@@ -3,15 +3,15 @@
 
 pre-commit:
   parallel: true
-  jobs:
-    - name: prettier
-      glob: 'src/**/*'
-      run: npx prettier --write {staged_files}
-    - name: eslint
-      glob: 'src/**/*.{ts,tsx}'
-      run: npx eslint --fix {staged_files}
+  commands:
+    frontend-lint:
+      glob: "src/**/*.{ts,js,cjs,mjs,vue}"
+      run: npx --no -- eslint -c eslint.config.ts --fix --cache {staged_files}
+    frontend-format:
+      glob: "src/**/*.{js,ts,vue,scss,html,md,json}"
+      run: npx --no -- prettier --write --experimental-cli {staged_files} --ignore-path .gitignore && git add {staged_files}
 
 commit-msg:
   commands:
     commitlint:
-      run: npx -- commitlint --edit {1}
+      run: npx --yes -p "@commitlint/cli" -p "@commitlint/config-conventional" -- commitlint --edit {1}
