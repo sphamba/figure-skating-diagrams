@@ -11,6 +11,16 @@ export class Vector<Size extends number> {
     this.size = this.data.length as Size;
   }
 
+  /** Serialize to a plain JSON object. Normalizes -0 to 0 (JSON cannot encode -0). */
+  toJSON(): { data: number[] } {
+    return { data: this.data.map((value) => (value === 0 ? 0 : value)) };
+  }
+
+  /** Reconstruct a Vector from serialized data. */
+  static fromJSON(json: { data: number[] }): Vector<number> {
+    return new Vector(...json.data);
+  }
+
   get x(): number {
     return this.data[0]!;
   }

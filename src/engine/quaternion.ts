@@ -17,6 +17,16 @@ export class Quaternion {
     return new Quaternion(this.real, this.vector.copy());
   }
 
+  /** Serialize to a plain JSON object. */
+  toJSON(): { real: number; vector: { data: number[] } } {
+    return { real: this.real, vector: this.vector.toJSON() };
+  }
+
+  /** Reconstruct a Quaternion from serialized data. */
+  static fromJSON(json: { real: number; vector: { data: number[] } }): Quaternion {
+    return new Quaternion(json.real, Vector.fromJSON(json.vector) as Vector<3>);
+  }
+
   plus(q: Quaternion): Quaternion {
     return new Quaternion(this.real + q.real, this.vector.plus(q.vector));
   }

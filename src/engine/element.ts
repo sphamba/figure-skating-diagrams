@@ -30,4 +30,7 @@ export abstract class Element {
 
   /** Keyframes contributed to the hips. */
   abstract getHipsKeyframes(): HipsKeyframe[];
+
+  /** Serialize this element to a plain JSON object. */
+  abstract toJSON(): unknown;
 }

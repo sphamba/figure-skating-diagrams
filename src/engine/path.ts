@@ -17,6 +17,19 @@ export class Path {
     this.length = this.curves.reduce((sum, curve) => sum + curve.length, 0);
   }
 
+  /** Serialize to a plain JSON object. */
+  toJSON(): { curves: ReturnType<Curve["toJSON"]>[] } {
+    return { curves: this.curves.map((curve) => curve.toJSON()) };
+  }
+
+  /** Reconstruct a Path from serialized data. */
+  static fromJSON(json: { curves: ReturnType<Curve["toJSON"]>[] }): Path {
+    const path = new Path();
+    path.curves = json.curves.map((curve) => Curve.fromJSON(curve));
+    path.updateLength();
+    return path;
+  }
+
   /** @param u - Uniform path coordinate, from 0 to path length */
   getCurveAndCurvilinearCoord(u: PathCoordinate): [Curve, Curvilinear] {
     if (this.curves.length == 0) {
@@ -57,7 +70,6 @@ export class Path {
 
   addCurveEnd(newCurve?: Curve) {
     newCurve ??= this.createNewEndCurve();
-
     // Match endpoints
     const lastCurve = this.curves[this.curves.length - 1];
     if (lastCurve && newCurve != lastCurve) {

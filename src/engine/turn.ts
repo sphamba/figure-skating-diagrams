@@ -13,6 +13,17 @@ const defaultPathLengthSmooth = (bladeLength * 1.6) as PathCoordinate;
 // To have loop length equal to 1.5 * bladeLength
 const defaultLoopShift = (bladeLength * 0.9) as PathCoordinate;
 
+/** JSON shape of a FootTurn used for (de)serialization. */
+export interface FootTurnJSON {
+  type: string;
+  footKey: FootKey;
+  start: PathCoordinate;
+  end: PathCoordinate;
+  smoothEntry: boolean;
+  smoothExit: boolean;
+  loopShift?: PathCoordinate;
+}
+
 export abstract class FootTurn extends Element {
   footKey: FootKey;
   smoothEntry: boolean;
@@ -21,6 +32,8 @@ export abstract class FootTurn extends Element {
   abstract readonly initialAngle: number;
   abstract readonly angleIncrement: number;
   abstract readonly contactPointTurn: number;
+  /** Name used to identify this turn type when (de)serializing. */
+  abstract readonly type: string;
 
   constructor(
     footKey: FootKey,
@@ -63,6 +76,34 @@ export abstract class FootTurn extends Element {
 
   /** Compute the turn keyframes from the element's start and end coordinates. */
   protected abstract createKeyframes(): FootKeyframe[];
+
+  /** Serialize this turn to a plain JSON object. */
+  toJSON(): FootTurnJSON {
+    return {
+      type: this.type,
+      footKey: this.footKey,
+      start: this.start,
+      end: this.end,
+      smoothEntry: this.smoothEntry,
+      smoothExit: this.smoothExit,
+    };
+  }
+
+  /** Reconstruct a turn of the matching concrete type from serialized data. */
+  static fromJSON(json: FootTurnJSON): FootTurn {
+    const constructor = footTurnConstructorsByType[json.type];
+    if (!constructor) {
+      throw new Error(`Unknown foot turn type: ${json.type}`);
+    }
+    return new constructor(
+      json.footKey as FootKey,
+      json.start as PathCoordinate,
+      json.end as PathCoordinate,
+      json.smoothEntry,
+      json.smoothExit,
+      json.loopShift as PathCoordinate | undefined,
+    );
+  }
 }
 
 export type FootTurnConstructor = new (
@@ -71,6 +112,15 @@ export type FootTurnConstructor = new (
   end: PathCoordinate,
   smoothEntry?: boolean,
   smoothExit?: boolean,
+) => FootTurn;
+
+type FootTurnClass = new (
+  footKey: FootKey,
+  start: PathCoordinate,
+  end: PathCoordinate,
+  smoothEntry?: boolean,
+  smoothExit?: boolean,
+  loopShift?: PathCoordinate,
 ) => FootTurn;
 
 abstract class FootHalfTurn extends FootTurn {
@@ -127,6 +177,10 @@ export class ForwardClockwiseFootTurn extends FootHalfTurn {
   get clockwise(): boolean {
     return true;
   }
+
+  get type(): string {
+    return "ForwardClockwiseFootTurn";
+  }
 }
 
 export class ForwardCounterClockwiseFootTurn extends FootHalfTurn {
@@ -136,6 +190,10 @@ export class ForwardCounterClockwiseFootTurn extends FootHalfTurn {
 
   get clockwise(): boolean {
     return false;
+  }
+
+  get type(): string {
+    return "ForwardCounterClockwiseFootTurn";
   }
 }
 
@@ -147,6 +205,10 @@ export class BackwardClockwiseFootTurn extends FootHalfTurn {
   get clockwise(): boolean {
     return true;
   }
+
+  get type(): string {
+    return "BackwardClockwiseFootTurn";
+  }
 }
 
 export class BackwardCounterClockwiseFootTurn extends FootHalfTurn {
@@ -156,6 +218,10 @@ export class BackwardCounterClockwiseFootTurn extends FootHalfTurn {
 
   get clockwise(): boolean {
     return false;
+  }
+
+  get type(): string {
+    return "BackwardCounterClockwiseFootTurn";
   }
 }
 
@@ -185,6 +251,10 @@ abstract class FootLoop extends FootTurn {
 
   get contactPointTurn(): number {
     return this.forward ? 0 : 1;
+  }
+
+  toJSON(): FootTurnJSON {
+    return { ...super.toJSON(), loopShift: this.loopShift };
   }
 
   createKeyframes(): FootKeyframe[] {
@@ -240,6 +310,10 @@ export class ForwardClockwiseFootLoop extends FootLoop {
   get clockwise(): boolean {
     return true;
   }
+
+  get type(): string {
+    return "ForwardClockwiseFootLoop";
+  }
 }
 
 export class ForwardCounterClockwiseFootLoop extends FootLoop {
@@ -249,6 +323,10 @@ export class ForwardCounterClockwiseFootLoop extends FootLoop {
 
   get clockwise(): boolean {
     return false;
+  }
+
+  get type(): string {
+    return "ForwardCounterClockwiseFootLoop";
   }
 }
 
@@ -260,6 +338,10 @@ export class BackwardClockwiseFootLoop extends FootLoop {
   get clockwise(): boolean {
     return true;
   }
+
+  get type(): string {
+    return "BackwardClockwiseFootLoop";
+  }
 }
 
 export class BackwardCounterClockwiseFootLoop extends FootLoop {
@@ -270,7 +352,23 @@ export class BackwardCounterClockwiseFootLoop extends FootLoop {
   get clockwise(): boolean {
     return false;
   }
+
+  get type(): string {
+    return "BackwardCounterClockwiseFootLoop";
+  }
 }
+
+/** Map a turn type name to its constructor, for deserialization. */
+const footTurnConstructorsByType: Record<string, FootTurnClass> = {
+  ForwardClockwiseFootTurn,
+  ForwardCounterClockwiseFootTurn,
+  BackwardClockwiseFootTurn,
+  BackwardCounterClockwiseFootTurn,
+  ForwardClockwiseFootLoop,
+  ForwardCounterClockwiseFootLoop,
+  BackwardClockwiseFootLoop,
+  BackwardCounterClockwiseFootLoop,
+};
 
 /** Default length of the smooth entry/exit portion of a turn, in path units. */
 export const defaultFootTurnLength = defaultPathLengthSmooth;

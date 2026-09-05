@@ -3,9 +3,12 @@ import type { PathCoordinate, Time } from "./coordinates.js";
 import type { Element } from "./element.js";
 import { interpolate } from "./interpolate.js";
 import { FootKeyframe, HipsKeyframe, TimeKeyframe } from "./keyframe.js";
-import type { Path } from "./path.js";
+import type { FootKeyframeJSON, HipsKeyframeJSON, TimeKeyframeJSON } from "./keyframe.js";
+import { Path } from "./path.js";
 import { Quaternion, getQuaternionFromAngleAxis } from "./quaternion.js";
 import type { CanvasRenderingContext2DSized } from "./rinkCanvas.js";
+import { FootTurn } from "./turn.js";
+import type { FootTurnJSON } from "./turn.js";
 import { Vector } from "./vector.js";
 
 type SequenceKeyframes = {
@@ -17,6 +20,18 @@ type SequenceKeyframes = {
 type PartKey = keyof SequenceKeyframes;
 export type FootKey = "footL" | "footR";
 type KeyframeType = SequenceKeyframes[PartKey][number];
+
+/** JSON shape of a sequence, used for (de)serialization. */
+export interface SequenceJSON {
+  path: ReturnType<Path["toJSON"]>;
+  keyframes: {
+    footL: FootKeyframeJSON[];
+    footR: FootKeyframeJSON[];
+    hips: HipsKeyframeJSON[];
+    time: TimeKeyframeJSON[];
+  };
+  elements: FootTurnJSON[];
+}
 
 /** Relative coordinate between two keyframes, from 0 to 1 */
 type Relative = number & { readonly __tag: unique symbol };
@@ -79,6 +94,33 @@ export class Sequence {
     for (const keyframe of element.getHipsKeyframes()) {
       this.addKeyframe("hips", keyframe);
     }
+  }
+
+  /** Serialize this sequence to a plain JSON object. */
+  toJSON(): SequenceJSON {
+    return {
+      path: this.path.toJSON(),
+      keyframes: {
+        footL: this.keyframes.footL.map((keyframe) => keyframe.toJSON()),
+        footR: this.keyframes.footR.map((keyframe) => keyframe.toJSON()),
+        hips: this.keyframes.hips.map((keyframe) => keyframe.toJSON()),
+        time: this.keyframes.time.map((keyframe) => keyframe.toJSON()),
+      },
+      elements: this.elements.map((element) => element.toJSON() as FootTurnJSON),
+    };
+  }
+
+  /** Reconstruct a sequence from serialized data, delegating to each class. */
+  static fromJSON(json: SequenceJSON): Sequence {
+    const sequence = new Sequence(Path.fromJSON(json.path));
+    sequence.keyframes = {
+      footL: json.keyframes.footL.map((keyframe) => FootKeyframe.fromJSON(keyframe)),
+      footR: json.keyframes.footR.map((keyframe) => FootKeyframe.fromJSON(keyframe)),
+      hips: json.keyframes.hips.map((keyframe) => HipsKeyframe.fromJSON(keyframe)),
+      time: json.keyframes.time.map((keyframe) => TimeKeyframe.fromJSON(keyframe)),
+    };
+    sequence.elements = json.elements.map((element) => FootTurn.fromJSON(element));
+    return sequence;
   }
 
   /** Draw path and traces over a range of path coordinates. */

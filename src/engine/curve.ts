@@ -1,5 +1,5 @@
 import type { CanvasRenderingContext2DSized } from "./rinkCanvas.js";
-import type { Vector } from "./vector.js";
+import { Vector } from "./vector.js";
 
 export type Curvilinear = number & { readonly __tag: unique symbol };
 
@@ -31,6 +31,26 @@ export class Curve {
     this.uniformCoordinates = [];
     this.length = 0;
     this.updateLength();
+  }
+
+  /** Serialize to a plain JSON object. */
+  toJSON(): { p0: { data: number[] }; p1: { data: number[] }; p2: { data: number[] }; p3: { data: number[] } } {
+    return { p0: this.p0.toJSON(), p1: this.p1.toJSON(), p2: this.p2.toJSON(), p3: this.p3.toJSON() };
+  }
+
+  /** Reconstruct a Curve from serialized data. */
+  static fromJSON(json: {
+    p0: { data: number[] };
+    p1: { data: number[] };
+    p2: { data: number[] };
+    p3: { data: number[] };
+  }): Curve {
+    return new Curve(
+      Vector.fromJSON(json.p0) as Vector<2>,
+      Vector.fromJSON(json.p1) as Vector<2>,
+      Vector.fromJSON(json.p2) as Vector<2>,
+      Vector.fromJSON(json.p3) as Vector<2>,
+    );
   }
 
   updateLength() {
