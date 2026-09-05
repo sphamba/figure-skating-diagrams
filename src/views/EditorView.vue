@@ -97,7 +97,8 @@ function addSegment() {
         <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFileSelected" />
 
         <p class="editor-view__hint">
-          Wheel to zoom, right click and drag to move, left click and drag the control points to edit the path.
+          Wheel to zoom, drag with the left button on empty space or with the right button to move, left click and drag
+          the control points to edit the path.
         </p>
       </template>
     </Card>

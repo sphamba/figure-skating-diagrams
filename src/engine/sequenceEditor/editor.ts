@@ -29,8 +29,8 @@ type ControlPointSelection = {
  * Interactive canvas editor for a single Sequence.
  *
  * Only the path is editable for now: control points can be selected and
- * dragged with the left button, the canvas can be panned with a right button
- * drag, and zoomed with the mouse wheel.
+ * dragged with the left button, the canvas can be panned with a left (on
+ * empty space) or right button drag, and zoomed with the mouse wheel.
  */
 export class Editor {
   canvas: HTMLCanvasElement;
@@ -166,24 +166,24 @@ export class Editor {
 
     curves.forEach((curve, curveIndex) => {
       const points = [curve.p0, curve.p1, curve.p2, curve.p3];
+      const showP1 = this.isHandleVisible(curveIndex, "p1");
+      const showP2 = this.isHandleVisible(curveIndex, "p2");
 
-      // Control polygon guides: p0-p1 and p2-p3 only (no p1-p2 segment).
+      // Control polygon guides: p0-p1 and p2-p3 only (no p1-p2 segment), and
+      // only for handles that are currently visible.
       ctx.strokeStyle = `rgba(0, 0, 0, ${POLYGON_ALPHA})`;
       ctx.lineWidth = 1 / this.view.zoom;
-      for (const [a, b] of [
-        [points[0]!, points[1]!],
-        [points[2]!, points[3]!],
-      ] as const) {
-        ctx.beginPath();
-        ctx.moveTo(a.x, -a.y);
-        ctx.lineTo(b.x, -b.y);
-        ctx.stroke();
-      }
+      if (showP1) this.drawGuide(points[0]!, points[1]!);
+      if (showP2) this.drawGuide(points[2]!, points[3]!);
 
-      // Handles
+      // Handles. Anchors (p0, p3) are always shown; the guide handles (p1, p2)
+      // only appear with their anchor, or while their aligned pair is selected.
       const keys: ControlPointKey[] = ["p0", "p1", "p2", "p3"];
       points.forEach((point, index) => {
-        const isSelected = this.selected?.curveIndex === curveIndex && this.selected.pointKey === keys[index];
+        const pointKey = keys[index]!;
+        if ((pointKey === "p1" && !showP1) || (pointKey === "p2" && !showP2)) return;
+
+        const isSelected = this.selected?.curveIndex === curveIndex && this.selected.pointKey === pointKey;
         const size = (isSelected ? NODE_SIZE * 1.5 : NODE_SIZE) / this.view.zoom;
 
         // Endpoints (p0, p3) are anchors; inner points (p1, p2) are guides.
@@ -201,6 +201,47 @@ export class Editor {
     });
   }
 
+  private drawGuide(a: Vector<2>, b: Vector<2>) {
+    this.ctx.beginPath();
+    this.ctx.moveTo(a.x, -a.y);
+    this.ctx.lineTo(b.x, -b.y);
+    this.ctx.stroke();
+  }
+
+  /**
+   * A guide handle (p1 or p2) is drawn only when an anchor on its shared joint
+   * is selected (either representation of the joint), when it is itself
+   * selected, or when its aligned partner handle across the shared joint is
+   * selected (so the two aligned handles stay visible together). Anchors (p0,
+   * p3) are always visible.
+   */
+  private isHandleVisible(curveIndex: number, pointKey: ControlPointKey): boolean {
+    if (pointKey !== "p1" && pointKey !== "p2") return true;
+    const sel = this.selected;
+    if (!sel) return false;
+    const curveCount = this.sequence.path.curves.length;
+
+    if (pointKey === "p1") {
+      // This curve's start anchor (p0), the joint's other anchor in the prev
+      // curve (its p3), itself, or the aligned opposite p2 of the prev curve.
+      if (curveIndex === sel.curveIndex && (sel.pointKey === "p0" || sel.pointKey === "p1")) return true;
+      if (curveIndex > 0 && curveIndex - 1 === sel.curveIndex && (sel.pointKey === "p3" || sel.pointKey === "p2"))
+        return true;
+      return false;
+    }
+    // pointKey === "p2"
+    // This curve's end anchor (p3), the joint's other anchor in the next curve
+    // (its p0), itself, or the aligned opposite p1 of the next curve.
+    if (curveIndex === sel.curveIndex && (sel.pointKey === "p3" || sel.pointKey === "p2")) return true;
+    if (
+      curveIndex < curveCount - 1 &&
+      curveIndex + 1 === sel.curveIndex &&
+      (sel.pointKey === "p0" || sel.pointKey === "p1")
+    )
+      return true;
+    return false;
+  }
+
   private pickControlPoint(screenX: number, screenY: number): ControlPointSelection | null {
     const curves = this.sequence.path.curves;
     const cursor = this.screenToWorld(screenX, screenY);
@@ -212,6 +253,10 @@ export class Editor {
 
     curves.forEach((curve, curveIndex) => {
       keys.forEach((pointKey) => {
+        // Hidden guide handles cannot be picked.
+        if ((pointKey === "p1" || pointKey === "p2") && !this.isHandleVisible(curveIndex, pointKey)) {
+          return;
+        }
         const distance = curve[pointKey].minus(cursor).length();
         if (distance <= pickRadius && distance < bestDistance) {
           bestDistance = distance;
@@ -270,7 +315,14 @@ export class Editor {
     if (event.button === 0) {
       const [screenX, screenY] = this.screenPosition(event);
       this.selected = this.pickControlPoint(screenX, screenY);
-      this.isDraggingPoint = this.selected !== null;
+      if (this.selected) {
+        this.isDraggingPoint = true;
+      } else {
+        // Left-click drag on empty space pans, the same as right-click drag.
+        this.isPanning = true;
+        this.lastPanX = screenX;
+        this.lastPanY = screenY;
+      }
       this.draw();
     }
   }
@@ -298,10 +350,50 @@ export class Editor {
       const point = curve?.[this.selected.pointKey];
       if (!curve || !point) return;
 
+      const delta = world.minus(point);
       point.x = world.x;
       point.y = world.y;
+      this.alignNeighbors(this.selected.curveIndex, this.selected.pointKey, delta);
       this.sequence.path.updateLength();
       this.draw();
+    }
+  }
+
+  /**
+   * Keep the path continuous after a control point is dragged.
+   *
+   * Dragging an anchor (p0 or p3) translates the flanking handles together
+   * with it, all with the same motion: around a joint, the handle before the
+   * joint (previous curve's p2 for a p0, this curve's p2 for a p3) and the
+   * handle after it (this curve's p1 for a p0, next curve's p1 for a p3) keep
+   * their offset to the anchor unchanged. This preserves the derivative at the
+   * join. Dragging p1 aligns the previous curve's end handle (p2) about the
+   * shared joint so the two handles stay collinear, keeping its distance to
+   * the joint. Dragging p2 does the same on the other side: the next curve's
+   * start handle (p1) is aligned about the shared joint, keeping its distance.
+   */
+  private alignNeighbors(curveIndex: number, pointKey: ControlPointKey, delta: Vector<2>) {
+    const curves = this.sequence.path.curves;
+    const curve = curves[curveIndex];
+    if (!curve) return;
+
+    if (pointKey === "p0" || pointKey === "p3") {
+      // Anchor: translate the flanking handle of this curve.
+      if (pointKey === "p0") curve.p1 = curve.p1.plus(delta);
+      else curve.p2 = curve.p2.plus(delta);
+
+      // And the handle of the neighbouring curve on the other side.
+      if (pointKey === "p0" && curveIndex > 0) {
+        curves[curveIndex - 1]!.p2 = curves[curveIndex - 1]!.p2.plus(delta);
+      } else if (pointKey === "p3" && curveIndex < curves.length - 1) {
+        curves[curveIndex + 1]!.p1 = curves[curveIndex + 1]!.p1.plus(delta);
+      }
+    } else if (pointKey === "p1" && curveIndex > 0) {
+      // Handle: mirror the previous curve's end handle (p2) about the joint.
+      curves[curveIndex - 1]!.alignEnd(curve);
+    } else if (pointKey === "p2" && curveIndex < curves.length - 1) {
+      // Handle: mirror the next curve's start handle (p1) about the joint.
+      curves[curveIndex + 1]!.alignStart(curve);
     }
   }
 
