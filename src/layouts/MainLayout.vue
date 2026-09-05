@@ -9,6 +9,7 @@ const year = new Date().getFullYear();
       <div class="main-layout__brand">Figure Skating Diagrams</div>
       <nav class="main-layout__nav">
         <router-link to="/">Home</router-link>
+        <router-link to="/editor">Editor</router-link>
       </nav>
     </header>
 

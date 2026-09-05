@@ -1,11 +1,7 @@
-<script setup lang="ts">
-import DiagramViewer from "@/components/DiagramViewer.vue";
-</script>
+<script setup lang="ts"></script>
 
 <template>
-  <section class="home-view">
-    <DiagramViewer />
-  </section>
+  <section class="home-view"></section>
 </template>
 
 <style scoped lang="scss">
