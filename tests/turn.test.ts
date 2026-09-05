@@ -26,5 +26,37 @@ test.each([
 ])("Add %s to sequence", (turnName, turn) => {
 	const path = new Path();
 	const sequence = new Sequence(path);
-	sequence.addFootTurn("footR", new turn((path.length / 2) as PathCoordinate, true, true));
+	sequence.addElement(
+		new turn("footR", (path.length / 4) as PathCoordinate, ((3 * path.length) / 4) as PathCoordinate, true, true),
+	);
+});
+
+test("Elements are stored in a single sequence list", () => {
+	const path = new Path();
+	const sequence = new Sequence(path);
+	const element = new ForwardClockwiseFootTurn(
+		"footL",
+		(path.length / 4) as PathCoordinate,
+		((3 * path.length) / 4) as PathCoordinate,
+	);
+	sequence.addElement(element);
+
+	expect(sequence.elements).toEqual([element]);
+});
+
+test("Element keyframes are routed to the correct foot layer", () => {
+	const path = new Path();
+	const sequence = new Sequence(path);
+	sequence.addElement(
+		new ForwardClockwiseFootTurn(
+			"footR",
+			(path.length / 4) as PathCoordinate,
+			((3 * path.length) / 4) as PathCoordinate,
+		),
+	);
+
+	// The turn is on the right foot: footR has the 3 turn keyframes.
+	expect(sequence.keyframes.footR).toHaveLength(3);
+	// The left foot has none.
+	expect(sequence.keyframes.footL).toHaveLength(0);
 });

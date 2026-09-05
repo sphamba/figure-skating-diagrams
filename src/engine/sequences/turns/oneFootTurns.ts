@@ -16,6 +16,7 @@ import {
   ForwardCounterClockwiseFootTurn,
 } from "../../turn.js";
 import type { FootTurnConstructor } from "../../turn.js";
+import { defaultFootTurnLength } from "../../turn.js";
 import { getUnitVectorFromAngle, Vector } from "../../vector.js";
 
 const pathRadius = 1.2; // meters
@@ -66,7 +67,17 @@ function createTurn(
   // Body part keyframes sit on the path coordinate axis (u).
   turn.addKeyframe(footKey, skatingFootInitialKeyframe); // u = 0
   turn.addKeyframe(getOppositeFootKey(footKey), freeFootInitialKeyframe); // u = 0
-  turn.addFootTurn(footKey, new turnClass((path.length / 2) as PathCoordinate, true, true)); // placed at path midpoint
+  const center = (path.length / 2) as PathCoordinate; // placed at path midpoint
+  const halfLength = defaultFootTurnLength;
+  turn.addElement(
+    new turnClass(
+      footKey,
+      (center - halfLength) as PathCoordinate,
+      (center + halfLength) as PathCoordinate,
+      true,
+      true,
+    ),
+  );
   turn.addKeyframe(footKey, new FootKeyframe(path.length as PathCoordinate, skatingFootInitialOrFinalData)); // u = path.length
   return turn;
 }

@@ -1,10 +1,10 @@
 import { bladeLength } from "./constants.js";
 import type { PathCoordinate, Time } from "./coordinates.js";
+import type { Element } from "./element.js";
 import { interpolate } from "./interpolate.js";
 import { FootKeyframe, HipsKeyframe, TimeKeyframe } from "./keyframe.js";
 import type { Path } from "./path.js";
 import { Quaternion, getQuaternionFromAngleAxis } from "./quaternion.js";
-import { FootTurn } from "./turn.js";
 import type { CanvasRenderingContext2DSized } from "./rinkCanvas.js";
 import { Vector } from "./vector.js";
 
@@ -34,10 +34,7 @@ const hoverColorR = "rgba(156, 0, 0, 0.2)";
 export class Sequence {
   path: Path;
   keyframes: SequenceKeyframes;
-  footTurns: {
-    footL: FootTurn[];
-    footR: FootTurn[];
-  };
+  elements: Element[];
 
   /**
    * A sequence is a 2D path with no time. Time is a separate clock layer.
@@ -54,10 +51,7 @@ export class Sequence {
       hips: [],
       time: [new TimeKeyframe(0 as Time, { pathCoordinate: 0 as PathCoordinate })],
     };
-    this.footTurns = {
-      footL: [],
-      footR: [],
-    };
+    this.elements = [];
   }
 
   get duration(): Time {
@@ -73,12 +67,17 @@ export class Sequence {
     keyframes.sort((a, b) => a.coordinate - b.coordinate);
   }
 
-  addFootTurn(footKey: FootKey, turn: FootTurn) {
-    turn.createKeyframes();
-    this.footTurns[footKey].push(turn);
+  addElement(element: Element) {
+    this.elements.push(element);
 
-    for (const keyframe of turn.keyframes) {
-      this.addKeyframe(footKey, keyframe);
+    for (const keyframe of element.getLeftFootKeyframes()) {
+      this.addKeyframe("footL", keyframe);
+    }
+    for (const keyframe of element.getRightFootKeyframes()) {
+      this.addKeyframe("footR", keyframe);
+    }
+    for (const keyframe of element.getHipsKeyframes()) {
+      this.addKeyframe("hips", keyframe);
     }
   }
 

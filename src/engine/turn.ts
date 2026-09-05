@@ -1,53 +1,76 @@
-//* Set of 3 keyframes to define a turn */
+/* Set of 3 keyframes to define a turn */
 
 import { bladeLength } from "./constants.js";
 import type { PathCoordinate } from "./coordinates.js";
-import { type FootData, FootKeyframe } from "./keyframe.js";
+import { Element } from "./element.js";
+import { type FootData, FootKeyframe, type HipsKeyframe } from "./keyframe.js";
 import { getQuaternionFromAngleAxis } from "./quaternion.js";
+import type { FootKey } from "./sequence.js";
 import { Vector } from "./vector.js";
 
 // Arbitrary, depends on interpolation functions
 const defaultPathLengthSmooth = (bladeLength * 1.6) as PathCoordinate;
-const defaultPathLengthLinear = (bladeLength * 0.8) as PathCoordinate;
 // To have loop length equal to 1.5 * bladeLength
 const defaultLoopShift = (bladeLength * 0.9) as PathCoordinate;
 
-export abstract class FootTurn {
-  pathCoordinate: PathCoordinate;
+export abstract class FootTurn extends Element {
+  footKey: FootKey;
   smoothEntry: boolean;
   smoothExit: boolean;
-  pathLengthEntry: PathCoordinate;
-  pathLengthExit: PathCoordinate;
-  keyframes: FootKeyframe[];
   abstract readonly clockwise: boolean;
   abstract readonly initialAngle: number;
   abstract readonly angleIncrement: number;
   abstract readonly contactPointTurn: number;
 
   constructor(
-    pathCoordinate: PathCoordinate,
+    footKey: FootKey,
+    start: PathCoordinate,
+    end: PathCoordinate,
     smoothEntry: boolean = true,
     smoothExit: boolean = true,
-    pathLengthEntry?: PathCoordinate,
-    pathLengthExit?: PathCoordinate,
   ) {
-    this.pathCoordinate = pathCoordinate;
+    super(start, end);
+    this.footKey = footKey;
     this.smoothEntry = smoothEntry;
     this.smoothExit = smoothExit;
-    this.pathLengthEntry = pathLengthEntry ?? (smoothEntry ? defaultPathLengthSmooth : defaultPathLengthLinear);
-    this.pathLengthExit = pathLengthExit ?? (smoothExit ? defaultPathLengthSmooth : defaultPathLengthLinear);
-    this.keyframes = [];
   }
 
-  abstract createKeyframes(): void;
+  /** Path coordinate at the center of the turn, halfway between start and end. */
+  get pathCoordinate(): PathCoordinate {
+    return ((this.start + this.end) / 2) as PathCoordinate;
+  }
+
+  get pathLengthEntry(): PathCoordinate {
+    return (this.pathCoordinate - this.start) as PathCoordinate;
+  }
+
+  get pathLengthExit(): PathCoordinate {
+    return (this.end - this.pathCoordinate) as PathCoordinate;
+  }
+
+  /** The turn is performed on the skating foot. The free foot has no keyframes. */
+  getLeftFootKeyframes(): FootKeyframe[] {
+    return this.footKey === "footL" ? this.createKeyframes() : [];
+  }
+
+  getRightFootKeyframes(): FootKeyframe[] {
+    return this.footKey === "footR" ? this.createKeyframes() : [];
+  }
+
+  getHipsKeyframes(): HipsKeyframe[] {
+    return [];
+  }
+
+  /** Compute the turn keyframes from the element's start and end coordinates. */
+  protected abstract createKeyframes(): FootKeyframe[];
 }
 
 export type FootTurnConstructor = new (
-  pathCoordinate: PathCoordinate,
+  footKey: FootKey,
+  start: PathCoordinate,
+  end: PathCoordinate,
   smoothEntry?: boolean,
   smoothExit?: boolean,
-  pathLengthEntry?: PathCoordinate,
-  pathLengthExit?: PathCoordinate,
 ) => FootTurn;
 
 abstract class FootHalfTurn extends FootTurn {
@@ -65,13 +88,13 @@ abstract class FootHalfTurn extends FootTurn {
     return this.forward ? 1 : 0;
   }
 
-  createKeyframes() {
-    this.keyframes = [];
+  createKeyframes(): FootKeyframe[] {
     const pathCoordinateShifts = [-this.pathLengthEntry, 0, this.pathLengthExit];
     const pathCoordinates = pathCoordinateShifts.map(
       (pathCoordinateShift) => (this.pathCoordinate + pathCoordinateShift) as PathCoordinate,
     );
 
+    const keyframes: FootKeyframe[] = [];
     for (let i = 0; i < 3; i++) {
       const pathCoordinate = pathCoordinates[i]!;
       const angle = this.initialAngle + i * this.angleIncrement;
@@ -90,8 +113,9 @@ abstract class FootHalfTurn extends FootTurn {
         this.smoothEntry && i == 0 ? "smooth" : "linear",
       );
 
-      this.keyframes.push(keyframe);
+      keyframes.push(keyframe);
     }
+    return keyframes;
   }
 }
 
@@ -140,14 +164,14 @@ abstract class FootLoop extends FootTurn {
   loopShift: PathCoordinate;
 
   constructor(
-    pathCoordinate: PathCoordinate,
+    footKey: FootKey,
+    start: PathCoordinate,
+    end: PathCoordinate,
     smoothEntry: boolean = true,
     smoothExit: boolean = true,
-    pathLengthEntry?: PathCoordinate,
-    pathLengthExit?: PathCoordinate,
     loopShift?: PathCoordinate,
   ) {
-    super(pathCoordinate, smoothEntry, smoothExit, pathLengthEntry, pathLengthExit);
+    super(footKey, start, end, smoothEntry, smoothExit);
     this.loopShift = loopShift ?? defaultLoopShift;
   }
 
@@ -163,10 +187,9 @@ abstract class FootLoop extends FootTurn {
     return this.forward ? 0 : 1;
   }
 
-  createKeyframes() {
-    if (!this.loopShift) return;
+  createKeyframes(): FootKeyframe[] {
+    if (!this.loopShift) return [];
 
-    this.keyframes = [];
     const pathCoordinateShifts = [-this.pathLengthEntry, 0, this.pathLengthExit];
     const pathCoordinates = pathCoordinateShifts.map(
       (pathCoordinateShift) => (this.pathCoordinate + pathCoordinateShift) as PathCoordinate,
@@ -179,6 +202,7 @@ abstract class FootLoop extends FootTurn {
       new Vector<3>(0, lateralShift, 0),
     ];
 
+    const keyframes: FootKeyframe[] = [];
     for (let i = 0; i < 3; i++) {
       const pathCoordinate = pathCoordinates[i]!;
       const angle = this.initialAngle + i * this.angleIncrement;
@@ -202,8 +226,9 @@ abstract class FootLoop extends FootTurn {
         this.smoothEntry && i != 1 ? "smooth" : "linear",
       );
 
-      this.keyframes.push(keyframe);
+      keyframes.push(keyframe);
     }
+    return keyframes;
   }
 }
 
@@ -246,3 +271,6 @@ export class BackwardCounterClockwiseFootLoop extends FootLoop {
     return false;
   }
 }
+
+/** Default length of the smooth entry/exit portion of a turn, in path units. */
+export const defaultFootTurnLength = defaultPathLengthSmooth;
