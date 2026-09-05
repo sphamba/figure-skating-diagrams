@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
+import Button from "openvue/button";
+import Card from "openvue/card";
 import { Editor } from "@/engine/sequenceEditor/editor";
 import { Path } from "@/engine/path";
 import { Sequence, type SequenceJSON } from "@/engine/sequence";
@@ -83,19 +85,22 @@ function addSegment() {
 
 <template>
   <div class="editor-view">
-    <aside class="editor-view__panel">
-      <h2 class="editor-view__title">Sequence editor</h2>
+    <Card class="editor-view__panel">
+      <template #title>Sequence editor</template>
+      <template #content>
+        <div class="editor-view__actions">
+          <Button label="Open JSON" icon="pi pi-folder-open" class="w-full" @click="openFile" />
+          <Button label="Save JSON" icon="pi pi-save" class="w-full" severity="secondary" @click="saveFile" />
+          <Button label="Add segment" icon="pi pi-plus" class="w-full" severity="info" outlined @click="addSegment" />
+        </div>
 
-      <button class="editor-view__button" type="button" @click="openFile">Open JSON</button>
-      <button class="editor-view__button" type="button" @click="saveFile">Save JSON</button>
-      <button class="editor-view__button" type="button" @click="addSegment">Add segment</button>
+        <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFileSelected" />
 
-      <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFileSelected" />
-
-      <p class="editor-view__hint">
-        Wheel to zoom, right click and drag to move, left click and drag the control points to edit the path.
-      </p>
-    </aside>
+        <p class="editor-view__hint">
+          Wheel to zoom, right click and drag to move, left click and drag the control points to edit the path.
+        </p>
+      </template>
+    </Card>
 
     <div class="editor-view__canvas">
       <canvas ref="canvasRef" class="editor-view__canvas-element"></canvas>
@@ -103,62 +108,43 @@ function addSegment() {
   </div>
 </template>
 
-<style scoped lang="scss">
-@use "@/styles/theme" as *;
-
+<style scoped>
+/* Minimal structural layout only; visual styling comes from OpenVue. */
 .editor-view {
   display: flex;
-  gap: $space-4;
+  gap: 1rem;
   height: 80vh;
+}
 
-  &__panel {
-    display: flex;
-    width: 220px;
-    flex-direction: column;
-    gap: $space-3;
-    padding: $space-4;
-    background-color: $color-surface;
-    border: 1px solid $color-border;
-    border-radius: $radius-base;
-  }
+.editor-view .editor-view__panel {
+  width: 220px;
+  flex-shrink: 0;
+}
 
-  &__title {
-    margin: 0 0 $space-2;
-    font-size: $font-size-lg;
-  }
+.editor-view__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
 
-  &__button {
-    padding: $space-2 $space-3;
-    background-color: $color-primary;
-    color: $color-bg;
-    border: none;
-    border-radius: $radius-sm;
-    cursor: pointer;
+.editor-view__hint {
+  margin: 1rem 0 0;
+  color: var(--p-text-muted-color);
+  font-size: 0.875rem;
+}
 
-    &:hover {
-      opacity: 0.9;
-    }
-  }
+.editor-view__canvas {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--p-content-border-color);
+  border-radius: var(--p-content-border-radius);
+  overflow: hidden;
+}
 
-  &__hint {
-    margin-top: auto;
-    color: $color-text-muted;
-    font-size: $font-size-sm;
-  }
-
-  &__canvas {
-    flex: 1;
-    min-width: 0;
-    border: 1px solid $color-border;
-    border-radius: $radius-base;
-    overflow: hidden;
-  }
-
-  &__canvas-element {
-    display: block;
-    width: 100%;
-    height: 100%;
-    cursor: grab;
-  }
+.editor-view__canvas-element {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
 }
 </style>

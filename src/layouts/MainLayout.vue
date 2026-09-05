@@ -1,4 +1,14 @@
 <script setup lang="ts">
+import { ref } from "vue";
+import Button from "openvue/button";
+import Menubar from "openvue/menubar";
+
+// Populate the top navigation bar with router links.
+const items = ref([
+  { label: "Home", icon: "pi pi-home", route: "/" },
+  { label: "Editor", icon: "pi pi-pencil", route: "/editor" },
+]);
+
 // Composition API: expose the current year for the footer.
 const year = new Date().getFullYear();
 </script>
@@ -6,11 +16,24 @@ const year = new Date().getFullYear();
 <template>
   <div class="main-layout">
     <header class="main-layout__header">
-      <div class="main-layout__brand">Figure Skating Diagrams</div>
-      <nav class="main-layout__nav">
-        <router-link to="/">Home</router-link>
-        <router-link to="/editor">Editor</router-link>
-      </nav>
+      <Menubar :model="items">
+        <template #start>
+          <span class="main-layout__brand">Figure Skating Diagrams</span>
+        </template>
+        <template #item="{ item, props }">
+          <router-link v-if="item.route" v-slot="{ href, navigate }" :to="item.route" custom>
+            <a v-ripple :href="href" v-bind="props.action" @click="navigate">
+              <span :class="item.icon" />
+              <span>{{ item.label }}</span>
+            </a>
+          </router-link>
+        </template>
+        <template #end>
+          <Button label="About" icon="pi pi-info-circle" text as-child v-slot="slotProps">
+            <RouterLink to="/about" :class="slotProps.class" />
+          </Button>
+        </template>
+      </Menubar>
     </header>
 
     <main class="main-layout__content">
@@ -25,44 +48,16 @@ const year = new Date().getFullYear();
 </template>
 
 <style scoped lang="scss">
-// Make the design tokens available in this scoped style block.
-@use "@/styles/theme" as *;
-
+// Minimal structural layout only; all visual styling comes from OpenVue.
 .main-layout {
   display: flex;
   min-height: 100vh;
   flex-direction: column;
-  background-color: $color-bg;
-  color: $color-text;
-  font-family: $font-family-base;
-  font-size: $font-size-base;
-  line-height: $line-height-base;
 
   &__header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: $space-4;
-    padding: $space-4 $space-6;
-    background-color: $color-surface;
-    border-bottom: 1px solid $color-border;
-  }
-
-  &__brand {
-    font-size: $font-size-lg;
-    font-weight: $font-weight-bold;
-    color: $color-primary;
-  }
-
-  &__nav {
-    a {
-      color: $color-text-muted;
-      text-decoration: none;
-
-      &:hover {
-        color: $color-primary;
-      }
-    }
+    position: sticky;
+    top: 0;
+    z-index: 10;
   }
 
   &__content {
@@ -70,18 +65,17 @@ const year = new Date().getFullYear();
     width: 100%;
     max-width: 1200px;
     margin: 0 auto;
-    padding: $space-6;
+    padding: 2rem;
   }
 
   &__footer {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: $space-4;
-    background-color: $color-surface;
-    border-top: 1px solid $color-border;
-    color: $color-text-muted;
-    font-size: $font-size-sm;
+    padding: 1rem;
+    border-top: 1px solid var(--p-content-border-color);
+    color: var(--p-text-muted-color);
+    font-size: 0.875rem;
   }
 }
 </style>

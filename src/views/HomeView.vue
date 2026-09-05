@@ -4,10 +4,6 @@
   <section class="home-view"></section>
 </template>
 
-<style scoped lang="scss">
-@use "@/styles/theme" as *;
-
-.home-view {
-  min-height: $space-8 * 6;
-}
+<style scoped>
+/* No custom styling: relies on the OpenVue default look. */
 </style>
