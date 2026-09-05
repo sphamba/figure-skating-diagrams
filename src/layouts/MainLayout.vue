@@ -18,7 +18,7 @@ const year = new Date().getFullYear();
     </main>
 
     <footer class="main-layout__footer">
-      <span>&copy; {{ year }} Figure Skating Diagrams</span>
+      <span>&copy; {{ year }} Son Pham-Ba</span>
     </footer>
   </div>
 </template>

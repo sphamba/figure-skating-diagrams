@@ -1,13 +1,17 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { expect, test } from "vitest";
 import * as oneFootTurns from "../src/engine/sequences/turns/oneFootTurns.js";
 import { Pattern } from "../src/engine/pattern.js";
+import type { PatternJSON } from "../src/engine/pattern.js";
 import { Sequence } from "../src/engine/sequence.js";
 
-test("Pattern round-trips through JSON", () => {
-  const pattern = new Pattern("Mohawk", [oneFootTurns.LFI_3, oneFootTurns.RBO_Loop], "https://example.com/video.mp4");
+test("Pattern loads from the public JSON asset", () => {
+  const json = JSON.parse(
+    readFileSync(resolve(process.cwd(), "public/test-pattern.json"), "utf-8"),
+  ) as PatternJSON;
 
-  const json = pattern.toJSON();
-  const restored = Pattern.fromJSON(JSON.parse(JSON.stringify(json)));
+  const restored = Pattern.fromJSON(json);
 
   // The reconstructed pattern serializes back to the same plain JSON object.
   expect(restored.toJSON()).toEqual(json);

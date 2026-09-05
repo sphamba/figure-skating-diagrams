@@ -1,9 +1,11 @@
 <script setup lang="ts">
-// Main page. Intentionally blank for now.
+import DiagramViewer from "@/components/DiagramViewer.vue";
 </script>
 
 <template>
-  <section class="home-view"></section>
+  <section class="home-view">
+    <DiagramViewer />
+  </section>
 </template>
 
 <style scoped lang="scss">
