@@ -1,4 +1,5 @@
 import { Curve } from "../../curve.js";
+import type { PathCoordinate, Time } from "../../coordinates.js";
 import { FootKeyframe, TimeKeyframe } from "../../keyframe.js";
 import { Path } from "../../path.js";
 import { getQuaternionFromAngleAxis } from "../../quaternion.js";
@@ -19,14 +20,14 @@ import { getUnitVectorFromAngle, Vector } from "../../vector.js";
 const pathRadius = 1.2; // meters
 const freeFootHeight = 0.2; // meters
 const CPathCenterShiftFactor = 0.4; // times pathRadius
-const CPathDuration = 2; // seconds
-const SPathDuration = 4; // seconds
+const CPathDuration = 2 as Time; // seconds
+const SPathDuration = 4 as Time; // seconds
 
 const skatingFootInitialOrFinalData = {
   position: new Vector<3>(0, 0, 0),
 };
 
-const skatingFootInitialKeyframe = new FootKeyframe(0, skatingFootInitialOrFinalData);
+const skatingFootInitialKeyframe = new FootKeyframe(0 as PathCoordinate, skatingFootInitialOrFinalData);
 
 const freeFootInitialData = {
   position: new Vector<3>(0, 0, freeFootHeight),
@@ -34,7 +35,7 @@ const freeFootInitialData = {
   contactPoint: 0.5,
 };
 
-const freeFootInitialKeyframe = new FootKeyframe(0, freeFootInitialData);
+const freeFootInitialKeyframe = new FootKeyframe(0 as PathCoordinate, freeFootInitialData);
 
 function getArcCurve(center: Vector<2>, radius: number, startAngle: number, endAngle: number): Curve {
   const angle = endAngle - startAngle;
@@ -57,14 +58,15 @@ function createTurn(
   footKey: FootKey,
   path: Path,
   turnClass: FootTurnConstructor,
-  duration: number = CPathDuration,
+  duration: Time = CPathDuration,
 ): Sequence {
   const turn = new Sequence(path);
-  turn.addKeyframe("time", new TimeKeyframe(duration, { pathCoordinate: path.length }));
-  turn.addKeyframe(footKey, skatingFootInitialKeyframe);
-  turn.addKeyframe(getOppositeFootKey(footKey), freeFootInitialKeyframe);
-  turn.addFootTurn(footKey, new turnClass(turn.duration / 2, true, true));
-  turn.addKeyframe(footKey, new FootKeyframe(turn.duration, skatingFootInitialOrFinalData));
+  turn.addKeyframe("time", new TimeKeyframe(duration, { pathCoordinate: path.length as PathCoordinate }));
+  // Body part keyframes sit on the path coordinate axis (u).
+  turn.addKeyframe(footKey, skatingFootInitialKeyframe); // u = 0
+  turn.addKeyframe(getOppositeFootKey(footKey), freeFootInitialKeyframe); // u = 0
+  turn.addFootTurn(footKey, new turnClass((path.length / 2) as PathCoordinate, true, true)); // placed at path midpoint
+  turn.addKeyframe(footKey, new FootKeyframe(path.length as PathCoordinate, skatingFootInitialOrFinalData)); // u = path.length
   return turn;
 }
 

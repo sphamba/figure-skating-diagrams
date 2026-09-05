@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import type { PathCoordinate } from "../src/engine/coordinates.js";
 import * as oneFootTurns from "../src/engine/sequences/turns/oneFootTurns.js";
 import { Path } from "../src/engine/path.js";
 import { Sequence } from "../src/engine/sequence.js";
@@ -25,5 +26,5 @@ test.each([
 ])("Add %s to sequence", (turnName, turn) => {
 	const path = new Path();
 	const sequence = new Sequence(path);
-	sequence.addFootTurn("footR", new turn(path.length / 2, true, true));
+	sequence.addFootTurn("footR", new turn((path.length / 2) as PathCoordinate, true, true));
 });

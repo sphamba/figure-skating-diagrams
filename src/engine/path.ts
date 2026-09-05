@@ -1,4 +1,5 @@
 import { Curve, type Curvilinear } from "./curve.js";
+import type { PathCoordinate } from "./coordinates.js";
 import type { CanvasRenderingContext2DSized } from "./rinkCanvas.js";
 import { Vector } from "./vector.js";
 
@@ -16,8 +17,8 @@ export class Path {
     this.length = this.curves.reduce((sum, curve) => sum + curve.length, 0);
   }
 
-  /** @param u - Uniform coordinate, from 0 to path length */
-  getCurveAndCurvilinearCoord(u: number): [Curve, Curvilinear] {
+  /** @param u - Uniform path coordinate, from 0 to path length */
+  getCurveAndCurvilinearCoord(u: PathCoordinate): [Curve, Curvilinear] {
     if (this.curves.length == 0) {
       throw new Error("Path has no curve.");
     }
@@ -42,14 +43,14 @@ export class Path {
     return [curve, curvilinearCoordinate];
   }
 
-  /** @param u - Uniform coordinate, from 0 to path length */
-  getPosition(u: number): Vector<2> {
+  /** @param u - Uniform path coordinate, from 0 to path length */
+  getPosition(u: PathCoordinate): Vector<2> {
     const [curve, curvilinearCoordinate] = this.getCurveAndCurvilinearCoord(u);
     return curve.getPosition(curvilinearCoordinate);
   }
 
-  /** @param u - Uniform coordinate, from 0 to path length */
-  getDerivative(u: number): Vector<2> {
+  /** @param u - Uniform path coordinate, from 0 to path length */
+  getDerivative(u: PathCoordinate): Vector<2> {
     const [curve, curvilinearCoordinate] = this.getCurveAndCurvilinearCoord(u);
     return curve.getDerivative(curvilinearCoordinate);
   }
@@ -159,10 +160,10 @@ export class Path {
 
     // Create new curve
     const curve = Curve.intersecting(
-      subPath.getPosition(0),
-      subPath.getPosition((1 / 3) * subPath.length),
-      subPath.getPosition((2 / 3) * subPath.length),
-      subPath.getPosition(1 * subPath.length),
+      subPath.getPosition(0 as PathCoordinate),
+      subPath.getPosition(((1 / 3) * subPath.length) as PathCoordinate),
+      subPath.getPosition(((2 / 3) * subPath.length) as PathCoordinate),
+      subPath.getPosition((1 * subPath.length) as PathCoordinate),
     );
 
     // Remaining curves
@@ -203,10 +204,10 @@ export class Path {
     return [curveBefore, curveAfter];
   }
 
-  /** @param uStart - Uniform coordinate where to start drawing, from 0 to path length. Defaults to 0.
-   *   @param uEnd - Uniform coordinate where to end drawing, from 0 to path length. Defaults to path length. */
-  draw(ctx: CanvasRenderingContext2DSized, uStart: number = 0, uEnd?: number) {
-    uEnd ??= this.length;
+  /** @param uStart - Uniform path coordinate where to start drawing, from 0 to path length. Defaults to 0.
+   *   @param uEnd - Uniform path coordinate where to end drawing, from 0 to path length. Defaults to path length. */
+  draw(ctx: CanvasRenderingContext2DSized, uStart: PathCoordinate = 0 as PathCoordinate, uEnd?: PathCoordinate) {
+    uEnd ??= this.length as PathCoordinate;
     this.curves.forEach((curve) => curve.draw(ctx));
   }
 

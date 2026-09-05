@@ -1,23 +1,23 @@
 //* Set of 3 keyframes to define a turn */
 
 import { bladeLength } from "./constants.js";
+import type { PathCoordinate } from "./coordinates.js";
 import { type FootData, FootKeyframe } from "./keyframe.js";
 import { getQuaternionFromAngleAxis } from "./quaternion.js";
-import { Sequence } from "./sequence.js";
 import { Vector } from "./vector.js";
 
 // Arbitrary, depends on interpolation functions
-const defaultPathLengthSmooth = bladeLength * 1.6;
-const defaultPathLengthLinear = bladeLength * 0.8;
+const defaultPathLengthSmooth = bladeLength * 1.6 as PathCoordinate;
+const defaultPathLengthLinear = bladeLength * 0.8 as PathCoordinate;
 // To have loop length equal to 1.5 * bladeLength
-const defaultLoopShift = bladeLength * 0.9;
+const defaultLoopShift = bladeLength * 0.9 as PathCoordinate;
 
 export abstract class FootTurn {
-  pathCoordinate: number;
+  pathCoordinate: PathCoordinate;
   smoothEntry: boolean;
   smoothExit: boolean;
-  pathLengthEntry: number;
-  pathLengthExit: number;
+  pathLengthEntry: PathCoordinate;
+  pathLengthExit: PathCoordinate;
   keyframes: FootKeyframe[];
   abstract readonly clockwise: boolean;
   abstract readonly initialAngle: number;
@@ -25,11 +25,11 @@ export abstract class FootTurn {
   abstract readonly contactPointTurn: number;
 
   constructor(
-    pathCoordinate: number,
+    pathCoordinate: PathCoordinate,
     smoothEntry: boolean = true,
     smoothExit: boolean = true,
-    pathLengthEntry?: number,
-    pathLengthExit?: number,
+    pathLengthEntry?: PathCoordinate,
+    pathLengthExit?: PathCoordinate,
   ) {
     this.pathCoordinate = pathCoordinate;
     this.smoothEntry = smoothEntry;
@@ -39,7 +39,7 @@ export abstract class FootTurn {
     this.keyframes = [];
   }
 
-  abstract createKeyframes(sequence: Sequence): void;
+  abstract createKeyframes(): void;
 }
 
 export type FootTurnConstructor = new (...args: any[]) => FootTurn;
@@ -59,15 +59,15 @@ abstract class FootHalfTurn extends FootTurn {
     return this.forward ? 1 : 0;
   }
 
-  createKeyframes(sequence: Sequence) {
+  createKeyframes() {
     this.keyframes = [];
     const pathCoordinateShifts = [-this.pathLengthEntry, 0, this.pathLengthExit];
-    const times = pathCoordinateShifts.map((pathCoordinateShift) =>
-      sequence.getTimeFromPathCoordinate(this.pathCoordinate + pathCoordinateShift),
+    const pathCoordinates = pathCoordinateShifts.map(
+      (pathCoordinateShift) => (this.pathCoordinate + pathCoordinateShift) as PathCoordinate,
     );
 
     for (let i = 0; i < 3; i++) {
-      const time = times[i];
+      const pathCoordinate = pathCoordinates[i];
       const angle = this.initialAngle + i * this.angleIncrement;
       const contactPoint = i == 1 ? this.contactPointTurn : 0.5;
 
@@ -77,7 +77,7 @@ abstract class FootHalfTurn extends FootTurn {
       };
 
       const keyframe = new FootKeyframe(
-        time,
+        pathCoordinate,
         keyframeData,
         // Smooth entry and exit into the turn
         this.smoothExit && i == 2 ? "smooth" : "linear",
@@ -131,15 +131,15 @@ export class BackwardCounterClockwiseFootTurn extends FootHalfTurn {
 
 abstract class FootLoop extends FootTurn {
   abstract readonly forward: boolean;
-  loopShift: number;
+  loopShift: PathCoordinate;
 
   constructor(
-    pathCoordinate: number,
+    pathCoordinate: PathCoordinate,
     smoothEntry: boolean = true,
     smoothExit: boolean = true,
-    pathLengthEntry?: number,
-    pathLengthExit?: number,
-    loopShift?: number,
+    pathLengthEntry?: PathCoordinate,
+    pathLengthExit?: PathCoordinate,
+    loopShift?: PathCoordinate,
   ) {
     super(pathCoordinate, smoothEntry, smoothExit, pathLengthEntry, pathLengthExit);
     this.loopShift = loopShift ?? defaultLoopShift;
@@ -157,13 +157,13 @@ abstract class FootLoop extends FootTurn {
     return this.forward ? 0 : 1;
   }
 
-  createKeyframes(sequence: Sequence) {
+  createKeyframes() {
     if (!this.loopShift) return;
 
     this.keyframes = [];
     const pathCoordinateShifts = [-this.pathLengthEntry, 0, this.pathLengthExit];
-    const times = pathCoordinateShifts.map((pathCoordinateShift) =>
-      sequence.getTimeFromPathCoordinate(this.pathCoordinate + pathCoordinateShift),
+    const pathCoordinates = pathCoordinateShifts.map(
+      (pathCoordinateShift) => (this.pathCoordinate + pathCoordinateShift) as PathCoordinate,
     );
     const contactPoints = [0.5, this.contactPointTurn, 0.5];
     const lateralShift = (this.clockwise ? 1 : -1) * (this.forward ? 1 : -1) * this.loopShift;
@@ -174,7 +174,7 @@ abstract class FootLoop extends FootTurn {
     ];
 
     for (let i = 0; i < 3; i++) {
-      const time = times[i];
+      const pathCoordinate = pathCoordinates[i];
       const angle = this.initialAngle + i * this.angleIncrement;
       const contactPoint = contactPoints[i];
 
@@ -189,7 +189,7 @@ abstract class FootLoop extends FootTurn {
       }
 
       const keyframe = new FootKeyframe(
-        time,
+        pathCoordinate,
         keyframeData,
         // Smooth entry and exit into the turn
         this.smoothExit && i != 1 ? "smooth" : "linear",

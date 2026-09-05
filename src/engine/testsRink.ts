@@ -1,4 +1,5 @@
 import { Curve } from "./curve.js";
+import type { PathCoordinate } from "./coordinates.js";
 import { FootKeyframe } from "./keyframe.js";
 import { Path } from "./path.js";
 import { getQuaternionFromAngleAxis, Quaternion } from "./quaternion.js";
@@ -80,7 +81,7 @@ export function test() {
   // Add keyframes
   sequence.addKeyframe(
     "footL",
-    new FootKeyframe(0, {
+    new FootKeyframe(0 as PathCoordinate, {
       position: new Vector<3>(0, 0.2, 0),
       orientation: new Quaternion(),
       contactPoint: 0.5,
@@ -90,16 +91,16 @@ export function test() {
   // Turn
   sequence.addKeyframe(
     "footL",
-    new FootKeyframe(path.length / 2, {
+    new FootKeyframe((path.length / 2) as PathCoordinate, {
       position: new Vector<3>(0, 0, 0),
     }),
   );
 
-  sequence.addFootTurn("footL", new ForwardCounterClockwiseFootTurn(path.length / 2));
+  sequence.addFootTurn("footL", new ForwardCounterClockwiseFootTurn((path.length / 2) as PathCoordinate));
 
   sequence.addKeyframe(
     "footL",
-    new FootKeyframe(path.length, {
+    new FootKeyframe(path.length as PathCoordinate, {
       position: new Vector<3>(0, 0, 0),
       orientation: getQuaternionFromAngleAxis(Math.PI * 1.5),
     }),
@@ -107,7 +108,7 @@ export function test() {
 
   sequence.addKeyframe(
     "footR",
-    new FootKeyframe(0, {
+    new FootKeyframe(0 as PathCoordinate, {
       position: new Vector<3>(0, -0.2, 0),
       orientation: new Quaternion(),
     }),
@@ -115,7 +116,7 @@ export function test() {
 
   sequence.addKeyframe(
     "footR",
-    new FootKeyframe(path.length / 4, {
+    new FootKeyframe((path.length / 4) as PathCoordinate, {
       position: new Vector<3>(-0.3, -0.2, 0),
       orientation: getQuaternionFromAngleAxis(-Math.PI * 0.2),
       contactPoint: 0.8,
@@ -124,7 +125,7 @@ export function test() {
 
   sequence.addKeyframe(
     "footR",
-    new FootKeyframe(path.length / 2, {
+    new FootKeyframe((path.length / 2) as PathCoordinate, {
       position: new Vector<3>(0.2, 0, 0.1),
       orientation: getQuaternionFromAngleAxis(Math.PI / 2),
       contactPoint: 0.5,
@@ -133,7 +134,7 @@ export function test() {
 
   sequence.addKeyframe(
     "footR",
-    new FootKeyframe(path.length, {
+    new FootKeyframe(path.length as PathCoordinate, {
       position: new Vector<3>(0.3, 0.2, 0.2),
       orientation: getQuaternionFromAngleAxis(Math.PI),
     }),
