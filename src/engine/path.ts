@@ -96,7 +96,7 @@ export class Path {
       dir = lastCurve!.getDerivative(1 as Curvilinear).normalized();
     }
 
-    return new Curve(p0, p0.plus(dir.times(1 / 3)), p0.plus(dir.times(2 / 3)), p0.plus(dir)); // 1m straight line
+    return new Curve(p0, p0.plus(dir.times(1 / 2)), p0.plus(dir.times(1 / 2)), p0.plus(dir)); // 1m straight line
   }
 
   addCurveStart(newCurve?: Curve) {
@@ -131,7 +131,7 @@ export class Path {
         .normalized();
     }
 
-    return new Curve(p0, p0.plus(dir.times(1 / 3)), p0.plus(dir.times(2 / 3)), p0.plus(dir)); // 1m straight line
+    return new Curve(p0, p0.plus(dir.times(1 / 2)), p0.plus(dir.times(1 / 2)), p0.plus(dir)); // 1m straight line
   }
 
   /** @param curveIndex - Index of curve in Path

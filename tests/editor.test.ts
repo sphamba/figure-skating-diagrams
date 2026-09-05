@@ -32,7 +32,7 @@ test("addSegmentEnd appends a 1 m straight curve", () => {
   expect(lastCurve.length).toBeCloseTo(1, 2);
 });
 
-test("new end curve keeps the end derivative and aligns control points at 1/3 and 2/3", () => {
+test("new end curve keeps the end derivative and aligns control points at 1/2 and 1/2", () => {
   // Use a curved last segment so the direction is non-trivial.
   const path = new Path();
   path.addCurveEnd(
@@ -58,11 +58,11 @@ test("new end curve keeps the end derivative and aligns control points at 1/3 an
   expect(lastCurve.p3.x).toBeCloseTo(endPosition.x + dir.x);
   expect(lastCurve.p3.y).toBeCloseTo(endPosition.y + dir.y);
 
-  // Control points sit at 1/3 and 2/3 along the same straight line.
-  expect(lastCurve.p1.x).toBeCloseTo(endPosition.x + dir.x / 3);
-  expect(lastCurve.p1.y).toBeCloseTo(endPosition.y + dir.y / 3);
-  expect(lastCurve.p2.x).toBeCloseTo(endPosition.x + (2 * dir.x) / 3);
-  expect(lastCurve.p2.y).toBeCloseTo(endPosition.y + (2 * dir.y) / 3);
+  // Both control points sit at 1/2 along the same straight line.
+  expect(lastCurve.p1.x).toBeCloseTo(endPosition.x + dir.x / 2);
+  expect(lastCurve.p1.y).toBeCloseTo(endPosition.y + dir.y / 2);
+  expect(lastCurve.p2.x).toBeCloseTo(endPosition.x + dir.x / 2);
+  expect(lastCurve.p2.y).toBeCloseTo(endPosition.y + dir.y / 2);
 
   // The new start derivative matches the previous end derivative.
   const newStartDerivative = lastCurve.getDerivative(0 as Curvilinear).normalized();

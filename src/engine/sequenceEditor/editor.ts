@@ -1,3 +1,4 @@
+import type { Curvilinear } from "../curve.js";
 import { LENGTH, WIDTH, CORNER_RADIUS } from "../rink.js";
 import type { CanvasRenderingContext2DSized } from "../rinkCanvas.js";
 import { Sequence } from "../sequence.js";
@@ -11,6 +12,12 @@ const PATH_WIDTH = 1; // px
 const NODE_SIZE = 10; // px
 const POLYGON_ALPHA = 0.25;
 const PICK_RADIUS = 8; // px
+const ADD_BUTTON_OFFSET = 24; // px (screen distance from the path end to the arrow tip)
+const ARROW_LENGTH = 14; // px (shaft length from tail to tip)
+const ARROW_HEAD_LENGTH = 7; // px (length of each arrowhead wing from the tip)
+const ARROW_HEAD_WIDTH = 6; // px (total width of the arrowhead)
+const ADD_BUTTON_HIT_RADIUS = 14; // px
+const ADD_BUTTON_COLOR = "#d33";
 const ZOOM_FACTOR = 1.005;
 const MIN_ZOOM = 2;
 const MAX_ZOOM = 5000;
@@ -124,6 +131,7 @@ export class Editor {
       this.drawPath(sequence);
     }
     this.drawControlHandles();
+    this.drawAddButton();
     ctx.restore();
   }
 
@@ -209,6 +217,68 @@ export class Editor {
   }
 
   /**
+   * World position of the add-segment arrow head. It is placed just beyond
+   * the end of the path, offset from the shared end point along the direction
+   * of the path derivative at its end (the tangent where the next segment
+   * starts). For an empty path the arrow head sits at the center of the rink.
+   */
+  private getAddButtonPosition(): Vector<2> {
+    const curves = this.sequence.path.curves;
+    if (curves.length == 0) return new Vector<2>(0, 0);
+
+    const lastCurve = curves[curves.length - 1]!;
+    const end = lastCurve.p3;
+    const dir = lastCurve.getDerivative(1 as Curvilinear).normalized();
+    const offset = ADD_BUTTON_OFFSET / this.view.zoom; // px -> m
+    return end.plus(dir.times(offset));
+  }
+
+  /** Tangent direction the add-segment arrow points along (world units). */
+  private getAddButtonDirection(): Vector<2> {
+    const curves = this.sequence.path.curves;
+    if (curves.length == 0) return new Vector<2>(0, 1); // point up for an empty path
+    return curves[curves.length - 1]!.getDerivative(1 as Curvilinear).normalized();
+  }
+
+  /** Draw the add-segment arrow near the end of the path. */
+  private drawAddButton() {
+    const ctx = this.ctx;
+    const tip = this.getAddButtonPosition();
+    const dir = this.getAddButtonDirection();
+    const perp = dir.getOrthogonal();
+
+    const shaftLen = ARROW_LENGTH / this.view.zoom;
+    const headLen = ARROW_HEAD_LENGTH / this.view.zoom;
+    const halfHeadWidth = ARROW_HEAD_WIDTH / 2 / this.view.zoom;
+
+    const tail = tip.minus(dir.times(shaftLen));
+    const headBase = tip.minus(dir.times(headLen));
+
+    ctx.strokeStyle = ADD_BUTTON_COLOR;
+    ctx.lineWidth = 2 / this.view.zoom;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    // Shaft, from the tail toward the end of the path.
+    ctx.moveTo(tail.x, -tail.y);
+    ctx.lineTo(tip.x, -tip.y);
+    // Arrowhead wings.
+    ctx.moveTo(tip.x, -tip.y);
+    ctx.lineTo(headBase.x + perp.x * halfHeadWidth, -(headBase.y + perp.y * halfHeadWidth));
+    ctx.moveTo(tip.x, -tip.y);
+    ctx.lineTo(headBase.x - perp.x * halfHeadWidth, -(headBase.y - perp.y * halfHeadWidth));
+    ctx.stroke();
+  }
+
+  /** True when the given CSS pixel position is over the "+" add-segment button. */
+  private hitAddButton(screenX: number, screenY: number): boolean {
+    const [iconX, iconY] = this.worldToScreen(this.getAddButtonPosition());
+    const dx = screenX - iconX;
+    const dy = screenY - iconY;
+    return Math.hypot(dx, dy) <= ADD_BUTTON_HIT_RADIUS;
+  }
+
+  /**
    * A guide handle (p1 or p2) is drawn only when an anchor on its shared joint
    * is selected (either representation of the joint), when it is itself
    * selected, or when its aligned partner handle across the shared joint is
@@ -278,6 +348,14 @@ export class Editor {
     );
   }
 
+  /** Convert a world position (meters) to CSS pixels (relative to the canvas). */
+  private worldToScreen(world: Vector<2>): [number, number] {
+    return [
+      this.width / 2 + (world.x - this.view.center.x) * this.view.zoom,
+      this.height / 2 - (world.y - this.view.center.y) * this.view.zoom,
+    ];
+  }
+
   private screenPosition(event: MouseEvent): [number, number] {
     const rect = this.canvas.getBoundingClientRect();
     return [event.clientX - rect.left, event.clientY - rect.top];
@@ -314,6 +392,10 @@ export class Editor {
 
     if (event.button === 0) {
       const [screenX, screenY] = this.screenPosition(event);
+      if (this.hitAddButton(screenX, screenY)) {
+        this.addSegmentEnd();
+        return;
+      }
       this.selected = this.pickControlPoint(screenX, screenY);
       if (this.selected) {
         this.isDraggingPoint = true;

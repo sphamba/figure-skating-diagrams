@@ -77,10 +77,6 @@ function saveFile() {
   anchor.click();
   URL.revokeObjectURL(url);
 }
-
-function addSegment() {
-  editor?.addSegmentEnd();
-}
 </script>
 
 <template>
@@ -91,14 +87,13 @@ function addSegment() {
         <div class="editor-view__actions">
           <Button label="Open JSON" icon="pi pi-folder-open" class="w-full" @click="openFile" />
           <Button label="Save JSON" icon="pi pi-save" class="w-full" severity="secondary" @click="saveFile" />
-          <Button label="Add segment" icon="pi pi-plus" class="w-full" severity="info" outlined @click="addSegment" />
         </div>
 
         <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFileSelected" />
 
         <p class="editor-view__hint">
           Wheel to zoom, drag with the left button on empty space or with the right button to move, left click and drag
-          the control points to edit the path.
+          the control points to edit the path, and click the arrow near the end of the path to add a segment.
         </p>
       </template>
     </Card>
