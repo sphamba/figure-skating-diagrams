@@ -1,0 +1,59 @@
+# Deploy the built Vite app to GitHub Pages.
+# Trigger: any push to the main branch, or manual run from the Actions tab.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Grant the workflow the permissions it needs for GitHub Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one deployment at a time for the Pages environment.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # 1) Build the project and upload the dist folder as a Pages artifact.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm run test:unit
+
+      - name: Type-check and build
+        run: npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  # 2) Deploy the uploaded artifact to the github-pages environment.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

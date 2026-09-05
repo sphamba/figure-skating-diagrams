@@ -1,0 +1,81 @@
+// theme.scss
+// Central design tokens (colors, spacing, typography, breakpoints) used
+// by scoped component styles via `@use "@/styles/theme" as *;`.
+//
+// Naming follows a simple semantic convention:
+//   $color-<role>
+//   $space-<scale-step>
+//   $font-<role>
+//   $breakpoint-<name>
+
+// ---------------------------------------------------------------
+// Colors
+// ---------------------------------------------------------------
+$color-primary: #3565a8;
+$color-primary-light: #5b86c4;
+$color-primary-dark: #24477a;
+
+$color-accent: #e8a33d;
+
+$color-bg: #f6f7f9;
+$color-surface: #ffffff;
+$color-border: #d8dce3;
+
+$color-text: #23272f;
+$color-text-muted: #6b7280;
+
+$color-success: #2e9e5b;
+$color-warning: #d97706;
+$color-danger: #d64545;
+
+// ---------------------------------------------------------------
+// Spacing (8px base scale)
+// ---------------------------------------------------------------
+$space-1: 0.25rem; //  4px
+$space-2: 0.5rem; //   8px
+$space-3: 0.75rem; //  12px
+$space-4: 1rem; //     16px
+$space-5: 1.5rem; //   24px
+$space-6: 2rem; //     32px
+$space-7: 3rem; //     48px
+$space-8: 4rem; //     64px
+
+// ---------------------------------------------------------------
+// Typography
+// ---------------------------------------------------------------
+$font-family-base: "Inter", "Helvetica Neue", "Segoe UI", Arial, sans-serif;
+$font-family-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+
+$font-size-xs: 0.75rem; //   12px
+$font-size-sm: 0.875rem; //  14px
+$font-size-base: 1rem; //    16px
+$font-size-lg: 1.125rem; //  18px
+$font-size-xl: 1.5rem; //    24px
+$font-size-2xl: 2rem; //     32px
+
+$font-weight-normal: 400;
+$font-weight-medium: 500;
+$font-weight-semibold: 600;
+$font-weight-bold: 700;
+
+$line-height-base: 1.5;
+$line-height-tight: 1.25;
+
+// ---------------------------------------------------------------
+// Breakpoints
+// ---------------------------------------------------------------
+$breakpoint-sm: 640px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 1024px;
+$breakpoint-xl: 1280px;
+
+// ---------------------------------------------------------------
+// Radii and shadows
+// ---------------------------------------------------------------
+$radius-sm: 0.25rem;
+$radius-base: 0.5rem;
+$radius-lg: 0.75rem;
+
+$shadow-sm: 0 1px 2px rgba(35, 39, 47, 0.08);
+$shadow-base: 0 2px 8px rgba(35, 39, 47, 0.1);
+$shadow-lg: 0 8px 24px rgba(35, 39, 47, 0.14);

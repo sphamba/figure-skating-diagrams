@@ -1,5 +1,15 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+// Main page. Intentionally blank for now.
+</script>
 
 <template>
-  <main>Hello from HomeView</main>
+  <section class="home-view"></section>
 </template>
+
+<style scoped lang="scss">
+@use "@/styles/theme" as *;
+
+.home-view {
+  min-height: $space-8 * 6;
+}
+</style>

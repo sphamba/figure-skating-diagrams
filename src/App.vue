@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import DiagramViewer from "./components/DiagramViewer.vue";
+// Root component. Routes render inside MainLayout (see src/router/index.ts).
 </script>
 
 <template>
-  <main>
-    <DiagramViewer />
-  </main>
+  <router-view />
 </template>
 
 <style scoped></style>
