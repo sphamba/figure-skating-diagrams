@@ -29,7 +29,7 @@ export class Path {
 
     // Find curve containing u
     let cumulatedLength = 0;
-    let curve = this.curves[0];
+    let curve = this.curves[0]!;
     for (curve of this.curves) {
       if (u - cumulatedLength < curve.length) break;
       if (curve == this.curves[this.curves.length - 1]) break;
@@ -80,8 +80,8 @@ export class Path {
       dir = new Vector<2>(0, 1);
     } else {
       // Take last point of chain and keep direction
-      p0 = lastCurve.p3;
-      dir = lastCurve.getDerivative(1 as Curvilinear).normalized();
+      p0 = lastCurve!.p3;
+      dir = lastCurve!.getDerivative(1 as Curvilinear).normalized();
     }
 
     return new Curve(p0, p0.plus(dir.times(1 / 3)), p0.plus(dir.times(2 / 3)), p0.plus(dir)); // 1m straight line
@@ -112,8 +112,8 @@ export class Path {
       dir = new Vector<2>(0, 1);
     } else {
       // Take first point of chain and keep direction
-      p0 = firstCurve.p0;
-      dir = firstCurve
+      p0 = firstCurve!.p0;
+      dir = firstCurve!
         .getDerivative(0 as Curvilinear)
         .times(-1)
         .normalized();
@@ -128,7 +128,7 @@ export class Path {
     if (curveIndex < 0 || curveIndex >= this.curves.length) {
       throw new Error("Curve not in Path.");
     }
-    const curve = this.curves[curveIndex];
+    const curve = this.curves[curveIndex]!;
     const [curve1, curve2] = curve.cut(x);
 
     // Remaining curves
@@ -137,11 +137,11 @@ export class Path {
 
     // Match endpoints
     if (curvesBefore.length > 0) {
-      curve1.p0 = curvesBefore[curvesBefore.length - 1].p3;
+      curve1.p0 = curvesBefore[curvesBefore.length - 1]!.p3;
     }
     curve2.p0 = curve1.p3;
     if (curvesAfter.length > 0) {
-      curve2.p3 = curvesAfter[0].p0;
+      curve2.p3 = curvesAfter[0]!.p0;
     }
 
     // Replace cut curve in array by c1 and c2
@@ -172,10 +172,10 @@ export class Path {
 
     // Match endpoints
     if (curvesBefore.length > 0) {
-      curve.p0 = curvesBefore[curvesBefore.length - 1].p3;
+      curve.p0 = curvesBefore[curvesBefore.length - 1]!.p3;
     }
     if (curvesAfter.length > 0) {
-      curve.p3 = curvesAfter[0].p0;
+      curve.p3 = curvesAfter[0]!.p0;
     }
 
     // Replace curveBefore and curveAfter in array by curve
@@ -189,7 +189,7 @@ export class Path {
     let curveAfter: Curve | undefined;
 
     for (let i = 0; i < this.curves.length - 1; i++) {
-      curveBefore = this.curves[i];
+      curveBefore = this.curves[i]!;
 
       if (curveBefore.p3 == point) {
         curveAfter = this.curves[i + 1];
@@ -206,13 +206,13 @@ export class Path {
 
   /** @param uStart - Uniform path coordinate where to start drawing, from 0 to path length. Defaults to 0.
    *   @param uEnd - Uniform path coordinate where to end drawing, from 0 to path length. Defaults to path length. */
-  draw(ctx: CanvasRenderingContext2DSized, uStart: PathCoordinate = 0 as PathCoordinate, uEnd?: PathCoordinate) {
+  draw(ctx: CanvasRenderingContext2DSized, _uStart: PathCoordinate = 0 as PathCoordinate, uEnd?: PathCoordinate) {
     uEnd ??= this.length as PathCoordinate;
     this.curves.forEach((curve) => curve.draw(ctx));
   }
 
   drawNodes(ctx: CanvasRenderingContext2DSized, size: number) {
-    const nodes = [...this.curves.map((curve) => curve.p0), this.curves[this.curves.length - 1].p3];
+    const nodes = [...this.curves.map((curve) => curve.p0), this.curves[this.curves.length - 1]!.p3];
     nodes.forEach((node) => {
       ctx.beginPath();
       ctx.arc(node.x, -node.y, size / 2, 0, 2 * Math.PI);

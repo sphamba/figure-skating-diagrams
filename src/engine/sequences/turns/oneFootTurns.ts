@@ -3,18 +3,19 @@ import type { PathCoordinate, Time } from "../../coordinates.js";
 import { FootKeyframe, TimeKeyframe } from "../../keyframe.js";
 import { Path } from "../../path.js";
 import { getQuaternionFromAngleAxis } from "../../quaternion.js";
-import { FootKey, getOppositeFootKey, Sequence } from "../../sequence.js";
+import { getOppositeFootKey, Sequence } from "../../sequence.js";
+import type { FootKey } from "../../sequence.js";
 import {
   BackwardClockwiseFootLoop,
   BackwardClockwiseFootTurn,
   BackwardCounterClockwiseFootLoop,
   BackwardCounterClockwiseFootTurn,
-  FootTurnConstructor,
   ForwardClockwiseFootLoop,
   ForwardClockwiseFootTurn,
   ForwardCounterClockwiseFootLoop,
   ForwardCounterClockwiseFootTurn,
 } from "../../turn.js";
+import type { FootTurnConstructor } from "../../turn.js";
 import { getUnitVectorFromAngle, Vector } from "../../vector.js";
 
 const pathRadius = 1.2; // meters

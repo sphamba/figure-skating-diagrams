@@ -61,7 +61,7 @@ export class Sequence {
   }
 
   get duration(): Time {
-    return this.keyframes.time[this.keyframes.time.length - 1].coordinate;
+    return this.keyframes.time[this.keyframes.time.length - 1]!.coordinate;
   }
 
   addKeyframe<Key extends PartKey, KeyframeType extends SequenceKeyframes[Key][number]>(
@@ -159,7 +159,11 @@ export class Sequence {
     this.path.drawNodes(ctx, nodeSize);
   }
 
-  drawFootTraces(ctx: CanvasRenderingContext2DSized, uStart: PathCoordinate = 0 as PathCoordinate, uEnd?: PathCoordinate) {
+  drawFootTraces(
+    ctx: CanvasRenderingContext2DSized,
+    uStart: PathCoordinate = 0 as PathCoordinate,
+    uEnd?: PathCoordinate,
+  ) {
     uEnd ??= this.path.length as PathCoordinate;
 
     this.drawFootTrace(ctx, "footL", uStart, uEnd);
@@ -247,14 +251,15 @@ export class Sequence {
 
     let keyframeAfter = keyframes.find((keyframe) => keyframe.coordinate > coordinate);
     if (keyframeAfter === undefined) {
-      keyframeAfter = keyframes[keyframes.length - 1];
+      keyframeAfter = keyframes[keyframes.length - 1]!;
     }
 
     const keyframeAfterIndex = keyframes.indexOf(keyframeAfter);
     const keyframeBeforeIndex = Math.max(0, keyframeAfterIndex - 1);
-    const keyframeBefore = keyframes[keyframeBeforeIndex];
+    const keyframeBefore = keyframes[keyframeBeforeIndex]!;
 
-    let relativeCoordinate = (coordinate - keyframeBefore.coordinate) / (keyframeAfter.coordinate - keyframeBefore.coordinate);
+    let relativeCoordinate =
+      (coordinate - keyframeBefore.coordinate) / (keyframeAfter.coordinate - keyframeBefore.coordinate);
     relativeCoordinate = Math.max(0, Math.min(1, relativeCoordinate));
 
     const easedCoordinate = getEasedTime(keyframeBefore, keyframeAfter, relativeCoordinate as Relative);

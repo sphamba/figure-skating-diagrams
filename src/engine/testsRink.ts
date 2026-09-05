@@ -5,20 +5,13 @@ import { Path } from "./path.js";
 import { getQuaternionFromAngleAxis, Quaternion } from "./quaternion.js";
 import { ctx } from "./rinkCanvas.js";
 import { Sequence } from "./sequence.js";
-import {
-  ForwardClockwiseFootTurn,
-  ForwardCounterClockwiseFootTurn,
-  BackwardClockwiseFootTurn,
-  BackwardCounterClockwiseFootTurn,
-} from "./turn.js";
+import { ForwardCounterClockwiseFootTurn } from "./turn.js";
 import { Vector } from "./vector.js";
 
 export function test() {
   const path = new Path();
   const sequence = new Sequence(path);
 
-  const bladeHalfLength = 0.12;
-  const bezierCircleParam = 0.551915;
   const interfaceLineWidth = 0.005;
   const fontSize = 0.1;
   const textHorizontalOffset = 0.2 * fontSize;
@@ -70,11 +63,11 @@ export function test() {
   }
 
   function getControlPointCoordinates(i: number): [number, number] {
-    return [parseFloat(slidersDom[2 * i].value), parseFloat(slidersDom[2 * i + 1].value)];
+    return [parseFloat(slidersDom[2 * i]!.value), parseFloat(slidersDom[2 * i + 1]!.value)];
   }
 
-  const curve1 = new Curve(points[0], points[1], points[2], points[3]);
-  const curve2 = new Curve(points[3], points[4], points[5], points[6]);
+  const curve1 = new Curve(points[0]!, points[1]!, points[2]!, points[3]!);
+  const curve2 = new Curve(points[3]!, points[4]!, points[5]!, points[6]!);
   path.addCurveEnd(curve1);
   path.addCurveEnd(curve2);
 

@@ -7,10 +7,10 @@ import { getQuaternionFromAngleAxis } from "./quaternion.js";
 import { Vector } from "./vector.js";
 
 // Arbitrary, depends on interpolation functions
-const defaultPathLengthSmooth = bladeLength * 1.6 as PathCoordinate;
-const defaultPathLengthLinear = bladeLength * 0.8 as PathCoordinate;
+const defaultPathLengthSmooth = (bladeLength * 1.6) as PathCoordinate;
+const defaultPathLengthLinear = (bladeLength * 0.8) as PathCoordinate;
 // To have loop length equal to 1.5 * bladeLength
-const defaultLoopShift = bladeLength * 0.9 as PathCoordinate;
+const defaultLoopShift = (bladeLength * 0.9) as PathCoordinate;
 
 export abstract class FootTurn {
   pathCoordinate: PathCoordinate;
@@ -42,7 +42,13 @@ export abstract class FootTurn {
   abstract createKeyframes(): void;
 }
 
-export type FootTurnConstructor = new (...args: any[]) => FootTurn;
+export type FootTurnConstructor = new (
+  pathCoordinate: PathCoordinate,
+  smoothEntry?: boolean,
+  smoothExit?: boolean,
+  pathLengthEntry?: PathCoordinate,
+  pathLengthExit?: PathCoordinate,
+) => FootTurn;
 
 abstract class FootHalfTurn extends FootTurn {
   abstract readonly forward: boolean;
@@ -67,7 +73,7 @@ abstract class FootHalfTurn extends FootTurn {
     );
 
     for (let i = 0; i < 3; i++) {
-      const pathCoordinate = pathCoordinates[i];
+      const pathCoordinate = pathCoordinates[i]!;
       const angle = this.initialAngle + i * this.angleIncrement;
       const contactPoint = i == 1 ? this.contactPointTurn : 0.5;
 
@@ -174,7 +180,7 @@ abstract class FootLoop extends FootTurn {
     ];
 
     for (let i = 0; i < 3; i++) {
-      const pathCoordinate = pathCoordinates[i];
+      const pathCoordinate = pathCoordinates[i]!;
       const angle = this.initialAngle + i * this.angleIncrement;
       const contactPoint = contactPoints[i];
 

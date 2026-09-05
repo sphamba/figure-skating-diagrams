@@ -1,10 +1,7 @@
-import { Curve } from "../curve.js";
 import "./interaction.js";
 import * as oneFootTurns from "../sequences/turns/oneFootTurns.js";
-import { Path } from "../path.js";
 import { LENGTH, WIDTH, CORNER_RADIUS } from "../rink.js";
-import { CanvasRenderingContext2DSized } from "../rinkCanvas.js";
-import { Sequence } from "../sequence.js";
+import type { CanvasRenderingContext2DSized } from "../rinkCanvas.js";
 import { Vector } from "../vector.js";
 
 const RINK_COLOR = "#ccc";
@@ -26,25 +23,6 @@ export const viewState: ViewState = {
   showPath: false,
 };
 
-function createInitialSequence(): Sequence {
-  const initialPathLength = 1;
-
-  const point1 = new Vector<2>(0, -initialPathLength / 2);
-  const point2 = new Vector<2>(0, initialPathLength / 2);
-  const difference = point2.minus(point1);
-  const controlPoint1 = point1.plus(difference.times(1 / 3));
-  const controlPoint2 = point1.plus(difference.times(2 / 3));
-
-  const curve = new Curve(point1, controlPoint1, controlPoint2, point2);
-
-  const path = new Path();
-  path.addCurveEnd(curve);
-
-  const sequence = new Sequence(path);
-  return sequence;
-}
-
-// let sequence = createInitialSequence();
 const sequence = oneFootTurns.LFI_Loop;
 
 function transformContext(ctx: CanvasRenderingContext2DSized, viewState: ViewState) {

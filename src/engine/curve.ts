@@ -55,9 +55,11 @@ export class Curve {
 
     // Find which interval contains u
     const upper = this.uniformCoordinates.findIndex((x: number) => x > u);
+    if (upper <= 0) return 0 as Curvilinear; // Defensive: should not occur for u in [0, length)
+
     const lower = upper - 1;
-    const uUpper = this.uniformCoordinates[upper];
-    const uLower = this.uniformCoordinates[lower];
+    const uUpper = this.uniformCoordinates[upper]!;
+    const uLower = this.uniformCoordinates[lower]!;
     const sUpper = Math.min(upper * ds, 1);
     const sLower = lower * ds;
 

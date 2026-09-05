@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import DiagramViewer from './components/DiagramViewer.vue';
+import DiagramViewer from "./components/DiagramViewer.vue";
 </script>
 
 <template>
@@ -8,5 +8,4 @@
   </main>
 </template>
 
-<style scoped>
-</style>
+<style scoped></style>

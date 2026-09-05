@@ -8,7 +8,7 @@ const CANVAS = Symbol("canvas");
 
 type MouseState = {
   isDown: boolean;
-  selected: any | null;
+  selected: unknown | null;
 };
 
 const mouseState: MouseState = {

@@ -12,7 +12,7 @@ export class Vector<Size extends number> {
   }
 
   get x(): number {
-    return this.data[0];
+    return this.data[0]!;
   }
 
   set x(value: number) {
@@ -20,7 +20,7 @@ export class Vector<Size extends number> {
   }
 
   get y(): number {
-    return this.data[1];
+    return this.data[1]!;
   }
 
   set y(value: number) {
@@ -31,7 +31,7 @@ export class Vector<Size extends number> {
     if (this.size < 3) {
       throw new Error(`Cannot get z component of vector of size ${this.size}`);
     }
-    return this.data[2];
+    return this.data[2]!;
   }
 
   set z(value: number) {
@@ -56,12 +56,12 @@ export class Vector<Size extends number> {
 
   /** Add a vector */
   plus(v: this): this {
-    return new (this.constructor as VectorConstructor<this>)(...this.data.map((value, i) => value + v.data[i]));
+    return new (this.constructor as VectorConstructor<this>)(...this.data.map((value, i) => value + v.data[i]!));
   }
 
   /** Subtract a vector */
   minus(v: this): this {
-    return new (this.constructor as VectorConstructor<this>)(...this.data.map((value, i) => value - v.data[i]));
+    return new (this.constructor as VectorConstructor<this>)(...this.data.map((value, i) => value - v.data[i]!));
   }
 
   /** Multiply by a scalar */
@@ -79,7 +79,7 @@ export class Vector<Size extends number> {
 
   /** Dot product */
   dot(v: this): number {
-    return this.data.reduce((sum, value, i) => sum + value * v.data[i], 0);
+    return this.data.reduce((sum, value, i) => sum + value * v.data[i]!, 0);
   }
 
   lengthSquared(): number {

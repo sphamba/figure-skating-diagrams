@@ -9,7 +9,7 @@ export class Matrix<NRows extends number, NColumns extends number> {
 
   constructor(...args: Vector<NRows>[]) {
     this.columns = args.map((vector) => vector.copy());
-    this.nRows = this.columns[0].size as NRows;
+    this.nRows = this.columns[0]!.size as NRows;
     this.nColumns = this.columns.length as NColumns;
   }
 
@@ -24,8 +24,8 @@ export class Matrix<NRows extends number, NColumns extends number> {
     if (typeof other === "number") {
       return new (this.constructor as MatrixConstructor<this>)(...this.columns.map((vector) => vector.times(other)));
     } else if (other instanceof Vector) {
-      const zero = this.columns[0].times(0);
-      return this.columns.reduce((sum, column, i) => sum.plus(column.times(other.data[i])), zero);
+      const zero = this.columns[0]!.times(0);
+      return this.columns.reduce((sum, column, i) => sum.plus(column.times(other.data[i]!)), zero);
     } else if (other instanceof Matrix) {
       const newColumns = other.columns.map((column) => this.times(column)) as Vector<NRows>[];
       return new Matrix<NRows, NColumnsOther>(...newColumns);
@@ -37,7 +37,7 @@ export class Matrix<NRows extends number, NColumns extends number> {
 
 export function eye<N extends number>(n: N): Matrix<N, N> {
   const zeros = Array(n).fill(0);
-  const columns = Array.from({ length: n }, (_) => new Vector<N>(...zeros));
+  const columns = Array.from({ length: n }, () => new Vector<N>(...zeros));
   columns.forEach((column, i) => (column.data[i] = 1));
   return new Matrix<N, N>(...columns);
 }
