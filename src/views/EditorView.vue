@@ -94,6 +94,8 @@ function saveFile() {
         <ul class="editor-view__hint">
           <li>wheel: zoom</li>
           <li>left click on a control point: select it</li>
+          <li>left click on a line: select that curve</li>
+          <li>drag a selected curve: move it (and the others selected)</li>
           <li>left drag on empty space: draw a selection rectangle</li>
           <li>drag one of the selected points: move all selected points</li>
           <li>ctrl + left click: add or remove from the selection</li>
@@ -153,6 +155,6 @@ function saveFile() {
   display: block;
   width: 100%;
   height: 100%;
-  cursor: grab;
+  cursor: default;
 }
 </style>

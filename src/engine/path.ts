@@ -216,6 +216,42 @@ export class Path {
     return [curveBefore, curveAfter];
   }
 
+  /**
+   * Find the curve of the Path closest to a given point, within a tolerance.
+   *
+   * Curves whose control-point bounding box (the smallest axis-aligned box
+   * containing the whole Bezier) does not reach the point are discarded as
+   * impossible candidates. Among the remaining curves the closest point on
+   * each one is computed and the smallest distance is kept.
+   *
+   * @param point - The query point, in world units.
+   * @param tolerance - Maximum allowed distance, in world units.
+   * @returns The index of the closest curve and its distance, or null when no
+   *          curve is within tolerance.
+   */
+  pickCurve(point: Vector<2>, tolerance: number): { curveIndex: number; curve: Curve; distance: number } | null {
+    let bestIndex = -1;
+    let bestCurve: Curve | null = null;
+    let bestDistance = Infinity;
+
+    this.curves.forEach((curve, curveIndex) => {
+      // Filter out impossible candidates with the control-point bounding box.
+      if (!curve.isPointInBoundingBox(point, tolerance)) return;
+
+      const { distance } = curve.getClosestPoint(point);
+      if (distance <= tolerance && distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = curveIndex;
+        bestCurve = curve;
+      }
+    });
+
+    if (bestCurve == null) {
+      return null;
+    }
+    return { curveIndex: bestIndex, curve: bestCurve, distance: bestDistance };
+  }
+
   /** @param uStart - Uniform path coordinate where to start drawing, from 0 to path length. Defaults to 0.
    *   @param uEnd - Uniform path coordinate where to end drawing, from 0 to path length. Defaults to path length. */
   draw(ctx: CanvasRenderingContext2DSized, _uStart: PathCoordinate = 0 as PathCoordinate, uEnd?: PathCoordinate) {

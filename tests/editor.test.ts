@@ -135,6 +135,159 @@ test("dragging multiple selected points keeps them under the cursor", () => {
   editor.destroy();
 });
 
+test("dragging an edge also drags the neighbour's supplementary control points to keep the derivative continuous", () => {
+  const { editor } = makeEditor();
+  const path = editor.getSequence().path;
+  // Append a straight continuation so the joint (1,0) is shared and the
+  // derivative is initially continuous: c0.p3 === c1.p0 === (1,0).
+  path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(4 / 3, 0), new Vector(5 / 3, 0), new Vector(2, 0)));
+  const c0 = path.curves[0]!;
+  const c1 = path.curves[1]!;
+  expect(c0.p3).toBe(c1.p0);
+
+  // Select curve 1 and translate the whole edge by a world delta.
+  const sel = editorRef(editor).selectedCurves;
+  sel.clear();
+  sel.add(1);
+  const delta = new Vector(0.5, 0.2);
+  editorRef(editor).translateSelectedCurves(delta);
+
+  // The dragged edge's own points moved together.
+  expect(c1.p0.x).toBeCloseTo(1.5, 12);
+  expect(c1.p0.y).toBeCloseTo(0.2, 12);
+  expect(c1.p1.x).toBeCloseTo(4 / 3 + 0.5, 12);
+  expect(c1.p2.x).toBeCloseTo(5 / 3 + 0.5, 12);
+  expect(c1.p3.x).toBeCloseTo(2.5, 12);
+  expect(c1.p3.y).toBeCloseTo(0.2, 12);
+
+  // The supplementary control point of the preceding neighbour moved by the
+  // same delta (keeps the joint collinear), while its other points did not.
+  expect(c0.p2.x).toBeCloseTo(2 / 3 + 0.5, 12);
+  expect(c0.p2.y).toBeCloseTo(0.2, 12);
+  expect(c0.p1.x).toBeCloseTo(1 / 3, 12);
+  expect(c0.p1.y).toBeCloseTo(0, 12);
+
+  // The derivative stays continuous at the shared joint.
+  const d0 = c0.getDerivative(1 as Curvilinear).normalized();
+  const d1 = c1.getDerivative(0 as Curvilinear).normalized();
+  expect(d0.x).toBeCloseTo(d1.x, 12);
+  expect(d0.y).toBeCloseTo(d1.y, 12);
+
+  editor.destroy();
+});
+
+test("dragging the first edge drags the next curve's supplementary p1 for continuity", () => {
+  const { editor } = makeEditor();
+  const path = editor.getSequence().path;
+  // Straight continuation so the joint (1,0) is shared: c0.p3 === c1.p0.
+  path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(4 / 3, 0), new Vector(5 / 3, 0), new Vector(2, 0)));
+  const c0 = path.curves[0]!;
+  const c1 = path.curves[1]!;
+
+  // Select curve 0 (the first edge) and translate it.
+  const sel = editorRef(editor).selectedCurves;
+  sel.clear();
+  sel.add(0);
+  const delta = new Vector(0.4, -0.3);
+  editorRef(editor).translateSelectedCurves(delta);
+
+  // The dragged edge's own points moved.
+  expect(c0.p3.x).toBeCloseTo(1.4, 12);
+  expect(c0.p3.y).toBeCloseTo(-0.3, 12);
+
+  // The next curve's supplementary p1 moved by the same delta (keeps the end
+  // joint collinear), while the next curve's own p0 (shared joint) also moved.
+  expect(c1.p1.x).toBeCloseTo(4 / 3 + 0.4, 12);
+  expect(c1.p1.y).toBeCloseTo(-0.3, 12);
+  expect(c1.p2.x).toBeCloseTo(5 / 3, 12);
+  expect(c1.p2.y).toBeCloseTo(0, 12);
+
+  // Derivative continuity is preserved at the joint.
+  const d0 = c0.getDerivative(1 as Curvilinear).normalized();
+  const d1 = c1.getDerivative(0 as Curvilinear).normalized();
+  expect(d0.x).toBeCloseTo(d1.x, 12);
+  expect(d0.y).toBeCloseTo(d1.y, 12);
+
+  editor.destroy();
+});
+
+test("dragging one of several selected curves moves them all", () => {
+  const { editor, canvas } = makeEditor();
+  const path = editor.getSequence().path;
+  // Two straight segments sharing the joint (1,0).
+  path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(4 / 3, 0), new Vector(5 / 3, 0), new Vector(2, 0)));
+  const c0 = path.curves[0]!;
+  const c1 = path.curves[1]!;
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  // Select both curves first.
+  const sel = editorRef(editor).selectedCurves;
+  sel.clear();
+  sel.add(0);
+  sel.add(1);
+  expect(sel.size).toBe(2);
+
+  // Plain-click a point on curve 1's line (midpoint (1.5, 0), not a control
+  // point) and start dragging. A plain click on an already selected curve
+  // must keep the whole multi-selection.
+  const startX = sx(1.5);
+  const startY = sy(0);
+  mouse("mousedown", canvas, { clientX: startX, clientY: startY, button: 0, ctrlKey: false });
+  expect(sel.size).toBe(2);
+
+  // Drag: final cursor is (startX + 24, startY - 18), so the world delta is
+  // (24/zoom, 18/zoom).
+  for (let i = 1; i <= 6; i++) {
+    mouse("mousemove", window, { clientX: startX + i * 4, clientY: startY - i * 3 });
+  }
+  mouse("mouseup", window, {});
+
+  const expectedX = 24 / zoom;
+  const expectedY = 18 / zoom;
+  // Both curves moved together: the far ends of each curve tracked the cursor.
+  expect(c0.p0.x).toBeCloseTo(expectedX, 6);
+  expect(c0.p0.y).toBeCloseTo(expectedY, 6);
+  expect(c1.p3.x).toBeCloseTo(2 + expectedX, 6);
+  expect(c1.p3.y).toBeCloseTo(expectedY, 6);
+
+  editor.destroy();
+});
+
+test("points and curves cannot be in the same multiple selection", () => {
+  const { editor, canvas } = makeEditor();
+  const path = editor.getSequence().path;
+  // A second curve so we can click a curve line that is not a control point.
+  path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(4 / 3, 0), new Vector(5 / 3, 0), new Vector(2, 0)));
+  const state = editorRef(editor);
+  const zoom = state.view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  // Select a control point of curve 0 (p0 at (0, 0)).
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(0), button: 0, ctrlKey: false });
+  mouse("mouseup", window, {});
+  expect(state.selected.size).toBe(1);
+  expect(state.selectedCurves.size).toBe(0);
+
+  // Ctrl + click a curve line (midpoint of curve 1): selecting a curve drops
+  // the point selection.
+  mouse("mousedown", canvas, { clientX: sx(1.5), clientY: sy(0), button: 0, ctrlKey: true });
+  mouse("mouseup", window, {});
+  expect(state.selectedCurves.size).toBe(1);
+  expect(state.selected.size).toBe(0);
+
+  // Ctrl + click a control point again: selecting a point drops the curve
+  // selection.
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(0), button: 0, ctrlKey: true });
+  mouse("mouseup", window, {});
+  expect(state.selected.size).toBe(1);
+  expect(state.selectedCurves.size).toBe(0);
+
+  editor.destroy();
+});
+
 // Small helper to reach a private field of the Editor for test assertions.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function editorRef(editor: Editor): any {

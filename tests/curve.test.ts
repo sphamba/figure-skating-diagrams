@@ -3,6 +3,74 @@ import { Curve, Curvilinear } from "../src/engine/curve";
 import { Vector } from "../src/engine/vector";
 
 
+test("isPointInBoundingBox checks the box enclosing all 4 control points", () => {
+  // Bounding box: x in [0, 4], y in [0, 2].
+  const curve = new Curve(new Vector(0, 0), new Vector(1, 2), new Vector(3, 2), new Vector(4, 0));
+
+  expect(curve.isPointInBoundingBox(new Vector(2, 1))).toBe(true);
+  expect(curve.isPointInBoundingBox(new Vector(0, 2))).toBe(true);
+  expect(curve.isPointInBoundingBox(new Vector(-1, 1))).toBe(false);
+  expect(curve.isPointInBoundingBox(new Vector(2, 3))).toBe(false);
+
+  // Tolerance expands the box on every side.
+  expect(curve.isPointInBoundingBox(new Vector(2, 3), 1)).toBe(true);
+  expect(curve.isPointInBoundingBox(new Vector(-1, 1), 1.1)).toBe(true);
+  expect(curve.isPointInBoundingBox(new Vector(-3, 1), 1)).toBe(false);
+});
+
+test("getClosestPoint on a straight line", () => {
+  const curve = new Curve(new Vector(0, 0), new Vector(2 / 3, 0), new Vector(4 / 3, 0), new Vector(2, 0));
+
+  // Interior point projects perpendicularly onto the line.
+  const interior = curve.getClosestPoint(new Vector(1, 0.5));
+  expect(interior.distance).toBeCloseTo(0.5, 10);
+  expect(interior.point.x).toBeCloseTo(1, 10);
+  expect(interior.point.y).toBeCloseTo(0, 10);
+
+  // Before the start: the closest point is the start endpoint.
+  const start = curve.getClosestPoint(new Vector(-1, 0));
+  expect(start.t).toBeCloseTo(0, 10);
+  expect(start.point.x).toBeCloseTo(0, 10);
+  expect(start.distance).toBeCloseTo(1, 10);
+
+  // After the end: the closest point is the end endpoint.
+  const end = curve.getClosestPoint(new Vector(3, 0));
+  expect(end.t).toBeCloseTo(1, 10);
+  expect(end.point.x).toBeCloseTo(2, 10);
+  expect(end.distance).toBeCloseTo(1, 10);
+});
+
+test("getClosestPoint agrees with brute-force sampling", () => {
+  const curve = new Curve(new Vector(0, 0), new Vector(1, 3), new Vector(3, -1), new Vector(4, 2));
+  const query = new Vector(3.7, 0.4);
+
+  const steps = 2000;
+  let bestDistance = Infinity;
+  for (let i = 0; i <= steps; i++) {
+    const position = curve.getPosition((i / steps) as Curvilinear);
+    const distance = position.minus(query).lengthSquared();
+    if (distance < bestDistance) bestDistance = distance;
+  }
+
+  const result = curve.getClosestPoint(query);
+  // The analytic minimum is at least as good as the best sampled point.
+  expect(result.distance).toBeLessThanOrEqual(Math.sqrt(bestDistance) + 1e-9);
+  // The returned point really lies on the curve.
+  expect(result.point.minus(curve.getPosition(result.t)).length()).toBeLessThan(1e-9);
+});
+
+test("getClosestPoint returns near-zero distance for points on the curve", () => {
+  const curve = new Curve(new Vector(0, 0), new Vector(1, 3), new Vector(3, -1), new Vector(4, 2));
+
+  for (let i = 0; i <= 40; i++) {
+    const onCurve = curve.getPosition((i / 40) as Curvilinear);
+    const result = curve.getClosestPoint(onCurve);
+    expect(result.distance).toBeLessThan(1e-6);
+    expect(result.point.minus(onCurve).length()).toBeLessThan(1e-6);
+  }
+});
+
+
 test("Get length", () => {
 	let p1 = new Vector<2>(0, 0);
 	let p2 = new Vector<2>(0.5, 0);

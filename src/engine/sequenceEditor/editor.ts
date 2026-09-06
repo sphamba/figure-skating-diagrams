@@ -55,8 +55,11 @@ export class Editor {
   private overlaySequences: Sequence[] = [];
 
   private selected = new Set<string>();
+  /** Indices of the curves currently selected (by clicking on their line). */
+  private selectedCurves = new Set<number>();
   private isPanning = false;
   private isDraggingPoint = false;
+  private isDraggingCurve = false;
   private isSelectingRect = false;
   private rectAddToSelection = false;
   private rectStartX = 0;
@@ -114,6 +117,7 @@ export class Editor {
   setSequence(sequence: Sequence) {
     this.sequence = sequence;
     this.selected.clear();
+    this.selectedCurves.clear();
     this.draw();
   }
 
@@ -144,6 +148,7 @@ export class Editor {
     for (const sequence of this.overlaySequences) {
       this.drawPath(sequence);
     }
+    this.drawSelectedCurves();
     this.drawControlHandles();
     this.drawAddButton();
     ctx.restore();
@@ -181,6 +186,20 @@ export class Editor {
     const pathWidth = PATH_WIDTH / this.view.zoom;
     // Draw the path and the foot traces (same as the home page).
     sequence.draw(this.ctx, pathWidth);
+  }
+
+  /** Draw the selected curves on top of the path, in a highlight color. */
+  private drawSelectedCurves() {
+    if (this.selectedCurves.size == 0) return;
+    const ctx = this.ctx;
+    ctx.strokeStyle = "#d33";
+    ctx.lineWidth = (PATH_WIDTH + 2) / this.view.zoom;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const curveIndex of this.selectedCurves) {
+      const curve = this.sequence.path.curves[curveIndex];
+      if (curve) curve.draw(ctx);
+    }
   }
 
   private drawControlHandles() {
@@ -363,6 +382,33 @@ export class Editor {
     return best;
   }
 
+  /**
+   * Index of the curve under the cursor, or null when the click is too far
+   * from every curve. Uses the same pick radius as the control points.
+   */
+  private pickCurve(screenX: number, screenY: number): number | null {
+    const cursor = this.screenToWorld(screenX, screenY);
+    const tolerance = PICK_RADIUS / this.view.zoom;
+    const result = this.sequence.path.pickCurve(cursor, tolerance);
+    return result ? result.curveIndex : null;
+  }
+
+  /** Select a curve, replacing the point selection on a plain click, or toggling it with ctrl. */
+  private handleCurveSelection(curveIndex: number, ctrlKey: boolean) {
+    if (ctrlKey) {
+      if (this.selectedCurves.has(curveIndex)) this.selectedCurves.delete(curveIndex);
+      else this.selectedCurves.add(curveIndex);
+    } else if (!this.selectedCurves.has(curveIndex)) {
+      // Plain click selects only this curve, unless the clicked curve is
+      // already part of a multi-selection (the group is kept so dragging it
+      // moves every selected curve).
+      this.selectedCurves = new Set([curveIndex]);
+    }
+    // Points and curves never share the selection: keeping any curve selected
+    // drops the control-point selection.
+    if (this.selectedCurves.size > 0) this.selected.clear();
+  }
+
   // Coordinate transforms //////////////////////////////////////////////////
 
   /** Convert a CSS pixel position (relative to the canvas) to world meters. */
@@ -429,9 +475,13 @@ export class Editor {
           if (this.selected.has(key)) this.selected.delete(key);
           else this.selected.add(key);
         } else if (!this.selected.has(key)) {
-          // Plain click on a new point selects only it.
+          // Plain click selects only this point, unless it is already part of
+          // a multi-selection (keep the group).
           this.selected = new Set([key]);
         }
+        // Points and curves never share the selection: keeping any point
+        // selected drops the curve selection.
+        if (this.selected.size > 0) this.selectedCurves.clear();
         // Start dragging only if the clicked point remains in the selection.
         if (this.selected.has(key)) {
           this.isDraggingPoint = true;
@@ -439,14 +489,27 @@ export class Editor {
           this.lastDragDelta = new Vector<2>(0, 0);
         }
       } else {
-        // Left drag on empty space draws a selection rectangle (no longer pans).
-        this.isSelectingRect = true;
-        this.rectAddToSelection = event.ctrlKey;
-        this.rectStartX = screenX;
-        this.rectStartY = screenY;
-        this.rectEndX = screenX;
-        this.rectEndY = screenY;
-        if (!event.ctrlKey) this.selected.clear();
+        // Click on a curve line selects the curve.
+        const curveIndex = this.pickCurve(screenX, screenY);
+        if (curveIndex != null) {
+          this.handleCurveSelection(curveIndex, event.ctrlKey);
+          // Start dragging the curve(s) if the clicked curve is selected.
+          if (this.selectedCurves.has(curveIndex)) {
+            this.isDraggingCurve = true;
+            this.dragOrigin = this.screenToWorld(screenX, screenY);
+            this.lastDragDelta = new Vector<2>(0, 0);
+          }
+        } else {
+          // Left drag on empty space draws a selection rectangle (no longer pans).
+          this.isSelectingRect = true;
+          this.rectAddToSelection = event.ctrlKey;
+          this.rectStartX = screenX;
+          this.rectStartY = screenY;
+          this.rectEndX = screenX;
+          this.rectEndY = screenY;
+          if (!event.ctrlKey) this.selected.clear();
+          this.selectedCurves.clear();
+        }
       }
       this.draw();
     }
@@ -473,6 +536,19 @@ export class Editor {
       this.rectEndX = screenX;
       this.rectEndY = screenY;
       this.draw();
+      return;
+    }
+
+    if (this.isDraggingCurve) {
+      const [screenX, screenY] = this.screenPosition(event);
+      if (!this.dragOrigin) return;
+      // Translate every selected curve by the change in delta, so the whole
+      // selection tracks the cursor exactly (no accumulation error).
+      const world = this.screenToWorld(screenX, screenY);
+      const delta = world.minus(this.dragOrigin);
+      const change = delta.minus(this.lastDragDelta);
+      this.lastDragDelta = delta;
+      this.translateSelectedCurves(change);
       return;
     }
 
@@ -549,6 +625,44 @@ export class Editor {
     this.draw();
   }
 
+  /**
+   * Translate every selected curve by `delta`: each curve's endpoints (p0,
+   * p3) and both control points (p1, p2) all move together with the same
+   * motion, so the whole edge slides without changing its shape. Shared joints
+   * are deduplicated by object identity so they are moved exactly once.
+   *
+   * To keep the path continuous, the supplementary control points of the
+   * neighbouring curves are translated too: the previous curve's p2 at the
+   * start joint and the next curve's p1 at the end joint. Moving them by the
+   * same delta as the joint keeps them collinear with it, so the derivative
+   * stays continuous (and unchanged) at the joints.
+   */
+  private translateSelectedCurves(delta: Vector<2>) {
+    const curves = this.sequence.path.curves;
+
+    const moved = new Set<Vector<2>>();
+    for (const curveIndex of this.selectedCurves) {
+      const curve = curves[curveIndex];
+      if (!curve) continue;
+      moved.add(curve.p0);
+      moved.add(curve.p1);
+      moved.add(curve.p2);
+      moved.add(curve.p3);
+      // Supplementary control points of the neighbouring curves, if they exist,
+      // to keep the derivative continuous at the shared joints.
+      if (curveIndex > 0) moved.add(curves[curveIndex - 1]!.p2);
+      if (curveIndex < curves.length - 1) moved.add(curves[curveIndex + 1]!.p1);
+    }
+
+    for (const point of moved) {
+      point.x += delta.x;
+      point.y += delta.y;
+    }
+
+    this.sequence.path.updateLength();
+    this.draw();
+  }
+
   /** Select the control points inside the dragged rectangle. */
   private finishSelectionRectangle() {
     const x0 = Math.min(this.rectStartX, this.rectEndX);
@@ -574,6 +688,7 @@ export class Editor {
     } else {
       this.selected = new Set(hits);
     }
+    this.selectedCurves.clear();
   }
 
   /** Select the anchor control points (p0, p3) of all curves, not the guides (p1, p2). */
@@ -585,6 +700,7 @@ export class Editor {
         this.selected.add(this.keyOf(curveIndex, pointKey));
       });
     });
+    this.selectedCurves.clear();
     this.draw();
   }
 
@@ -640,6 +756,7 @@ export class Editor {
     }
     this.isPanning = false;
     this.isDraggingPoint = false;
+    this.isDraggingCurve = false;
     this.dragOrigin = null;
     this.lastDragDelta = new Vector<2>(0, 0);
     this.draw();
