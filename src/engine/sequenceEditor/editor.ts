@@ -36,6 +36,9 @@ type ViewState = {
   zoom: number; // pixel per meter
 };
 
+/** The active editing tool set. Navigation works in every mode. */
+export type EditMode = "path" | "elements";
+
 type ControlPointSelection = {
   curveIndex: number;
   pointKey: ControlPointKey;
@@ -57,6 +60,8 @@ export class Editor {
   height = 0;
 
   sequence: Sequence;
+  /** Current editing mode. "elements" disables path editing for now. */
+  mode: EditMode = "path";
   private view: ViewState;
   /** Extra sequences drawn for their paths/traces but not editable. */
   private overlaySequences: Sequence[] = [];
@@ -85,11 +90,20 @@ export class Editor {
   private onKeyDown = (event: KeyboardEvent) => this.handleKeyDown(event);
   private onContextMenu = (event: MouseEvent) => event.preventDefault();
   private onWindowResize = () => this.resize();
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor(canvas: HTMLCanvasElement, sequence: Sequence) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d") as CanvasRenderingContext2DSized;
     this.sequence = sequence;
+
+    // Keep the backing store in sync whenever the canvas element resizes
+    // (e.g. when the layout changes or the sidebar splitter is dragged).
+    const ResizeObserverCtor = typeof ResizeObserver !== "undefined" ? ResizeObserver : null;
+    if (ResizeObserverCtor) {
+      this.resizeObserver = new ResizeObserverCtor(() => this.resize());
+      this.resizeObserver.observe(canvas);
+    }
 
     this.view = {
       center: new Vector<2>(0, 0),
@@ -119,6 +133,8 @@ export class Editor {
     window.removeEventListener("keydown", this.onKeyDown);
     this.canvas.removeEventListener("contextmenu", this.onContextMenu);
     window.removeEventListener("resize", this.onWindowResize);
+    if (this.resizeObserver) this.resizeObserver.disconnect();
+    this.resizeObserver = null;
   }
 
   setSequence(sequence: Sequence) {
@@ -604,6 +620,10 @@ export class Editor {
     }
 
     if (event.button === 0) {
+      // "elements" mode: only navigation is available for now, so skip all
+      // path-editing actions (selection, dragging, add/split/delete buttons).
+      if (this.mode !== "path") return;
+
       const [screenX, screenY] = this.screenPosition(event);
       if (this.hitDeleteButton(screenX, screenY)) {
         const removable = this.getRemovablePoint();
@@ -882,7 +902,7 @@ export class Editor {
   }
 
   private handleKeyDown(event: KeyboardEvent) {
-    if (event.ctrlKey && (event.key === "a" || event.key === "A")) {
+    if (this.mode === "path" && event.ctrlKey && (event.key === "a" || event.key === "A")) {
       event.preventDefault();
       this.selectAll();
     }

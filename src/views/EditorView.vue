@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Button from "openvue/button";
 import Card from "openvue/card";
-import { Editor } from "@/engine/sequenceEditor/editor";
+import Tag from "openvue/tag";
+import Fieldset from "openvue/fieldset";
+import SelectButton from "openvue/selectbutton";
+import { Editor, type EditMode } from "@/engine/sequenceEditor/editor";
 import { Path } from "@/engine/path";
 import { Sequence, type SequenceJSON } from "@/engine/sequence";
 import type { PatternJSON } from "@/engine/pattern";
@@ -10,7 +13,43 @@ import type { PatternJSON } from "@/engine/pattern";
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 
+const editModeOptions = [
+  { label: "Path", value: "path" },
+  { label: "Elements", value: "elements" },
+];
+const editMode = ref<EditMode>("path");
+
+/** A help line: one or more input gestures shown as pills, plus a description. */
+type HelpItem = { keys: string[]; description: string };
+
+/** Help commands that are actually usable in the current edit mode. */
+const helpItems = computed<HelpItem[]>(() =>
+  editMode.value === "elements"
+    ? [
+        { keys: ["wheel"], description: "zoom" },
+        { keys: ["right drag"], description: "move the view" },
+      ]
+    : [
+        { keys: ["wheel"], description: "zoom" },
+        { keys: ["left click"], description: "on a control point: select it" },
+        { keys: ["left click"], description: "on a line: select that curve" },
+        { keys: ["drag"], description: "a selected curve: move it (and the others selected)" },
+        { keys: ["left drag"], description: "on empty space: draw a selection rectangle" },
+        { keys: ["drag"], description: "one of the selected points: move all selected points" },
+        { keys: ["ctrl", "left click"], description: "add or remove from the selection" },
+        { keys: ["ctrl", "A"], description: "select all" },
+        { keys: ["right drag"], description: "move the view" },
+        { keys: ["+"], description: "button near the end of the path: add a segment" },
+        { keys: ["+"], description: "button at the midpoint of a selected curve: split it" },
+        { keys: ["-"], description: "button beside a selected point: remove that point" },
+      ],
+);
+
 let editor: Editor | null = null;
+
+watch(editMode, (mode) => {
+  if (editor) editor.mode = mode;
+});
 
 function emptySequence(): Sequence {
   return new Sequence(new Path());
@@ -81,50 +120,73 @@ function saveFile() {
 
 <template>
   <div class="editor-view">
-    <Card class="editor-view__panel">
-      <template #title>Sequence editor</template>
-      <template #content>
-        <div class="editor-view__actions">
-          <Button label="Open JSON" icon="pi pi-folder-open" class="w-full" @click="openFile" />
-          <Button label="Save JSON" icon="pi pi-save" class="w-full" severity="secondary" @click="saveFile" />
-        </div>
+    <!-- Fixed-width sidebar, flush with the left edge of the screen. -->
+    <aside class="editor-view__sidebar">
+      <Card class="editor-view__panel">
+        <template #title>Sequence editor</template>
+        <template #content>
+          <div class="editor-view__actions">
+            <label class="editor-view__mode-label">Edit mode</label>
+            <SelectButton
+              v-model="editMode"
+              :options="editModeOptions"
+              option-label="label"
+              option-value="value"
+              class="w-full"
+            />
+          </div>
 
-        <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFileSelected" />
+          <div class="editor-view__actions">
+            <Button label="Open JSON" icon="pi pi-folder-open" class="w-full" @click="openFile" />
+            <Button label="Save JSON" icon="pi pi-save" class="w-full" severity="secondary" @click="saveFile" />
+          </div>
 
-        <ul class="editor-view__hint">
-          <li>wheel: zoom</li>
-          <li>left click on a control point: select it</li>
-          <li>left click on a line: select that curve</li>
-          <li>drag a selected curve: move it (and the others selected)</li>
-          <li>left drag on empty space: draw a selection rectangle</li>
-          <li>drag one of the selected points: move all selected points</li>
-          <li>ctrl + left click: add or remove from the selection</li>
-          <li>ctrl + a: select all</li>
-          <li>right button drag: move the view</li>
-          <li>click the "+" button near the end of the path: add a segment</li>
-          <li>click the "+" button at the midpoint of a selected curve: split it</li>
-          <li>click the "-" button beside a selected point: remove that point</li>
-        </ul>
-      </template>
-    </Card>
+          <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFileSelected" />
 
+          <Fieldset legend="Input help" toggleable class="editor-view__help">
+            <ul class="editor-view__hint">
+              <li v-for="item in helpItems" :key="item.description" class="editor-view__hint-item">
+                <span class="editor-view__hint-keys">
+                  <template v-for="(key, index) in item.keys" :key="key">
+                    <Tag :value="key" rounded />
+                    <span v-if="index < item.keys.length - 1" class="editor-view__hint-separator">+</span>
+                  </template>
+                </span>
+                <span class="editor-view__hint-desc">{{ item.description }}</span>
+              </li>
+            </ul>
+          </Fieldset>
+        </template>
+      </Card>
+    </aside>
+
+    <!-- The canvas takes all remaining horizontal space. -->
     <div class="editor-view__canvas">
       <canvas ref="canvasRef" class="editor-view__canvas-element"></canvas>
     </div>
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 /* Minimal structural layout only; visual styling comes from OpenVue. */
 .editor-view {
   display: flex;
-  gap: 1rem;
-  height: 80vh;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
 }
 
-.editor-view .editor-view__panel {
-  width: 220px;
-  flex-shrink: 0;
+.editor-view__sidebar {
+  // Fixed width regardless of the viewport (not a percentage).
+  flex: 0 0 360px;
+  width: 360px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.editor-view__panel {
+  border-radius: 0;
+  height: 100%;
 }
 
 .editor-view__actions {
@@ -133,24 +195,56 @@ function saveFile() {
   gap: 0.5rem;
 }
 
-.editor-view__hint {
-  margin: 1rem 0 0;
-  padding-left: 1.1rem;
+.editor-view__actions + .editor-view__actions {
+  margin-top: 1rem;
+}
+
+.editor-view__mode-label {
+  display: block;
+  margin-bottom: 0.25rem;
   color: var(--p-text-muted-color);
   font-size: 0.875rem;
+}
+
+.editor-view__help {
+  margin-top: 1rem;
+}
+
+.editor-view__hint {
+  margin: 0;
+  padding: 0;
   list-style: none;
 }
 
-.editor-view__hint li {
-  margin-bottom: 0.25rem;
+.editor-view__hint-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.editor-view__hint-keys {
+  display: flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.editor-view__hint-separator {
+  display: flex;
+  align-items: center;
+  color: var(--p-text-muted-color);
+}
+
+.editor-view__hint-desc {
+  color: var(--p-text-muted-color);
 }
 
 .editor-view__canvas {
-  flex: 1;
+  display: flex;
+  flex: 1 1 auto;
   min-width: 0;
-  border: 1px solid var(--p-content-border-color);
-  border-radius: var(--p-content-border-radius);
-  overflow: hidden;
+  height: 100%;
 }
 
 .editor-view__canvas-element {

@@ -17,6 +17,9 @@ const router = createRouter({
           path: "editor",
           name: "editor",
           component: () => import("@/views/EditorView.vue"),
+          // Render full-bleed: the editor fills the whole page, flush to the
+          // screen edges (no centered max-width container or page padding).
+          meta: { fullBleed: true },
         },
         {
           path: "about",

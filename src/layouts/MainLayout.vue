@@ -1,7 +1,13 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
+import { useRoute } from "vue-router";
 import Button from "openvue/button";
 import Menubar from "openvue/menubar";
+
+// Full-bleed routes (e.g. the editor) fill the whole page without the centered
+// content container, so the editor can be flush with the screen edges.
+const route = useRoute();
+const isFullBleed = computed(() => Boolean(route.meta.fullBleed));
 
 // Populate the top navigation bar with router links.
 const items = ref([
@@ -36,12 +42,12 @@ const year = new Date().getFullYear();
       </Menubar>
     </header>
 
-    <main class="main-layout__content">
+    <main class="main-layout__content" :class="{ 'main-layout__content--full-bleed': isFullBleed }">
       <!-- Child routes (e.g. HomeView) render here. -->
       <router-view />
     </main>
 
-    <footer class="main-layout__footer">
+    <footer v-if="!isFullBleed" class="main-layout__footer">
       <span>&copy; {{ year }} Son Pham-Ba</span>
     </footer>
   </div>
@@ -66,6 +72,14 @@ const year = new Date().getFullYear();
     max-width: 1200px;
     margin: 0 auto;
     padding: 2rem;
+
+    &--full-bleed {
+      display: flex;
+      max-width: none;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
   }
 
   &__footer {
