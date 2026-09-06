@@ -1,4 +1,6 @@
-import type { Curvilinear } from "../curve.js";
+import type { Curvilinear, Curve } from "../curve.js";
+import type { PathCoordinate } from "../coordinates.js";
+import type { Element } from "../element.js";
 import { LENGTH, WIDTH, CORNER_RADIUS } from "../rink.js";
 import type { CanvasRenderingContext2DSized } from "../rinkCanvas.js";
 import { Sequence } from "../sequence.js";
@@ -9,6 +11,10 @@ export type ControlPointKey = "p0" | "p1" | "p2" | "p3";
 
 const RINK_COLOR = "#ccc";
 const PATH_WIDTH = 1; // px
+/** Path color in "elements" mode: translucent grey so the path stays visible but de-emphasized. */
+const ELEMENTS_PATH_COLOR = "rgba(128, 128, 128, 0.35)";
+/** Path-coordinate step used to trace an element along the path. */
+const ELEMENT_DRAW_INCREMENT = 0.02;
 const NODE_SIZE = 10; // px
 const POLYGON_ALPHA = 0.25;
 const PICK_RADIUS = 8; // px
@@ -69,10 +75,29 @@ export class Editor {
   private selected = new Set<string>();
   /** Indices of the curves currently selected (by clicking on their line). */
   private selectedCurves = new Set<number>();
+  /** Elements currently selected (path-elements mode only). */
+  private selectedElements = new Set<Element>();
   private isPanning = false;
   private isDraggingPoint = false;
   private isDraggingCurve = false;
   private isSelectingRect = false;
+  /** Set while dragging an element's control point along the path (elements mode). */
+  private isDraggingElementPoint = false;
+  /** Element whose control point is being dragged, and whether it is the start point. */
+  private dragElement: Element | null = null;
+  private dragElementPointIsStart = false;
+  /** Set while moving an element by dragging its segment (elements mode). */
+  private isDraggingElementSegment = false;
+  /**
+   * Real (arc) lengths, in path coordinates, from the invisible grabbed point
+   * on the path to the element's start and end control points. These are fixed
+   * when the drag starts so the element's length and the grabbed point's
+   * relative position are conserved while dragging.
+   */
+  private dragStartDistance = 0;
+  private dragEndDistance = 0;
+  /** Curve used as the anchor (current + neighbors) for the segment drag. */
+  private dragAnchorCurveIndex = 0;
   private rectAddToSelection = false;
   private rectStartX = 0;
   private rectStartY = 0;
@@ -141,7 +166,15 @@ export class Editor {
     this.sequence = sequence;
     this.selected.clear();
     this.selectedCurves.clear();
+    this.selectedElements.clear();
     this.draw();
+  }
+
+  /** Deselect every selected curve, control point, and element. */
+  clearSelection() {
+    this.selected.clear();
+    this.selectedCurves.clear();
+    this.selectedElements.clear();
   }
 
   /** Draw an extra sequence (path + foot traces) without making it editable. */
@@ -172,12 +205,21 @@ export class Editor {
       this.drawPath(sequence);
     }
     this.drawSelectedCurves();
-    this.drawControlHandles();
-    this.drawAddButton();
-    this.drawSplitButtons();
-    this.drawDeleteButton();
+    // Path-editing controls (control points, add/split/delete buttons,
+    // selection rectangle) are only meaningful while editing the path.
+    // In "elements" mode they are hidden, and selection is empty.
+    if (this.mode !== "elements") {
+      this.drawControlHandles();
+      this.drawAddButton();
+      this.drawSplitButtons();
+      this.drawDeleteButton();
+    } else {
+      this.drawElements();
+    }
     ctx.restore();
-    this.drawSelectionRectangle();
+    if (this.mode !== "elements") {
+      this.drawSelectionRectangle();
+    }
   }
 
   private transformContext() {
@@ -210,7 +252,9 @@ export class Editor {
     }
     const pathWidth = PATH_WIDTH / this.view.zoom;
     // Draw the path and the foot traces (same as the home page).
-    sequence.draw(this.ctx, pathWidth);
+    // In "elements" mode the path is de-emphasized in translucent grey.
+    const pathColor = this.mode === "elements" ? ELEMENTS_PATH_COLOR : undefined;
+    sequence.draw(this.ctx, pathWidth, 0 as PathCoordinate, undefined, pathColor);
   }
 
   /** Draw the selected curves on top of the path, in a highlight color. */
@@ -225,6 +269,252 @@ export class Editor {
       const curve = this.sequence.path.curves[curveIndex];
       if (curve) curve.draw(ctx);
     }
+  }
+
+  /**
+   * Draw the elements as black lines that follow the path, with a control
+   * point at each end. Each element spans a start and an end path coordinate,
+   * so its line is traced along the path between those two points, similar
+   * to how a curve is shown in path mode. Selected elements are highlighted.
+   */
+  private drawElements() {
+    if (this.sequence.path.curves.length === 0 || this.sequence.elements.length === 0) {
+      return;
+    }
+    const ctx = this.ctx;
+    const nodeSize = NODE_SIZE / this.view.zoom;
+
+    for (const element of this.sequence.elements) {
+      const selected = this.selectedElements.has(element);
+      const points = this.getElementPoints(element);
+
+      // Black line that follows the path from start to end.
+      ctx.strokeStyle = selected ? "#d33" : "#000";
+      ctx.lineWidth = (selected ? PATH_WIDTH + 2 : PATH_WIDTH) / this.view.zoom;
+      ctx.beginPath();
+      points.forEach((point, index) => {
+        if (index === 0) ctx.moveTo(point.x, -point.y);
+        else ctx.lineTo(point.x, -point.y);
+      });
+      ctx.stroke();
+
+      // Control point at each end.
+      ctx.fillStyle = selected ? "#d33" : "#444";
+      for (const point of [points[0], points[points.length - 1]]) {
+        if (!point) continue;
+        ctx.beginPath();
+        ctx.arc(point.x, -point.y, nodeSize / 2, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    }
+  }
+
+  /** Sampled world-space points along the path covered by an element. */
+  private getElementPoints(element: Element): Vector<2>[] {
+    const path = this.sequence.path;
+    const points: Vector<2>[] = [];
+    for (let u = element.start as number; u <= (element.end as number); u += ELEMENT_DRAW_INCREMENT) {
+      points.push(path.getPosition(u as PathCoordinate));
+    }
+    return points;
+  }
+
+  /** Select an element, toggling it with ctrl, or selecting only it on a plain click. */
+  private selectElement(element: Element, ctrlKey: boolean) {
+    if (ctrlKey) {
+      if (this.selectedElements.has(element)) this.selectedElements.delete(element);
+      else this.selectedElements.add(element);
+    } else if (!this.selectedElements.has(element)) {
+      this.selectedElements = new Set([element]);
+    }
+  }
+
+  /**
+   * Endpoint control point under the cursor, or null when the click is too far
+   * from every element start/end point. Used to start dragging an element point.
+   */
+  private pickElementControlPoint(screenX: number, screenY: number): { element: Element; isStart: boolean } | null {
+    const cursor = this.screenToWorld(screenX, screenY);
+    const tolerance = PICK_RADIUS / this.view.zoom;
+    let best: { element: Element; isStart: boolean } | null = null;
+    let bestDistance = Infinity;
+
+    for (const element of this.sequence.elements) {
+      const points = this.getElementPoints(element);
+      if (points.length === 0) continue;
+      const endpoints: Array<[boolean, Vector<2>]> = [
+        [true, points[0]!],
+        [false, points[points.length - 1]!],
+      ];
+      for (const [isStart, point] of endpoints) {
+        const distance = point.minus(cursor).length();
+        if (distance <= tolerance && distance < bestDistance) {
+          bestDistance = distance;
+          best = { element, isStart };
+        }
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Snap the dragged control point of an element to the point on the path
+   * closest to the given world cursor. To avoid big jumps, only the curve the
+   * point currently lies on and its direct neighbors are considered.
+   *
+   * @returns The new path coordinate, or null when it cannot be computed.
+   */
+  private snapElementPointToPath(element: Element, isStart: boolean, cursor: Vector<2>): PathCoordinate | null {
+    const path = this.sequence.path;
+    const curves = path.curves;
+    if (curves.length === 0) return null;
+
+    // Curve the endpoint currently lies on.
+    const currentU = (isStart ? element.start : element.end) as number;
+    const anchorIndex = this.curveIndexAt(curves, currentU);
+    const u = this.snapCursorToPathNearCurve(anchorIndex, cursor);
+    if (u == null) return null;
+
+    let clamped = Math.max(0, Math.min(path.length, u));
+    // Keep a valid, non-inverted span: the dragged point must not cross the
+    // opposite endpoint (start <= end).
+    const other = (isStart ? element.end : element.start) as number;
+    clamped = isStart ? Math.min(clamped, other) : Math.max(clamped, other);
+    return clamped as PathCoordinate;
+  }
+
+  /**
+   * Point on the path closest to the cursor, considering only the given anchor
+   * curve and its direct neighbors. This avoids big jumps while dragging.
+   *
+   * @returns The uniform path coordinate, or null if the path is empty.
+   */
+  private snapCursorToPathNearCurve(anchorCurveIndex: number, cursor: Vector<2>): PathCoordinate | null {
+    const curves = this.sequence.path.curves;
+    if (curves.length === 0) return null;
+
+    const lo = Math.max(0, anchorCurveIndex - 1);
+    const hi = Math.min(curves.length - 1, anchorCurveIndex + 1);
+
+    let bestIndex = anchorCurveIndex;
+    let bestT = 0;
+    let bestDistance = Infinity;
+    for (let i = lo; i <= hi; i++) {
+      const { t, distance } = curves[i]!.getClosestPoint(cursor);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+        bestT = t;
+      }
+    }
+
+    return this.uniformCoordinateAt(curves, bestIndex, bestT) as PathCoordinate;
+  }
+
+  /**
+   * Begin moving an element by dragging its segment. Records the real distances
+   * along the path between the invisible grabbed point (the path point closest
+   * to the cursor) and the element's two control points. Because the path
+   * coordinate is a global arc length, these distances are computed directly as
+   * path-coordinate differences; the curvilinear to path conversion only matters
+   * when snapping the cursor to a curve (see snapCursorToPathNearCurve).
+   */
+  private startElementSegmentDrag(element: Element, screenX: number, screenY: number) {
+    const path = this.sequence.path;
+    const curves = path.curves;
+    if (curves.length === 0) return;
+
+    const cursor = this.screenToWorld(screenX, screenY);
+    const anchorIndex = this.curveIndexAt(curves, element.start as number);
+    const grabbedU = this.snapCursorToPathNearCurve(anchorIndex, cursor);
+    if (grabbedU == null) return;
+
+    const startU = element.start as number;
+    const endU = element.end as number;
+    // The grabbed point lies on the element, so clamp it into its span. This
+    // keeps both distances non-negative (the grabbed point never falls outside
+    // the element) so the element's real length is exactly conserved.
+    const clampedGrab = Math.min(Math.max(grabbedU as number, Math.min(startU, endU)), Math.max(startU, endU));
+
+    this.isDraggingElementSegment = true;
+    this.dragElement = element;
+    // Real distances (arc lengths) from the grabbed point to each control point.
+    this.dragStartDistance = clampedGrab - startU;
+    this.dragEndDistance = endU - clampedGrab;
+    this.dragAnchorCurveIndex = anchorIndex;
+  }
+
+  /** Index of the curve containing the given path coordinate (clamped). */
+  private curveIndexAt(curves: Curve[], u: number): number {
+    if (curves.length === 0) return 0;
+    if (u <= 0) return 0;
+    if (u >= this.sequence.path.length) return curves.length - 1;
+    const [curve] = this.sequence.path.getCurveAndCurvilinearCoord(u as PathCoordinate);
+    const index = curves.indexOf(curve);
+    return index >= 0 ? index : 0;
+  }
+
+  /**
+   * Uniform path coordinate for a curvilinear parameter on a given curve, i.e.
+   * the cumulated length of the curves before it plus the point within it.
+   */
+  private uniformCoordinateAt(curves: Curve[], curveIndex: number, s: number): number {
+    let u = 0;
+    for (let i = 0; i < curveIndex; i++) u += curves[i]!.length;
+    u += this.uniformWithinCurve(curves[curveIndex]!, s);
+    return u;
+  }
+
+  /** Inverse of getCurvilinearCoordFromUniform for a single curve. */
+  private uniformWithinCurve(curve: Curve, s: number): number {
+    const n = curve.uniformCoordinates.length;
+    if (n === 0) return 0;
+    if (s <= 0) return 0;
+    if (s >= 1) return curve.length;
+    const ds = 1 / (n - 1);
+    const pos = s / ds;
+    const i0 = Math.min(n - 1, Math.floor(pos));
+    const i1 = Math.min(n - 1, i0 + 1);
+    const u0 = curve.uniformCoordinates[i0] ?? 0;
+    const u1 = curve.uniformCoordinates[i1] ?? curve.length;
+    return u0 + (u1 - u0) * (pos - i0);
+  }
+
+  /**
+   * Element under the cursor (by a control point or its segment), or null when
+   * the click is too far from every element. Uses the same pick radius as the
+   * path control points.
+   */
+  private pickElement(screenX: number, screenY: number): Element | null {
+    const cursor = this.screenToWorld(screenX, screenY);
+    const tolerance = PICK_RADIUS / this.view.zoom;
+    let best: Element | null = null;
+    let bestDistance = Infinity;
+
+    for (const element of this.sequence.elements) {
+      const points = this.getElementPoints(element);
+      if (points.length === 0) continue;
+
+      // Control points at either end.
+      for (const point of [points[0], points[points.length - 1]]) {
+        if (!point) continue;
+        const distance = point.minus(cursor).length();
+        if (distance <= tolerance && distance < bestDistance) {
+          bestDistance = distance;
+          best = element;
+        }
+      }
+
+      // Segment: the line traced along the path.
+      for (let i = 0; i < points.length - 1; i++) {
+        const distance = distanceToSegment(cursor, points[i]!, points[i + 1]!);
+        if (distance <= tolerance && distance < bestDistance) {
+          bestDistance = distance;
+          best = element;
+        }
+      }
+    }
+    return best;
   }
 
   private drawControlHandles() {
@@ -620,11 +910,31 @@ export class Editor {
     }
 
     if (event.button === 0) {
-      // "elements" mode: only navigation is available for now, so skip all
-      // path-editing actions (selection, dragging, add/split/delete buttons).
-      if (this.mode !== "path") return;
-
       const [screenX, screenY] = this.screenPosition(event);
+
+      // "elements" mode: clicking any part of an element selects it. Clicking
+      // an endpoint control point starts dragging that point along the path;
+      // clicking the segment moves the whole element along the path. No
+      // path-editing actions are available here.
+      if (this.mode !== "path") {
+        const element = this.pickElement(screenX, screenY);
+        if (element) {
+          this.selectElement(element, event.ctrlKey);
+          const pointHit = this.pickElementControlPoint(screenX, screenY);
+          if (pointHit?.element === element) {
+            this.isDraggingElementPoint = true;
+            this.dragElement = element;
+            this.dragElementPointIsStart = pointHit.isStart;
+          } else {
+            this.startElementSegmentDrag(element, screenX, screenY);
+          }
+        } else if (!event.ctrlKey) {
+          this.selectedElements.clear();
+        }
+        this.draw();
+        return;
+      }
+
       if (this.hitDeleteButton(screenX, screenY)) {
         const removable = this.getRemovablePoint();
         if (removable) {
@@ -732,6 +1042,53 @@ export class Editor {
       const [screenX, screenY] = this.screenPosition(event);
       this.rectEndX = screenX;
       this.rectEndY = screenY;
+      this.draw();
+      return;
+    }
+
+    if (this.isDraggingElementPoint) {
+      const [screenX, screenY] = this.screenPosition(event);
+      if (!this.dragElement) return;
+      const world = this.screenToWorld(screenX, screenY);
+      const u = this.snapElementPointToPath(this.dragElement, this.dragElementPointIsStart, world);
+      if (u != null) {
+        if (this.dragElementPointIsStart) this.dragElement.start = u;
+        else this.dragElement.end = u;
+        this.sequence.updateElementKeyframes(this.dragElement);
+      }
+      this.draw();
+      return;
+    }
+
+    if (this.isDraggingElementSegment) {
+      const [screenX, screenY] = this.screenPosition(event);
+      if (!this.dragElement) return;
+      const world = this.screenToWorld(screenX, screenY);
+      const pathLen = this.sequence.path.length;
+      const snappedU = this.snapCursorToPathNearCurve(this.dragAnchorCurveIndex, world);
+      if (snappedU != null) {
+        const grabbed = snappedU as number;
+        // Place the control points on the path, keeping the real distances from
+        // the grabbed point fixed, so the element's real length is conserved.
+        let newStart = grabbed - this.dragStartDistance;
+        let newEnd = grabbed + this.dragEndDistance;
+        const span = this.dragStartDistance + this.dragEndDistance;
+        // Clamp the whole span within the path, preserving its real length.
+        if (newStart < 0) {
+          newStart = 0;
+          newEnd = span;
+        }
+        if (newEnd > pathLen) {
+          newEnd = pathLen;
+          newStart = pathLen - span;
+        }
+        this.dragElement.start = newStart as PathCoordinate;
+        this.dragElement.end = newEnd as PathCoordinate;
+        this.sequence.updateElementKeyframes(this.dragElement);
+        // Follow the cursor so the move can continue across curves smoothly
+        // (the curvilinear to path conversion is anchored on newStart's curve).
+        this.dragAnchorCurveIndex = this.curveIndexAt(this.sequence.path.curves, newStart);
+      }
       this.draw();
       return;
     }
@@ -954,6 +1311,9 @@ export class Editor {
     this.isPanning = false;
     this.isDraggingPoint = false;
     this.isDraggingCurve = false;
+    this.isDraggingElementPoint = false;
+    this.isDraggingElementSegment = false;
+    this.dragElement = null;
     this.dragOrigin = null;
     this.lastDragDelta = new Vector<2>(0, 0);
     this.draw();
@@ -969,4 +1329,16 @@ export class Editor {
     this.height = this.canvas.clientHeight;
     this.draw();
   }
+}
+
+/** Shortest squared distance from point p to the segment [a, b]. */
+function distanceToSegment(p: Vector<2>, a: Vector<2>, b: Vector<2>): number {
+  const ab = b.minus(a);
+  const lengthSquared = ab.lengthSquared();
+  if (lengthSquared === 0) {
+    return p.minus(a).length();
+  }
+  let t = p.minus(a).dot(ab) / lengthSquared;
+  t = Math.max(0, Math.min(1, t));
+  return p.minus(a.plus(ab.times(t))).length();
 }

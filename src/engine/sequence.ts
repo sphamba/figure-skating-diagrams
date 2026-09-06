@@ -21,6 +21,15 @@ type PartKey = keyof SequenceKeyframes;
 export type FootKey = "footL" | "footR";
 type KeyframeType = SequenceKeyframes[PartKey][number];
 
+/** Keyframes an element contributes for each body part. */
+type ElementKeyframes = {
+  footL: FootKeyframe[];
+  footR: FootKeyframe[];
+  hips: HipsKeyframe[];
+};
+/** Part layers that elements can contribute keyframes to. */
+type FootOrHipsKey = "footL" | "footR" | "hips";
+
 /** JSON shape of a sequence, used for (de)serialization. */
 export interface SequenceJSON {
   path: ReturnType<Path["toJSON"]>;
@@ -40,7 +49,7 @@ type Relative = number & { readonly __tag: unique symbol };
 const drawIncrement = 0.02;
 const traceWidth = 0.004;
 const skidWidth = 0.03;
-const pathColor = "black";
+const defaultPathColor = "black";
 const traceColorL = "rgb(48, 48, 210)";
 const hoverColorL = "rgba(48, 48, 210, 0.2)";
 const traceColorR = "rgb(156, 0, 0)";
@@ -50,6 +59,13 @@ export class Sequence {
   path: Path;
   keyframes: SequenceKeyframes;
   elements: Element[];
+
+  /**
+   * Keyframes each element currently contributes into the sequence's keyframe
+   * arrays, keyed by element. Used to refresh a trace when an element's start
+   * or end path coordinate changes.
+   */
+  private elementKeyframes = new WeakMap<Element, ElementKeyframes>();
 
   /**
    * A sequence is a 2D path with no time. Time is a separate clock layer.
@@ -84,16 +100,70 @@ export class Sequence {
 
   addElement(element: Element) {
     this.elements.push(element);
+    this.refreshElementKeyframes(element);
+  }
 
-    for (const keyframe of element.getLeftFootKeyframes()) {
-      this.addKeyframe("footL", keyframe);
+  /**
+   * Recompute the keyframes an element contributes into the sequence's
+   * keyframe arrays from the element's current start and end, replacing its
+   * previous contribution. This is what keeps the blade traces in sync when an
+   * element's start or end is edited.
+   */
+  updateElementKeyframes(element: Element) {
+    const previous = this.elementKeyframes.get(element);
+    if (previous) {
+      this.removeElementKeyframes("footL", previous.footL);
+      this.removeElementKeyframes("footR", previous.footR);
+      this.removeElementKeyframes("hips", previous.hips);
     }
-    for (const keyframe of element.getRightFootKeyframes()) {
-      this.addKeyframe("footR", keyframe);
-    }
-    for (const keyframe of element.getHipsKeyframes()) {
-      this.addKeyframe("hips", keyframe);
-    }
+    this.refreshElementKeyframes(element);
+  }
+
+  /** Compute an element's keyframes, insert them and remember the contribution. */
+  private refreshElementKeyframes(element: Element) {
+    const footL = element.getLeftFootKeyframes();
+    const footR = element.getRightFootKeyframes();
+    const hips = element.getHipsKeyframes();
+    for (const keyframe of footL) this.addKeyframe("footL", keyframe);
+    for (const keyframe of footR) this.addKeyframe("footR", keyframe);
+    for (const keyframe of hips) this.addKeyframe("hips", keyframe);
+    this.elementKeyframes.set(element, { footL, footR, hips });
+  }
+
+  /** Remove a set of keyframe objects (by identity) from a part keyframe array. */
+  private removeElementKeyframes<Key extends FootOrHipsKey>(partKey: Key, toRemove: KeyframeType[]) {
+    const removeSet = new Set<KeyframeType>(toRemove);
+    const arr = this.keyframes[partKey] as KeyframeType[];
+    this.keyframes[partKey] = arr.filter((keyframe) => !removeSet.has(keyframe)) as SequenceKeyframes[Key];
+  }
+
+  /**
+   * After deserialization the element contributions are rebuilt so they can be
+   * refreshed later: baked keyframes matching a freshly computed element
+   * keyframe are replaced by the fresh ones, which are then tracked per element.
+   */
+  private registerLoadedElementKeyframes(element: Element) {
+    const fresh: ElementKeyframes = {
+      footL: element.getLeftFootKeyframes(),
+      footR: element.getRightFootKeyframes(),
+      hips: element.getHipsKeyframes(),
+    };
+    this.removeMatchingKeyframes("footL", fresh.footL);
+    this.removeMatchingKeyframes("footR", fresh.footR);
+    this.removeMatchingKeyframes("hips", fresh.hips);
+    for (const keyframe of fresh.footL) this.addKeyframe("footL", keyframe);
+    for (const keyframe of fresh.footR) this.addKeyframe("footR", keyframe);
+    for (const keyframe of fresh.hips) this.addKeyframe("hips", keyframe);
+    this.elementKeyframes.set(element, fresh);
+  }
+
+  /** Drop baked keyframes that structure-equal any freshly computed element keyframe. */
+  private removeMatchingKeyframes<Key extends FootOrHipsKey>(partKey: Key, computed: KeyframeType[]) {
+    const computedJson = new Set(computed.map((keyframe) => JSON.stringify(keyframe.toJSON())));
+    const arr = this.keyframes[partKey] as KeyframeType[];
+    this.keyframes[partKey] = arr.filter(
+      (keyframe) => !computedJson.has(JSON.stringify((keyframe as { toJSON(): unknown }).toJSON())),
+    ) as SequenceKeyframes[Key];
   }
 
   /** Serialize this sequence to a plain JSON object. */
@@ -120,6 +190,9 @@ export class Sequence {
       time: json.keyframes.time.map((keyframe) => TimeKeyframe.fromJSON(keyframe)),
     };
     sequence.elements = json.elements.map((element) => FootTurn.fromJSON(element));
+    for (const element of sequence.elements) {
+      sequence.registerLoadedElementKeyframes(element);
+    }
     return sequence;
   }
 
@@ -129,10 +202,11 @@ export class Sequence {
     pathWidth: number = traceWidth,
     uStart: PathCoordinate = 0 as PathCoordinate,
     uEnd?: PathCoordinate,
+    pathColor: string = defaultPathColor,
   ) {
     uEnd ??= this.path.length as PathCoordinate;
 
-    this.drawPath(ctx, pathWidth, uStart, uEnd);
+    this.drawPath(ctx, pathWidth, uStart, uEnd, pathColor);
     this.drawFootTraces(ctx, uStart, uEnd);
   }
 
@@ -187,6 +261,7 @@ export class Sequence {
     pathWidth: number = traceWidth,
     uStart: PathCoordinate = 0 as PathCoordinate,
     uEnd?: PathCoordinate,
+    pathColor: string = defaultPathColor,
   ) {
     uEnd ??= this.path.length as PathCoordinate;
 
@@ -196,7 +271,7 @@ export class Sequence {
   }
 
   drawPathNodes(ctx: CanvasRenderingContext2DSized, nodeSize: number) {
-    ctx.fillStyle = pathColor;
+    ctx.fillStyle = defaultPathColor;
     this.path.drawNodes(ctx, nodeSize);
   }
 

@@ -48,7 +48,12 @@ const helpItems = computed<HelpItem[]>(() =>
 let editor: Editor | null = null;
 
 watch(editMode, (mode) => {
-  if (editor) editor.mode = mode;
+  if (editor) {
+    editor.mode = mode;
+    // Unselect everything when switching modes (e.g. path -> elements).
+    editor.clearSelection();
+    editor.draw();
+  }
 });
 
 function emptySequence(): Sequence {
