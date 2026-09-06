@@ -165,18 +165,11 @@ export class Path {
   removePoint(point: Vector<2>) {
     const [curveBefore, curveAfter] = this.getCurvesAroundPoint(point);
 
-    // Create new Path to find intermediate positions easily
-    const subPath = new Path();
-    subPath.addCurveEnd(curveBefore);
-    subPath.addCurveEnd(curveAfter);
-
-    // Create new curve
-    const curve = Curve.intersecting(
-      subPath.getPosition(0 as PathCoordinate),
-      subPath.getPosition(((1 / 3) * subPath.length) as PathCoordinate),
-      subPath.getPosition(((2 / 3) * subPath.length) as PathCoordinate),
-      subPath.getPosition((1 * subPath.length) as PathCoordinate),
-    );
+    // Merge the two neighbours into a single curve that keeps the surviving
+    // control points unchanged: the start and first handle of the curve before
+    // the removed joint, and the last handle and end of the curve after it.
+    // The removed joint and its two adjacent handles are dropped.
+    const merged = new Curve(curveBefore.p0, curveBefore.p1, curveAfter.p2, curveAfter.p3);
 
     // Remaining curves
     const curvesBefore = this.curves.slice(0, this.curves.indexOf(curveBefore));
@@ -184,15 +177,31 @@ export class Path {
 
     // Match endpoints
     if (curvesBefore.length > 0) {
-      curve.p0 = curvesBefore[curvesBefore.length - 1]!.p3;
+      merged.p0 = curvesBefore[curvesBefore.length - 1]!.p3;
     }
     if (curvesAfter.length > 0) {
-      curve.p3 = curvesAfter[0]!.p0;
+      merged.p3 = curvesAfter[0]!.p0;
     }
 
-    // Replace curveBefore and curveAfter in array by curve
-    this.curves = [...curvesBefore, curve, ...curvesAfter];
+    // Replace curveBefore and curveAfter in array by the merged curve
+    this.curves = [...curvesBefore, merged, ...curvesAfter];
     this.updateLength();
+  }
+
+  /** Remove the final curve, shortening the path at its end. */
+  removeEndCurve() {
+    if (this.curves.length > 0) {
+      this.curves.pop();
+      this.updateLength();
+    }
+  }
+
+  /** Remove the first curve, shortening the path at its start. */
+  removeStartCurve() {
+    if (this.curves.length > 0) {
+      this.curves.shift();
+      this.updateLength();
+    }
   }
 
   /** @param point - Point in Path */

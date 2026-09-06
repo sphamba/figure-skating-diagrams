@@ -5,6 +5,8 @@ export type Curvilinear = number & { readonly __tag: unique symbol };
 
 /** Curvilinear increment for length estimation */
 const ds = 0.05 as Curvilinear;
+/** Number of integration steps per curve used for accurate arc-length lookup. */
+const ARC_LENGTH_SAMPLES = 256;
 
 export class Curve {
   p0: Vector<2>;
@@ -84,6 +86,37 @@ export class Curve {
     const sLower = lower * ds;
 
     return (((u - uLower) / (uUpper - uLower)) * (sUpper - sLower) + sLower) as Curvilinear;
+  }
+
+  /**
+   * Curvilinear coordinate at which the curve has reached half of its real
+   * arc length. The arc length is integrated at a fine resolution (unlike the
+   * coarse `uniformCoordinates` sampling used by `getCurvilinearCoordFromUniform`),
+   * then a binary search finds the parameter whose covered length equals half
+   * the total, so the result is accurate even for strongly non-uniform curves.
+   */
+  getHalfLengthCoordinate(): Curvilinear {
+    const target = this.arcLength(0 as Curvilinear, 1 as Curvilinear) / 2;
+
+    let lo = 0 as Curvilinear;
+    let hi = 1 as Curvilinear;
+    for (let i = 0; i < 40; i++) {
+      const mid = ((lo + hi) / 2) as Curvilinear;
+      if (this.arcLength(0 as Curvilinear, mid) < target) lo = mid;
+      else hi = mid;
+    }
+    return ((lo + hi) / 2) as Curvilinear;
+  }
+
+  /** Arc length of the curve between the curvilinear coordinates `a` and `b`. */
+  private arcLength(a: Curvilinear, b: Curvilinear): number {
+    const steps = ARC_LENGTH_SAMPLES;
+    const dt = (b - a) / steps;
+    let sum = 0;
+    for (let i = 0; i < steps; i++) {
+      sum += this.getDerivative((a + dt * i) as Curvilinear).length() * dt;
+    }
+    return sum;
   }
 
   /** @param s - Curvilinear coordinate */

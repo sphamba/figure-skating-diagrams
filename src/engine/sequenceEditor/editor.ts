@@ -12,12 +12,19 @@ const PATH_WIDTH = 1; // px
 const NODE_SIZE = 10; // px
 const POLYGON_ALPHA = 0.25;
 const PICK_RADIUS = 8; // px
-const ADD_BUTTON_OFFSET = 24; // px (screen distance from the path end to the arrow tip)
-const ARROW_LENGTH = 14; // px (shaft length from tail to tip)
-const ARROW_HEAD_LENGTH = 7; // px (length of each arrowhead wing from the tip)
-const ARROW_HEAD_WIDTH = 6; // px (total width of the arrowhead)
+const ADD_BUTTON_OFFSET = 20; // px (screen distance from the path end to the button center)
+const ADD_BUTTON_RADIUS = 7; // px (circle radius)
+const ADD_BUTTON_LINE_WIDTH = 1.5; // px
+const ADD_PLUS_LENGTH = 7; // px (total length of each "+" arm)
 const ADD_BUTTON_HIT_RADIUS = 14; // px
 const ADD_BUTTON_COLOR = "#d33";
+const DELETE_BUTTON_OFFSET = 20; // px (screen distance from the selected joint to the button center)
+const DELETE_BUTTON_RADIUS = 7; // px (circle radius)
+const DELETE_BUTTON_LINE_WIDTH = 1.5; // px
+const DELETE_MINUS_LENGTH = 7; // px (total length of the "-" bar)
+const DELETE_BUTTON_HIT_RADIUS = 14; // px
+const DELETE_BUTTON_COLOR = "#d33";
+const SPLIT_BUTTON_OFFSET = 14; // px (screen distance from the curve midpoint to the button center)
 const SELECTION_RECT_FILL = "rgba(100, 149, 237, 0.2)"; // gentle blue fill
 const SELECTION_RECT_STROKE = "rgba(100, 149, 237, 0.9)";
 const ZOOM_FACTOR = 1.005;
@@ -151,6 +158,8 @@ export class Editor {
     this.drawSelectedCurves();
     this.drawControlHandles();
     this.drawAddButton();
+    this.drawSplitButtons();
+    this.drawDeleteButton();
     ctx.restore();
     this.drawSelectionRectangle();
   }
@@ -251,10 +260,10 @@ export class Editor {
   }
 
   /**
-   * World position of the add-segment arrow head. It is placed just beyond
+   * World position of the "+" add-segment button. It is placed just beyond
    * the end of the path, offset from the shared end point along the direction
    * of the path derivative at its end (the tangent where the next segment
-   * starts). For an empty path the arrow head sits at the center of the rink.
+   * starts). For an empty path the button sits at the center of the rink.
    */
   private getAddButtonPosition(): Vector<2> {
     const curves = this.sequence.path.curves;
@@ -267,41 +276,37 @@ export class Editor {
     return end.plus(dir.times(offset));
   }
 
-  /** Tangent direction the add-segment arrow points along (world units). */
-  private getAddButtonDirection(): Vector<2> {
-    const curves = this.sequence.path.curves;
-    if (curves.length == 0) return new Vector<2>(0, 1); // point up for an empty path
-    return curves[curves.length - 1]!.getDerivative(1 as Curvilinear).normalized();
-  }
-
-  /** Draw the add-segment arrow near the end of the path. */
-  private drawAddButton() {
+  /** Draw a "+" inside a circle at the given world point. */
+  private drawPlusInCircle(world: Vector<2>) {
     const ctx = this.ctx;
-    const tip = this.getAddButtonPosition();
-    const dir = this.getAddButtonDirection();
-    const perp = dir.getOrthogonal();
+    const cx = world.x;
+    const cy = -world.y;
 
-    const shaftLen = ARROW_LENGTH / this.view.zoom;
-    const headLen = ARROW_HEAD_LENGTH / this.view.zoom;
-    const halfHeadWidth = ARROW_HEAD_WIDTH / 2 / this.view.zoom;
-
-    const tail = tip.minus(dir.times(shaftLen));
-    const headBase = tip.minus(dir.times(headLen));
+    const radius = ADD_BUTTON_RADIUS / this.view.zoom;
+    const halfPlus = ADD_PLUS_LENGTH / 2 / this.view.zoom;
 
     ctx.strokeStyle = ADD_BUTTON_COLOR;
-    ctx.lineWidth = 2 / this.view.zoom;
+    ctx.lineWidth = ADD_BUTTON_LINE_WIDTH / this.view.zoom;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
+
+    // Circle outline.
     ctx.beginPath();
-    // Shaft, from the tail toward the end of the path.
-    ctx.moveTo(tail.x, -tail.y);
-    ctx.lineTo(tip.x, -tip.y);
-    // Arrowhead wings.
-    ctx.moveTo(tip.x, -tip.y);
-    ctx.lineTo(headBase.x + perp.x * halfHeadWidth, -(headBase.y + perp.y * halfHeadWidth));
-    ctx.moveTo(tip.x, -tip.y);
-    ctx.lineTo(headBase.x - perp.x * halfHeadWidth, -(headBase.y - perp.y * halfHeadWidth));
+    ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
     ctx.stroke();
+
+    // "+" inside the circle.
+    ctx.beginPath();
+    ctx.moveTo(cx - halfPlus, cy);
+    ctx.lineTo(cx + halfPlus, cy);
+    ctx.moveTo(cx, cy - halfPlus);
+    ctx.lineTo(cx, cy + halfPlus);
+    ctx.stroke();
+  }
+
+  /** Draw the "+" add-segment button near the end of the path. */
+  private drawAddButton() {
+    this.drawPlusInCircle(this.getAddButtonPosition());
   }
 
   /** True when the given CSS pixel position is over the "+" add-segment button. */
@@ -310,6 +315,143 @@ export class Editor {
     const dx = screenX - iconX;
     const dy = screenY - iconY;
     return Math.hypot(dx, dy) <= ADD_BUTTON_HIT_RADIUS;
+  }
+
+  /**
+   * The point selected for removal, if exactly one point is selected. Returns
+   * the world position of the point and the tangent direction of the path
+   * there (used to offset the delete button to the side), plus flags saying
+   * whether it is the very first or very last point of the path. Interior
+   * joints (shared by two consecutive curves) and both ends are removable;
+   * the guide handles (p1, p2) are not.
+   */
+  private getRemovablePoint(): { point: Vector<2>; dir: Vector<2>; isStart: boolean; isEnd: boolean } | null {
+    if (this.selected.size !== 1 || this.selectedCurves.size > 0) return null;
+    const curves = this.sequence.path.curves;
+    if (curves.length === 0) return null;
+    const [ciStr, pkStr] = [...this.selected][0]!.split(":");
+    const curveIndex = Number(ciStr);
+    const pointKey = pkStr as ControlPointKey;
+    const curve = curves[curveIndex];
+    if (!curve) return null;
+
+    // Very first point: deleting removes the first curve. Only allowed while
+    // more than one curve remains, so the path can never become empty.
+    if (pointKey === "p0" && curveIndex === 0 && curves.length > 1) {
+      return { point: curve.p0, dir: curve.getDerivative(0 as Curvilinear).normalized(), isStart: true, isEnd: false };
+    }
+    // Very last point: deleting removes the last curve. Only allowed while
+    // more than one curve remains, so the path can never become empty.
+    if (pointKey === "p3" && curveIndex === curves.length - 1 && curves.length > 1) {
+      return { point: curve.p3, dir: curve.getDerivative(1 as Curvilinear).normalized(), isStart: false, isEnd: true };
+    }
+    // Interior joint: p0 of a non-first curve, or p3 of a non-last curve.
+    if (pointKey === "p0" && curveIndex > 0) {
+      return { point: curve.p0, dir: curve.getDerivative(0 as Curvilinear).normalized(), isStart: false, isEnd: false };
+    }
+    if (pointKey === "p3" && curveIndex < curves.length - 1) {
+      return {
+        point: curve.p3,
+        dir: curves[curveIndex + 1]!.getDerivative(0 as Curvilinear).normalized(),
+        isStart: false,
+        isEnd: false,
+      };
+    }
+    return null;
+  }
+
+  /**
+   * World position of the "-" delete button. It sits beside the selected
+   * point, offset to the side of the path (perpendicular to the tangent).
+   */
+  private getDeleteButtonPosition(): Vector<2> | null {
+    const removable = this.getRemovablePoint();
+    if (!removable) return null;
+    const perp = removable.dir.getOrthogonal();
+    const offset = DELETE_BUTTON_OFFSET / this.view.zoom; // px -> m
+    return removable.point.plus(perp.times(offset));
+  }
+
+  /** Draw the "-" delete button beside a selected joint. */
+  private drawDeleteButton() {
+    const center = this.getDeleteButtonPosition();
+    if (!center) return;
+    const ctx = this.ctx;
+    const cx = center.x;
+    const cy = -center.y;
+
+    const radius = DELETE_BUTTON_RADIUS / this.view.zoom;
+    const halfMinus = DELETE_MINUS_LENGTH / 2 / this.view.zoom;
+
+    ctx.strokeStyle = DELETE_BUTTON_COLOR;
+    ctx.lineWidth = DELETE_BUTTON_LINE_WIDTH / this.view.zoom;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    // Circle outline.
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+    ctx.stroke();
+
+    // "-" bar inside the circle.
+    ctx.beginPath();
+    ctx.moveTo(cx - halfMinus, cy);
+    ctx.lineTo(cx + halfMinus, cy);
+    ctx.stroke();
+  }
+
+  /** True when the given CSS pixel position is over the "-" delete button. */
+  private hitDeleteButton(screenX: number, screenY: number): boolean {
+    const center = this.getDeleteButtonPosition();
+    if (!center) return false;
+    const [iconX, iconY] = this.worldToScreen(center);
+    const dx = screenX - iconX;
+    const dy = screenY - iconY;
+    return Math.hypot(dx, dy) <= DELETE_BUTTON_HIT_RADIUS;
+  }
+
+  /**
+   * The "+" split buttons: one for each selected curve, placed at the real
+   * arc-length midpoint of the curve and offset to the side (perpendicular to
+   * the tangent there). The midpoint is the curvilinear coordinate at half the
+   * curve's true arc length, so the button sits at the real middle of the
+   * curve, not halfway between its control points.
+   */
+  private getSplitButtonData(): { curveIndex: number; center: Vector<2> }[] {
+    const curves = this.sequence.path.curves;
+    const result: { curveIndex: number; center: Vector<2> }[] = [];
+    for (const curveIndex of this.selectedCurves) {
+      const curve = curves[curveIndex];
+      if (!curve) continue;
+      const mid = curve.getHalfLengthCoordinate();
+      const point = curve.getPosition(mid);
+      const dir = curve.getDerivative(mid).normalized();
+      const perp = dir.getOrthogonal();
+      const offset = SPLIT_BUTTON_OFFSET / this.view.zoom; // px -> m
+      result.push({ curveIndex, center: point.plus(perp.times(offset)) });
+    }
+    return result;
+  }
+
+  /** Draw a "+" split button at the midpoint of every selected curve. */
+  private drawSplitButtons() {
+    for (const { center } of this.getSplitButtonData()) {
+      this.drawPlusInCircle(center);
+    }
+  }
+
+  /**
+   * True when the given CSS pixel position is over a "+" split button;
+   * returns the index of the curve it splits, or null when over none.
+   */
+  private hitSplitButton(screenX: number, screenY: number): number | null {
+    for (const { curveIndex, center } of this.getSplitButtonData()) {
+      const [iconX, iconY] = this.worldToScreen(center);
+      const dx = screenX - iconX;
+      const dy = screenY - iconY;
+      if (Math.hypot(dx, dy) <= ADD_BUTTON_HIT_RADIUS) return curveIndex;
+    }
+    return null;
   }
 
   /**
@@ -463,8 +605,43 @@ export class Editor {
 
     if (event.button === 0) {
       const [screenX, screenY] = this.screenPosition(event);
+      if (this.hitDeleteButton(screenX, screenY)) {
+        const removable = this.getRemovablePoint();
+        if (removable) {
+          if (removable.isStart) {
+            this.sequence.path.removeStartCurve();
+          } else if (removable.isEnd) {
+            this.sequence.path.removeEndCurve();
+          } else {
+            this.sequence.path.removePoint(removable.point);
+          }
+          this.selected.clear();
+          this.draw();
+        }
+        return;
+      }
       if (this.hitAddButton(screenX, screenY)) {
         this.addSegmentEnd();
+        return;
+      }
+      const splitCurveIndex = this.hitSplitButton(screenX, screenY);
+      if (splitCurveIndex != null) {
+        const curve = this.sequence.path.curves[splitCurveIndex];
+        if (curve) {
+          const mid = curve.getHalfLengthCoordinate();
+          this.sequence.path.cut(splitCurveIndex, mid);
+          // Split adds a joint and shifts the indices of the curves after it.
+          // Re-index the selection and keep both halves selected.
+          const newSelected = new Set<number>();
+          for (const idx of this.selectedCurves) {
+            if (idx < splitCurveIndex) newSelected.add(idx);
+            else if (idx > splitCurveIndex) newSelected.add(idx + 1);
+          }
+          newSelected.add(splitCurveIndex);
+          newSelected.add(splitCurveIndex + 1);
+          this.selectedCurves = newSelected;
+          this.draw();
+        }
         return;
       }
       const picked = this.pickControlPoint(screenX, screenY);

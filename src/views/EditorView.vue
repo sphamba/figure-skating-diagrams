@@ -101,7 +101,9 @@ function saveFile() {
           <li>ctrl + left click: add or remove from the selection</li>
           <li>ctrl + a: select all</li>
           <li>right button drag: move the view</li>
-          <li>click the arrow near the end of the path: add a segment</li>
+          <li>click the "+" button near the end of the path: add a segment</li>
+          <li>click the "+" button at the midpoint of a selected curve: split it</li>
+          <li>click the "-" button beside a selected point: remove that point</li>
         </ul>
       </template>
     </Card>
