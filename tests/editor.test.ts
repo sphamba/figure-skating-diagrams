@@ -69,3 +69,114 @@ test("new end curve keeps the end derivative and aligns control points at 1/2 an
   expect(newStartDerivative.x).toBeCloseTo(dir.x);
   expect(newStartDerivative.y).toBeCloseTo(dir.y);
 });
+
+// --- Multi-drag regression tests (real Editor instance) -------------------
+
+import { Editor } from "../src/engine/sequenceEditor/editor";
+
+/** A no-op 2D context that records nothing but accepts every call. */
+const CTX_METHODS = [
+  "scale", "clearRect", "save", "restore", "beginPath", "moveTo", "lineTo",
+  "bezierCurveTo", "stroke", "fill", "arc", "fillRect", "strokeRect", "translate",
+  "setTransform", "closePath", "rect",
+];
+
+function makeEditor() {
+  const ctx: Record<string, unknown> = { width: 0, height: 0 };
+  for (const m of CTX_METHODS) ctx[m] = () => {};
+  const canvas = document.createElement("canvas") as HTMLCanvasElement & {
+    getContext: () => Record<string, unknown>;
+  };
+  Object.defineProperty(canvas, "clientWidth", { value: 1024, configurable: true });
+  Object.defineProperty(canvas, "clientHeight", { value: 1024, configurable: true });
+  Object.defineProperty(canvas, "getContext", { value: () => ctx, configurable: true });
+  Object.defineProperty(canvas, "getBoundingClientRect", {
+    value: () => ({ left: 0, top: 0, width: 1024, height: 1024 }),
+    configurable: true,
+  });
+  const path = new Path();
+  path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
+  const editor = new Editor(canvas, new Sequence(path));
+  return { editor, canvas };
+}
+
+function mouse(eventName: string, target: EventTarget, init: MouseEventInit) {
+  target.dispatchEvent(new MouseEvent(eventName, init));
+}
+
+test("dragging multiple selected points keeps them under the cursor", () => {
+  const { editor, canvas } = makeEditor();
+  const curve = editor.getSequence().path.curves[0]!;
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  // Select p0 (plain click) then p3 (ctrl + click to add). p3 is at (1, 0).
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(0), button: 0, ctrlKey: false });
+  mouse("mouseup", window, {});
+  mouse("mousedown", canvas, { clientX: sx(1), clientY: sy(0), button: 0, ctrlKey: true });
+  mouse("mouseup", window, {});
+  expect(editorRef(editor).selected.size).toBe(2);
+
+  // Drag p0 (+ctrl-free) along a winding screen path; it must track the cursor.
+  const p0 = curve.p0;
+  const startX = sx(p0.x);
+  const startY = sy(p0.y);
+  mouse("mousedown", canvas, { clientX: startX, clientY: startY, button: 0, ctrlKey: false });
+  for (let i = 1; i <= 12; i++) {
+    const tx = startX + (i % 7) * 5 - 3;
+    const ty = startY - i * 3 + (i % 4) * 2;
+    mouse("mousemove", window, { clientX: tx, clientY: ty });
+    expect(sx(p0.x)).toBeCloseTo(tx, 0);
+    expect(sy(p0.y)).toBeCloseTo(ty, 0);
+  }
+  mouse("mouseup", window, {});
+
+  editor.destroy();
+});
+
+// Small helper to reach a private field of the Editor for test assertions.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function editorRef(editor: Editor): any {
+  return editor;
+}
+
+test("a joint shared by two curves moves once, not twice, during a group drag", () => {
+  const { editor, canvas } = makeEditor();
+  // Build a second curve so the joint (1,0) is shared: curve0.p3 === curve1.p0.
+  const path = editor.getSequence().path;
+  path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(4 / 3, 0), new Vector(5 / 3, 0), new Vector(2, 0)));
+  const c0 = path.curves[0]!;
+  const c1 = path.curves[1]!;
+  expect(c0.p3).toBe(c1.p0); // same object reference (shared joint)
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  // Both representations of the joint are selected (e.g. ctrl+A / rectangle).
+  const sel = editorRef(editor).selected;
+  sel.clear();
+  sel.add("0:p3");
+  sel.add("1:p0");
+  sel.add("1:p3");
+
+  const startX = sx(c0.p3.x);
+  const startY = sy(c0.p3.y);
+  mouse("mousedown", canvas, { clientX: startX, clientY: startY, button: 0, ctrlKey: false });
+  for (let i = 1; i <= 8; i++) {
+    const tx = startX + i * 6 - 2;
+    const ty = startY - i * 4 + 1;
+    mouse("mousemove", window, { clientX: tx, clientY: ty });
+    // The grabbed joint follows the cursor.
+    expect(sx(c0.p3.x)).toBeCloseTo(tx, 0);
+    expect(sy(c0.p3.y)).toBeCloseTo(ty, 0);
+    // And it moved by exactly one delta (not double). At step i the applied
+    // world delta is ((tx-startX)/zoom, -(ty-startY)/zoom) from the origin (1,0).
+    const expectedX = 1 + (tx - startX) / zoom;
+    const expectedY = -(ty - startY) / zoom;
+    expect(c1.p0.x).toBeCloseTo(expectedX, 3);
+    expect(c1.p0.y).toBeCloseTo(expectedY, 3);
+  }
+  mouse("mouseup", window, {});
+  editor.destroy();
+});

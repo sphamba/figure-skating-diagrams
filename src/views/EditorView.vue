@@ -91,10 +91,16 @@ function saveFile() {
 
         <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFileSelected" />
 
-        <p class="editor-view__hint">
-          Wheel to zoom, drag with the left button on empty space or with the right button to move, left click and drag
-          the control points to edit the path, and click the arrow near the end of the path to add a segment.
-        </p>
+        <ul class="editor-view__hint">
+          <li>wheel: zoom</li>
+          <li>left click on a control point: select it</li>
+          <li>left drag on empty space: draw a selection rectangle</li>
+          <li>drag one of the selected points: move all selected points</li>
+          <li>ctrl + left click: add or remove from the selection</li>
+          <li>ctrl + a: select all</li>
+          <li>right button drag: move the view</li>
+          <li>click the arrow near the end of the path: add a segment</li>
+        </ul>
       </template>
     </Card>
 
@@ -125,8 +131,14 @@ function saveFile() {
 
 .editor-view__hint {
   margin: 1rem 0 0;
+  padding-left: 1.1rem;
   color: var(--p-text-muted-color);
   font-size: 0.875rem;
+  list-style: none;
+}
+
+.editor-view__hint li {
+  margin-bottom: 0.25rem;
 }
 
 .editor-view__canvas {
