@@ -89,9 +89,9 @@ export class Editor {
   /** Set while moving an element by dragging its segment (elements mode). */
   private isDraggingElementSegment = false;
   /**
-   * Real (arc) lengths, in path coordinates, from the invisible grabbed point
+   * Real (geometric) arc lengths, in metres, from the invisible grabbed point
    * on the path to the element's start and end control points. These are fixed
-   * when the drag starts so the element's length and the grabbed point's
+   * when the drag starts so the element's real length and the grabbed point's
    * relative position are conserved while dragging.
    */
   private dragStartDistance = 0;
@@ -410,12 +410,15 @@ export class Editor {
   }
 
   /**
-   * Begin moving an element by dragging its segment. Records the real distances
-   * along the path between the invisible grabbed point (the path point closest
-   * to the cursor) and the element's two control points. Because the path
-   * coordinate is a global arc length, these distances are computed directly as
-   * path-coordinate differences; the curvilinear to path conversion only matters
-   * when snapping the cursor to a curve (see snapCursorToPathNearCurve).
+   * Begin moving an element by dragging its segment. Records the real
+   * (geometric) arc lengths along the path between the invisible grabbed point
+   * (the path point closest to the cursor, clamped into the element's span) and
+   * the element's two control points.
+   *
+   * These real lengths, not the approximate path-coordinate span, are what must
+   * stay fixed. The path coordinate is only a coarse lookup-table approximation
+   * of arc length, so conserving the path-coordinate span lets an element's
+   * drawn length drift when it is dragged across a curve whose speed varies.
    */
   private startElementSegmentDrag(element: Element, screenX: number, screenY: number) {
     const path = this.sequence.path;
@@ -430,15 +433,17 @@ export class Editor {
     const startU = element.start as number;
     const endU = element.end as number;
     // The grabbed point lies on the element, so clamp it into its span. This
-    // keeps both distances non-negative (the grabbed point never falls outside
-    // the element) so the element's real length is exactly conserved.
-    const clampedGrab = Math.min(Math.max(grabbedU as number, Math.min(startU, endU)), Math.max(startU, endU));
+    // keeps both real lengths non-negative (the grabbed point never falls
+    // outside the element) so its real length is exactly conserved.
+    const lo = Math.min(startU, endU);
+    const hi = Math.max(startU, endU);
+    const clampedGrab = Math.min(Math.max(grabbedU as number, lo), hi);
 
     this.isDraggingElementSegment = true;
     this.dragElement = element;
-    // Real distances (arc lengths) from the grabbed point to each control point.
-    this.dragStartDistance = clampedGrab - startU;
-    this.dragEndDistance = endU - clampedGrab;
+    // Real (geometric) arc lengths from the grabbed point to each control point.
+    this.dragStartDistance = path.arcLengthBetween(lo as PathCoordinate, clampedGrab as PathCoordinate);
+    this.dragEndDistance = path.arcLengthBetween(clampedGrab as PathCoordinate, hi as PathCoordinate);
     this.dragAnchorCurveIndex = anchorIndex;
   }
 
@@ -465,17 +470,7 @@ export class Editor {
 
   /** Inverse of getCurvilinearCoordFromUniform for a single curve. */
   private uniformWithinCurve(curve: Curve, s: number): number {
-    const n = curve.uniformCoordinates.length;
-    if (n === 0) return 0;
-    if (s <= 0) return 0;
-    if (s >= 1) return curve.length;
-    const ds = 1 / (n - 1);
-    const pos = s / ds;
-    const i0 = Math.min(n - 1, Math.floor(pos));
-    const i1 = Math.min(n - 1, i0 + 1);
-    const u0 = curve.uniformCoordinates[i0] ?? 0;
-    const u1 = curve.uniformCoordinates[i1] ?? curve.length;
-    return u0 + (u1 - u0) * (pos - i0);
+    return curve.getUniformCoordFromCurvilinear(s as Curvilinear);
   }
 
   /**
@@ -1062,30 +1057,35 @@ export class Editor {
       const [screenX, screenY] = this.screenPosition(event);
       if (!this.dragElement) return;
       const world = this.screenToWorld(screenX, screenY);
-      const pathLen = this.sequence.path.length;
+      const path = this.sequence.path;
+      const pathLen = path.length;
+      const total = this.dragStartDistance + this.dragEndDistance;
       const snappedU = this.snapCursorToPathNearCurve(this.dragAnchorCurveIndex, world);
       if (snappedU != null) {
         const grabbed = snappedU as number;
-        // Place the control points on the path, keeping the real distances from
-        // the grabbed point fixed, so the element's real length is conserved.
-        let newStart = grabbed - this.dragStartDistance;
-        let newEnd = grabbed + this.dragEndDistance;
-        const span = this.dragStartDistance + this.dragEndDistance;
-        // Clamp the whole span within the path, preserving its real length.
-        if (newStart < 0) {
-          newStart = 0;
-          newEnd = span;
+        // Walk the real (geometric) arc lengths from the grabbed point to each
+        // control point along the path, so the element's real length (not its
+        // approximate path-coordinate span) is conserved during the drag.
+        let newStart = path.moveAlongByArcLength(grabbed as PathCoordinate, -this.dragStartDistance);
+        let newEnd = path.moveAlongByArcLength(grabbed as PathCoordinate, this.dragEndDistance);
+        // If a path boundary was hit, re-anchor the whole span to preserve its
+        // total real length instead of letting it shrink against the edge.
+        if (total >= pathLen) {
+          newStart = 0 as PathCoordinate;
+          newEnd = pathLen as PathCoordinate;
+        } else if ((newStart as number) <= 1e-9) {
+          newStart = 0 as PathCoordinate;
+          newEnd = path.moveAlongByArcLength(0 as PathCoordinate, total);
+        } else if ((newEnd as number) >= pathLen - 1e-9) {
+          newEnd = pathLen as PathCoordinate;
+          newStart = path.moveAlongByArcLength(pathLen as PathCoordinate, -total);
         }
-        if (newEnd > pathLen) {
-          newEnd = pathLen;
-          newStart = pathLen - span;
-        }
-        this.dragElement.start = newStart as PathCoordinate;
-        this.dragElement.end = newEnd as PathCoordinate;
+        this.dragElement.start = newStart;
+        this.dragElement.end = newEnd;
         this.sequence.updateElementKeyframes(this.dragElement);
         // Follow the cursor so the move can continue across curves smoothly
         // (the curvilinear to path conversion is anchored on newStart's curve).
-        this.dragAnchorCurveIndex = this.curveIndexAt(this.sequence.path.curves, newStart);
+        this.dragAnchorCurveIndex = this.curveIndexAt(this.sequence.path.curves, newStart as number);
       }
       this.draw();
       return;

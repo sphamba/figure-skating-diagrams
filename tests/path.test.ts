@@ -256,3 +256,33 @@ test("drawRange sub-bezier endpoints land exactly on the path", () => {
   expect(endPt!.x).toBeCloseTo(expectedEnd.x, 6);
   expect(endPt!.y).toBeCloseTo(expectedEnd.y, 6);
 });
+
+test("arcLengthBetween is additive and moveAlongByArcLength lands at that length", () => {
+	const curve = new Curve(new Vector(0, 0), new Vector(0.5, 0), new Vector(5, 4), new Vector(50, 0));
+	const path = new Path();
+	path.curves.push(curve);
+	path.updateLength();
+
+	const a = (path.length * 0.2) as PathCoordinate;
+	const b = (path.length * 0.5) as PathCoordinate;
+	const c = (path.length * 0.8) as PathCoordinate;
+
+	// Adding the two halves reproduces the whole interval (the remaining residue
+	// is integration error, far below anything visible).
+	expect(path.arcLengthBetween(a, b) + path.arcLengthBetween(b, c)).toBeCloseTo(path.arcLengthBetween(a, c), 6);
+
+	// Walking forward/backward by a real arc length lands exactly where the same
+	// arc length is measured, even on a strongly non-uniform curve.
+	const d = 3;
+	const bFromA = path.moveAlongByArcLength(a, d);
+	expect(path.arcLengthBetween(a, bFromA)).toBeCloseTo(d, 6);
+	const aFromB = path.moveAlongByArcLength(b, -d);
+	expect(path.arcLengthBetween(aFromB, b)).toBeCloseTo(d, 6);
+});
+
+test("moveAlongByArcLength clamps at the path ends", () => {
+	const path = new Path();
+	path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
+	expect(path.moveAlongByArcLength(0.1 as PathCoordinate, -10)).toBe(0 as PathCoordinate);
+	expect(path.moveAlongByArcLength(0.9 as PathCoordinate, 10)).toBe(path.length as PathCoordinate);
+});

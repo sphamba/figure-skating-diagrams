@@ -62,6 +62,103 @@ export class Path {
     return curve.getPosition(curvilinearCoordinate);
   }
 
+  /**
+   * Real (geometric) arc length of the path between two path coordinates.
+   *
+   * This integrates the actual curve geometry at a fine resolution, so it is
+   * independent of the coarse uniform-coordinate lookup table used by
+   * `getPosition`. Two elements that measure the same arc length here really
+   * render with the same on-screen length, regardless of how curved or uneven
+   * the underlying curves are.
+   *
+   * @param uStart - Path coordinate where the measured range starts.
+   * @param uEnd - Path coordinate where the measured range ends.
+   *        The range is clamped to `[0, path.length]`.
+   */
+  arcLengthBetween(uStart: PathCoordinate, uEnd: PathCoordinate): number {
+    if (this.curves.length === 0) return 0;
+    const start = Math.max(0, uStart as number);
+    const end = Math.min(this.length, uEnd as number);
+    if (end <= start) return 0;
+
+    const [cStart, tStart] = this.getCurveAndCurvilinearCoord(start as PathCoordinate);
+    const [cEnd, tEnd] = this.getCurveAndCurvilinearCoord(end as PathCoordinate);
+    const iStart = this.curves.indexOf(cStart);
+    const iEnd = this.curves.indexOf(cEnd);
+
+    if (iStart === iEnd) {
+      return cStart.arcLength(tStart, tEnd);
+    }
+
+    let total = cStart.arcLength(tStart, 1 as Curvilinear);
+    for (let i = iStart + 1; i < iEnd; i++) {
+      total += this.curves[i]!.arcLength(0 as Curvilinear, 1 as Curvilinear);
+    }
+    total += cEnd.arcLength(0 as Curvilinear, tEnd);
+    return total;
+  }
+
+  /**
+   * Path coordinate reached by walking `offset` metres of real (geometric)
+   * arc length from `u`. A positive offset walks forward (increasing path
+   * coordinate), a negative offset walks backward. The result is clamped to
+   * `[0, path.length]`.
+   *
+   * The walk uses the same fine arc-length integration as `arcLengthBetween`,
+   * so `arcLengthBetween(u, moveAlongByArcLength(u, l))` is exactly `|l|`
+   * (up to integration resolution) even across strongly non-uniform curves.
+   */
+  moveAlongByArcLength(u: PathCoordinate, offset: number): PathCoordinate {
+    if (this.curves.length === 0) return 0 as PathCoordinate;
+    const uu = Math.max(0, Math.min(this.length, u as number));
+
+    let [curve, t] = this.getCurveAndCurvilinearCoord(uu as PathCoordinate);
+    let idx = this.curves.indexOf(curve);
+    let remaining = offset;
+
+    if (offset >= 0) {
+      // Walk forward along the path.
+      for (;;) {
+        const seg = curve.arcLength(t, 1 as Curvilinear);
+        if (remaining <= seg) {
+          return this.coordinateFor(idx, arcLengthForwardTarget(curve, t, remaining));
+        }
+        remaining -= seg;
+        if (idx >= this.curves.length - 1) return this.length as PathCoordinate;
+        idx += 1;
+        curve = this.curves[idx]!;
+        t = 0 as Curvilinear;
+      }
+    }
+
+    // Walk backward along the path.
+    remaining = -offset;
+    for (;;) {
+      const seg = curve.arcLength(0 as Curvilinear, t);
+      if (remaining <= seg) {
+        return this.coordinateFor(idx, arcLengthBackwardTarget(curve, t, remaining));
+      }
+      remaining -= seg;
+      if (idx <= 0) return 0 as PathCoordinate;
+      idx -= 1;
+      curve = this.curves[idx]!;
+      t = 1 as Curvilinear;
+    }
+  }
+
+  /**
+   * Path coordinate for a curved point given as a curve index and a
+   * curvilinear parameter. Uses the same coarse cumulated lengths and the same
+   * within-curve uniform mapping as `getCurveAndCurvilinearCoord`, so the two
+   * are consistent round-trips.
+   */
+  private coordinateFor(curveIndex: number, s: Curvilinear): PathCoordinate {
+    let cumulated = 0;
+    for (let i = 0; i < curveIndex; i++) cumulated += this.curves[i]!.length;
+    const curve = this.curves[curveIndex]!;
+    return (cumulated + curve.getUniformCoordFromCurvilinear(s)) as PathCoordinate;
+  }
+
   /** @param u - Uniform path coordinate, from 0 to path length */
   getDerivative(u: PathCoordinate): Vector<2> {
     const [curve, curvilinearCoordinate] = this.getCurveAndCurvilinearCoord(u);
@@ -332,6 +429,40 @@ export class Path {
  * parameter, so splitting at the same value keeps the drawn segment aligned
  * with the path.
  */
+/**
+ * Curvilinear coordinate on `curve` that is exactly `length` of real arc
+ * length ahead of `t` (i.e. arcLength(t, s) == length), found by binary search.
+ * Assumes `length` is within arcLength(t, 1).
+ */
+function arcLengthForwardTarget(curve: Curve, t: Curvilinear, length: number): Curvilinear {
+  let lo = t as number;
+  let hi = 1;
+  const goal = length;
+  for (let i = 0; i < 30; i++) {
+    const mid = (lo + hi) / 2;
+    if (curve.arcLength(t, mid as Curvilinear) < goal) lo = mid;
+    else hi = mid;
+  }
+  return ((lo + hi) / 2) as Curvilinear;
+}
+
+/**
+ * Curvilinear coordinate on `curve` that is exactly `length` of real arc
+ * length behind `t` (i.e. arcLength(s, t) == length), found by binary search.
+ * Assumes `length` is within arcLength(0, t).
+ */
+function arcLengthBackwardTarget(curve: Curve, t: Curvilinear, length: number): Curvilinear {
+  let lo = 0;
+  let hi = t as number;
+  const goal = length;
+  for (let i = 0; i < 30; i++) {
+    const mid = (lo + hi) / 2;
+    if (curve.arcLength(mid as Curvilinear, t) < goal) hi = mid;
+    else lo = mid;
+  }
+  return ((lo + hi) / 2) as Curvilinear;
+}
+
 function splitBezierAt(
   p0: Vector<2>,
   p1: Vector<2>,

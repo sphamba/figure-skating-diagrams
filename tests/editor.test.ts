@@ -3,7 +3,9 @@ import { Curve } from "../src/engine/curve";
 import type { Curvilinear } from "../src/engine/curve";
 import { Path } from "../src/engine/path";
 import { Sequence } from "../src/engine/sequence";
+import type { PathCoordinate } from "../src/engine/coordinates";
 import { Vector } from "../src/engine/vector";
+import { ForwardCounterClockwiseFootTurn } from "../src/engine/turn";
 
 /** Build a simple known path: a straight 1 m line along the X axis. */
 function makeStraightPath(): Path {
@@ -214,8 +216,11 @@ test("dragging the first edge drags the next curve's supplementary p1 for contin
 test("dragging one of several selected curves moves them all", () => {
   const { editor, canvas } = makeEditor();
   const path = editor.getSequence().path;
-  // Two straight segments sharing the joint (1,0).
-  path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(4 / 3, 0), new Vector(5 / 3, 0), new Vector(2, 0)));
+  // Two straight segments (4 m each) sharing the joint (4,0). The curves are
+  // long so that the grab point on curve 1's line sits well away from both the
+  // control-point pick radius and the "+" add/split buttons that float near
+  // the curve endpoints and midpoints.
+  path.addCurveEnd(new Curve(new Vector(4, 0), new Vector(16 / 3, 0), new Vector(20 / 3, 0), new Vector(8, 0)));
   const c0 = path.curves[0]!;
   const c1 = path.curves[1]!;
   const zoom = editorRef(editor).view.zoom;
@@ -229,10 +234,10 @@ test("dragging one of several selected curves moves them all", () => {
   sel.add(1);
   expect(sel.size).toBe(2);
 
-  // Plain-click a point on curve 1's line (midpoint (1.5, 0), not a control
-  // point) and start dragging. A plain click on an already selected curve
-  // must keep the whole multi-selection.
-  const startX = sx(1.5);
+  // Plain-click a point on curve 1's line (quarter point (5, 0), not a control
+  // point nor a split/add button) and start dragging. A plain click on an
+  // already selected curve must keep the whole multi-selection.
+  const startX = sx(5);
   const startY = sy(0);
   mouse("mousedown", canvas, { clientX: startX, clientY: startY, button: 0, ctrlKey: false });
   expect(sel.size).toBe(2);
@@ -249,7 +254,7 @@ test("dragging one of several selected curves moves them all", () => {
   // Both curves moved together: the far ends of each curve tracked the cursor.
   expect(c0.p0.x).toBeCloseTo(expectedX, 6);
   expect(c0.p0.y).toBeCloseTo(expectedY, 6);
-  expect(c1.p3.x).toBeCloseTo(2 + expectedX, 6);
+  expect(c1.p3.x).toBeCloseTo(8 + expectedX, 6);
   expect(c1.p3.y).toBeCloseTo(expectedY, 6);
 
   editor.destroy();
@@ -329,6 +334,50 @@ test("a joint shared by two curves moves once, not twice, during a group drag", 
     const expectedY = -(ty - startY) / zoom;
     expect(c1.p0.x).toBeCloseTo(expectedX, 3);
     expect(c1.p0.y).toBeCloseTo(expectedY, 3);
+  }
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("dragging an element by its segment keeps its real length constant", () => {
+  // A strongly non-uniform single curve: the arc length covered per unit of
+  // the Bezier parameter varies hugely along it, so the path-coordinate span
+  // is only a poor proxy for the real drawn length. This is exactly the case
+  // where the editor used to let an element's length drift while dragging by
+  // its segment.
+  const { editor, canvas } = makeEditor();
+  const path = editor.getSequence().path;
+  path.curves = [new Curve(new Vector(0, 0), new Vector(0.5, 0), new Vector(5, 4), new Vector(50, 0))];
+  path.updateLength();
+  editorRef(editor).mode = "elements";
+
+  const startU = (path.length * 0.2) as PathCoordinate;
+  const endU = (path.length * 0.4) as PathCoordinate;
+  const el = new ForwardCounterClockwiseFootTurn("footL", startU, endU);
+  editorRef(editor).sequence.elements.push(el);
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  // Grab the element by the middle of its segment.
+  const midU = (startU + endU) / 2;
+  const mid = path.getPosition(midU as PathCoordinate);
+  mouse("mousedown", canvas, { clientX: sx(mid.x), clientY: sy(mid.y), button: 0, ctrlKey: false });
+  expect(editorRef(editor).isDraggingElementSegment).toBe(true);
+
+  const initial = path.arcLengthBetween(el.start, el.end);
+
+  // Drag the grabbed point along almost the whole curve, checking at several
+  // points that the element's real (geometric) length stays constant even when
+  // the element is pushed against the path boundaries.
+  for (let i = 1; i <= 200; i++) {
+    const u = path.length * (0.02 + (i / 200) * 0.96);
+    const p = path.getPosition(u as PathCoordinate);
+    mouse("mousemove", window, { clientX: sx(p.x), clientY: sy(p.y), button: 0 });
+    if (i % 40 === 0) {
+      expect(path.arcLengthBetween(el.start, el.end)).toBeCloseTo(initial, 6);
+    }
   }
   mouse("mouseup", window, {});
   editor.destroy();

@@ -17,7 +17,7 @@ export type Curvilinear = number & { readonly __tag: unique symbol };
  */
 const ds = 0.001 as Curvilinear;
 /** Number of integration steps per curve used for accurate arc-length lookup. */
-const ARC_LENGTH_SAMPLES = 256;
+const ARC_LENGTH_SAMPLES = 128;
 
 export class Curve {
   p0: Vector<2>;
@@ -120,14 +120,50 @@ export class Curve {
   }
 
   /** Arc length of the curve between the curvilinear coordinates `a` and `b`. */
-  private arcLength(a: Curvilinear, b: Curvilinear): number {
-    const steps = ARC_LENGTH_SAMPLES;
-    const dt = (b - a) / steps;
-    let sum = 0;
-    for (let i = 0; i < steps; i++) {
-      sum += this.getDerivative((a + dt * i) as Curvilinear).length() * dt;
+  arcLength(a: Curvilinear, b: Curvilinear): number {
+    if (b <= a) return 0;
+    // Composite Simpson's rule over the (smooth) speed along the curve. On a
+    // cubic Bezier the speed |dP/dt| is smooth, so Simpson converges far faster
+    // than the trapezoidal rule and keeps the integration error (and the
+    // resulting non-additivity between adjacent sub-intervals) far below what
+    // the eye can notice. That additivity is what lets an element dragged along
+    // the path keep its real length constant: the walk used to place its two
+    // control points and the measurement used to verify its length agree.
+    const steps = ARC_LENGTH_SAMPLES; // number of even sub-intervals
+    const h = (b - a) / steps;
+    let sum = this.getDerivative(a).length() + this.getDerivative(b).length();
+    for (let i = 1; i < steps; i++) {
+      const t = (a + i * h) as Curvilinear;
+      sum += (i % 2 === 1 ? 4 : 2) * this.getDerivative(t).length();
     }
-    return sum;
+    return (sum * h) / 3;
+  }
+
+  /**
+   * Inverse of `getCurvilinearCoordFromUniform`: map a curvilinear coordinate
+   * back to the uniform (approximate arc-length) coordinate, using the same
+   * piecewise-linear interpolation and the same sample spacing so that the
+   * round trip `u -> s -> u` is the identity.
+   *
+   * Keeping the forward and inverse mappings consistent is what lets an element
+   * traced along the path by fixed arc-length increments keep its real length
+   * constant when it is dragged across curves whose speed varies strongly.
+   */
+  getUniformCoordFromCurvilinear(s: Curvilinear): number {
+    if (s <= 0) return 0;
+    if (s >= 1) return this.length;
+    const n = this.uniformCoordinates.length;
+    if (n === 0) return 0;
+    // The uniform-coordinate table stores one sample every 0.001 of the
+    // parameter (see the module-level `ds` used by `updateLength` and
+    // `getCurvilinearCoordFromUniform`), so index i sits at t = i * ds.
+    const ds = 0.001;
+    const pos = s / ds;
+    const i0 = Math.min(n - 1, Math.floor(pos));
+    const i1 = Math.min(n - 1, i0 + 1);
+    const u0 = this.uniformCoordinates[i0] ?? 0;
+    const u1 = this.uniformCoordinates[i1] ?? this.length;
+    return u0 + (u1 - u0) * (pos - i0);
   }
 
   /** @param s - Curvilinear coordinate */
