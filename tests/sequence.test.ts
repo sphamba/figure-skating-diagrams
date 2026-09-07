@@ -4,6 +4,10 @@ import type { PathCoordinate, Time } from "../src/engine/coordinates";
 import { FootKeyframe, TimeKeyframe } from "../src/engine/keyframe";
 import { Path } from "../src/engine/path";
 import { Quaternion } from "../src/engine/quaternion";
+import {
+  ForwardCounterClockwiseFootLoop,
+  ForwardCounterClockwiseFootTurn,
+} from "../src/engine/turn";
 import { Sequence } from "../src/engine/sequence";
 import { Vector } from "../src/engine/vector";
 
@@ -96,4 +100,53 @@ test("draw renders traces for both feet", () => {
 
   expect(strokes).toContain(TRACE_COLOR_L);
   expect(strokes).toContain(TRACE_COLOR_R);
+});
+
+test("drawing a sequence with no drawable foot data does not crash", () => {
+  // A sequence with 0 elements can still have baked/bare foot keyframes that
+  // only define a position (no orientation nor contact point). Drawing its
+  // foot trace must skip the trace instead of crashing inside
+  // getKeyframesAround on an empty keyframe set.
+  const sequence = new Sequence(makeStraightLengthOnePath());
+  sequence.keyframes.footL = [
+    new FootKeyframe(0 as PathCoordinate, { position: new Vector(0, 0, 0) }),
+    new FootKeyframe(1 as PathCoordinate, { position: new Vector(0, 0, 0) }),
+  ];
+  expect(sequence.elements).toHaveLength(0);
+
+  const ctx = {
+    scale: () => {},
+    clearRect: () => {},
+    save: () => {},
+    restore: () => {},
+    beginPath: () => {},
+    moveTo: () => {},
+    lineTo: () => {},
+    bezierCurveTo: () => {},
+    stroke: () => {},
+    fill: () => {},
+    arc: () => {},
+  };
+  expect(() => sequence.draw(ctx as never)).not.toThrow();
+});
+
+test("replaceElement swaps an element in place and rebuilds its keyframes", () => {
+  const sequence = new Sequence(makeStraightLengthOnePath());
+  const start = 0.25 as PathCoordinate;
+  const end = 0.75 as PathCoordinate;
+  const turn = new ForwardCounterClockwiseFootTurn("footL", start, end, true, true);
+  sequence.addElement(turn);
+
+  // A half turn contributes no foot position keyframes, a loop does.
+  expect(sequence.keyframes.footL.some((kf) => kf.data.position !== undefined)).toBe(false);
+
+  const loop = new ForwardCounterClockwiseFootLoop("footL", start, end, true, true);
+  sequence.replaceElement(turn, loop);
+
+  expect(sequence.elements).toHaveLength(1);
+  expect(sequence.elements[0]).toBe(loop);
+  expect(sequence.elements[0]!.start).toBe(start);
+  expect(sequence.elements[0]!.end).toBe(end);
+  // The loop contribution replaced the turn's keyframes.
+  expect(sequence.keyframes.footL.some((kf) => kf.data.position !== undefined)).toBe(true);
 });

@@ -2,7 +2,7 @@ import { bladeLength } from "./constants.js";
 import type { PathCoordinate, Time } from "./coordinates.js";
 import type { Element } from "./element.js";
 import { interpolate } from "./interpolate.js";
-import { FootKeyframe, HipsKeyframe, TimeKeyframe } from "./keyframe.js";
+import { FootKeyframe, HipsKeyframe, TimeKeyframe, type FootData } from "./keyframe.js";
 import type { FootKeyframeJSON, HipsKeyframeJSON, TimeKeyframeJSON } from "./keyframe.js";
 import { Path } from "./path.js";
 import { Quaternion, getQuaternionFromAngleAxis } from "./quaternion.js";
@@ -101,6 +101,40 @@ export class Sequence {
   addElement(element: Element) {
     this.elements.push(element);
     this.refreshElementKeyframes(element);
+  }
+
+  /**
+   * Remove an element from the sequence. The keyframes it contributed to the
+   * foot and hips parts are dropped too, so the timeline stays in sync.
+   */
+  removeElement(element: Element) {
+    this.elements = this.elements.filter((candidate) => candidate !== element);
+    const previous = this.elementKeyframes.get(element);
+    if (previous) {
+      this.removeElementKeyframes("footL", previous.footL);
+      this.removeElementKeyframes("footR", previous.footR);
+      this.removeElementKeyframes("hips", previous.hips);
+    }
+    this.elementKeyframes.delete(element);
+  }
+
+  /**
+   * Replace one element with another in-place, keeping its position in the
+   * array and rebuilding the keyframe contribution. The old element's
+   * keyframes are dropped and the new element's are inserted.
+   */
+  replaceElement(oldElement: Element, newElement: Element) {
+    const index = this.elements.indexOf(oldElement);
+    if (index === -1) return;
+    const previous = this.elementKeyframes.get(oldElement);
+    if (previous) {
+      this.removeElementKeyframes("footL", previous.footL);
+      this.removeElementKeyframes("footR", previous.footR);
+      this.removeElementKeyframes("hips", previous.hips);
+    }
+    this.elementKeyframes.delete(oldElement);
+    this.elements[index] = newElement;
+    this.refreshElementKeyframes(newElement);
   }
 
   /**
@@ -297,11 +331,14 @@ export class Sequence {
     if (this.keyframes[footKey].length == 0) {
       return;
     }
-    // A foot trace needs the foot's position at every point along the path.
-    // If no keyframe defines a position for this foot, there is nothing
-    // meaningful to trace, so skip it. (Production timelines always define a
-    // position, so this only affects freshly built or partial timelines.)
-    if (!this.keyframes[footKey].some((keyframe) => keyframe.data.position !== undefined)) {
+    // A foot trace needs the foot's position, orientation and contact point at
+    // every point along the path. If the keyframes do not define all three,
+    // there is nothing meaningful to trace, so skip it. (Production timelines
+    // always define all three, so this only affects freshly built or partial
+    // timelines, e.g. a sequence with no elements.)
+    const hasData = (property: keyof FootData) =>
+      this.keyframes[footKey].some((keyframe) => keyframe.data[property] !== undefined);
+    if (!hasData("position") || !hasData("orientation") || !hasData("contactPoint")) {
       return;
     }
 

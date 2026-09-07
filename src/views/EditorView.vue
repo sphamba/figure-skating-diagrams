@@ -5,9 +5,13 @@ import Card from "openvue/card";
 import Tag from "openvue/tag";
 import Fieldset from "openvue/fieldset";
 import SelectButton from "openvue/selectbutton";
+import Dialog from "openvue/dialog";
+import Listbox from "openvue/listbox";
 import { Editor, type EditMode } from "@/engine/sequenceEditor/editor";
 import { Path } from "@/engine/path";
 import { Sequence, type SequenceJSON } from "@/engine/sequence";
+import { FootTurn, changeFootTurnType, footTurnKindChoices } from "@/engine/turn";
+import type { Element } from "@/engine/element";
 import type { PatternJSON } from "@/engine/pattern";
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
@@ -18,6 +22,21 @@ const editModeOptions = [
   { label: "Elements", value: "elements" },
 ];
 const editMode = ref<EditMode>("path");
+
+/** Overlay state for the "change element kind" picker. */
+const elementChangeOpen = ref(false);
+/** The single selected element we are changing the kind of. */
+const elementToChange = ref<Element | null>(null);
+/** Currently highlighted kind in the listbox. */
+const selectedElementKind = ref<string | null>(null);
+
+/** Listbox options for the available element kinds (labels + type names). */
+const elementKindOptions = computed(() =>
+  footTurnKindChoices.map((choice) => ({
+    label: choice.label,
+    value: choice.type,
+  })),
+);
 
 /** A help line: one or more input gestures shown as pills, plus a description. */
 type HelpItem = { keys: string[]; description: string };
@@ -41,7 +60,7 @@ const helpItems = computed<HelpItem[]>(() =>
         { keys: ["right drag"], description: "move the view" },
         { keys: ["+"], description: "button near the end of the path: add a segment" },
         { keys: ["+"], description: "button at the midpoint of a selected curve: split it" },
-        { keys: ["-"], description: "button beside a selected point: remove that point" },
+        { keys: ["−"], description: "button beside a selected point: remove that point" },
       ],
 );
 
@@ -63,6 +82,14 @@ function emptySequence(): Sequence {
 onMounted(async () => {
   if (!canvasRef.value) return;
   editor = new Editor(canvasRef.value, emptySequence());
+
+  // Open the element kind picker when the user clicks the cog button on the
+  // single selected element.
+  editor.onElementChangeRequest = (element) => {
+    elementToChange.value = element;
+    selectedElementKind.value = (element as FootTurn).type;
+    elementChangeOpen.value = true;
+  };
 
   // Load the test pattern as a starting point when available.
   try {
@@ -121,6 +148,25 @@ function saveFile() {
   anchor.click();
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Replace the element being edited with a new element of the given kind.
+ * The element keeps its foot key, span and smoothing; only its type changes.
+ */
+function changeElementKind(kind: string) {
+  if (!editor || !elementToChange.value) return;
+  const current = elementToChange.value as FootTurn;
+  const replacement = changeFootTurnType(kind, current.toJSON());
+  const sequence = editor.getSequence();
+  sequence.replaceElement(current, replacement);
+  editor.replaceSelectedElement(current, replacement);
+  elementToChange.value = replacement;
+  editor.draw();
+}
+
+function closeElementChange() {
+  elementChangeOpen.value = false;
+}
 </script>
 
 <template>
@@ -137,6 +183,7 @@ function saveFile() {
               :options="editModeOptions"
               option-label="label"
               option-value="value"
+              :allow-empty="false"
               class="w-full"
             />
           </div>
@@ -169,6 +216,27 @@ function saveFile() {
     <div class="editor-view__canvas">
       <canvas ref="canvasRef" class="editor-view__canvas-element"></canvas>
     </div>
+
+    <!-- Overlay to pick a new kind for the selected element. -->
+    <Dialog
+      v-model:visible="elementChangeOpen"
+      header="Change element kind"
+      modal
+      class="editor-view__element-dialog"
+      @hide="closeElementChange"
+    >
+      <Listbox
+        :model-value="selectedElementKind"
+        :options="elementKindOptions"
+        option-label="label"
+        option-value="value"
+        class="w-full"
+        @change="(event) => changeElementKind(event.value)"
+      />
+      <template #footer>
+        <Button label="Close" severity="secondary" icon="pi pi-times" @click="closeElementChange" />
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -257,5 +325,9 @@ function saveFile() {
   width: 100%;
   height: 100%;
   cursor: default;
+}
+
+.editor-view__element-dialog {
+  width: 320px;
 }
 </style>

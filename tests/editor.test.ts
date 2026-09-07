@@ -382,3 +382,45 @@ test("dragging an element by its segment keeps its real length constant", () => 
   mouse("mouseup", window, {});
   editor.destroy();
 });
+
+test("clicking the delete button next to a selected element removes it", () => {
+  const { editor, canvas } = makeEditor();
+  const path = editor.getSequence().path;
+  // A longer straight path so the element centre button floats clear of the
+  // element's endpoint control points and the "+" add button.
+  path.curves = [new Curve(new Vector(0, 0), new Vector(4 / 3, 0), new Vector(8 / 3, 0), new Vector(4, 0))];
+  path.updateLength();
+  editorRef(editor).mode = "elements";
+
+  const startU = (path.length * 0.2) as PathCoordinate;
+  const endU = (path.length * 0.6) as PathCoordinate;
+  const el = new ForwardCounterClockwiseFootTurn("footL", startU, endU);
+  editorRef(editor).sequence.elements.push(el);
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  // No button while nothing is selected.
+  expect(editorRef(editor).getElementDeleteButtonPosition()).toBeNull();
+
+  // Select the element by clicking on it.
+  const midU = (startU + endU) / 2;
+  const mid = path.getPosition(midU as PathCoordinate);
+  mouse("mousedown", canvas, { clientX: sx(mid.x), clientY: sy(mid.y), button: 0, ctrlKey: false });
+  mouse("mouseup", window, {});
+  expect(editorRef(editor).selectedElements.has(el)).toBe(true);
+  expect(editorRef(editor).getElementDeleteButtonPosition()).not.toBeNull();
+
+  // Click on the delete button that now sits next to the element's centre.
+  const btn = editorRef(editor).getElementDeleteButtonPosition();
+  mouse("mousedown", canvas, { clientX: sx(btn.x), clientY: sy(btn.y), button: 0, ctrlKey: false });
+  mouse("mouseup", window, {});
+
+  expect(editorRef(editor).sequence.elements).not.toContain(el);
+  expect(editorRef(editor).selectedElements.has(el)).toBe(false);
+  // After removal the selection is empty, so no delete button remains.
+  expect(editorRef(editor).getElementDeleteButtonPosition()).toBeNull();
+
+  editor.destroy();
+});

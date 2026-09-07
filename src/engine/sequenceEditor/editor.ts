@@ -30,6 +30,10 @@ const DELETE_BUTTON_LINE_WIDTH = 1.5; // px
 const DELETE_MINUS_LENGTH = 7; // px (total length of the "-" bar)
 const DELETE_BUTTON_HIT_RADIUS = 14; // px
 const DELETE_BUTTON_COLOR = "#d33";
+/** The "change kind" cog button sits on the side opposite the delete button, with the same geometry. */
+const COG_BUTTON_COLOR = "#444";
+const COG_LINE_WIDTH = 3.5; // px (thick circle and teeth, thicker than the short teeth are long)
+const COG_TEETH_COUNT = 8;
 const SPLIT_BUTTON_OFFSET = 14; // px (screen distance from the curve midpoint to the button center)
 const SELECTION_RECT_FILL = "rgba(100, 149, 237, 0.2)"; // gentle blue fill
 const SELECTION_RECT_STROKE = "rgba(100, 149, 237, 0.9)";
@@ -73,6 +77,12 @@ export class Editor {
   private overlaySequences: Sequence[] = [];
 
   private selected = new Set<string>();
+  /**
+   * Called when the user clicks the "change kind" (cog) button on the single
+   * selected element. The host UI is expected to show a picker for the
+   * element's kind and then replace the element via the sequence.
+   */
+  onElementChangeRequest?: (element: Element) => void;
   /** Indices of the curves currently selected (by clicking on their line). */
   private selectedCurves = new Set<number>();
   /** Elements currently selected (path-elements mode only). */
@@ -175,6 +185,17 @@ export class Editor {
     this.selected.clear();
     this.selectedCurves.clear();
     this.selectedElements.clear();
+  }
+
+  /**
+   * Swap a selected element reference for its replacement, so the new element
+   * stays selected after an in-place kind change. The sequence must already
+   * hold the new element.
+   */
+  replaceSelectedElement(oldElement: Element, newElement: Element) {
+    if (this.selectedElements.delete(oldElement)) {
+      this.selectedElements.add(newElement);
+    }
   }
 
   /** Draw an extra sequence (path + foot traces) without making it editable. */
@@ -305,6 +326,10 @@ export class Editor {
         ctx.fill();
       }
     }
+
+    // Action buttons for the selected element, on top of the elements.
+    this.drawElementDeleteButton();
+    this.drawElementCogButton();
   }
 
   /** Sampled world-space points along the path covered by an element. */
@@ -344,9 +369,13 @@ export class Editor {
         [true, points[0]!],
         [false, points[points.length - 1]!],
       ];
+      // The end point is visited after the start point. Using <= (instead of
+      // <) means that, when both ends are at the same spot (e.g. an element
+      // whose start and end coincide on screen), the END point wins the
+      // tie-break and gets priority to be dragged.
       for (const [isStart, point] of endpoints) {
         const distance = point.minus(cursor).length();
-        if (distance <= tolerance && distance < bestDistance) {
+        if (distance <= tolerance && distance <= bestDistance) {
           bestDistance = distance;
           best = { element, isStart };
         }
@@ -671,13 +700,11 @@ export class Editor {
     return removable.point.plus(perp.times(offset));
   }
 
-  /** Draw the "-" delete button beside a selected joint. */
-  private drawDeleteButton() {
-    const center = this.getDeleteButtonPosition();
-    if (!center) return;
+  /** Draw a "-" inside a circle at the given world point. */
+  private drawMinusInCircle(world: Vector<2>) {
     const ctx = this.ctx;
-    const cx = center.x;
-    const cy = -center.y;
+    const cx = world.x;
+    const cy = -world.y;
 
     const radius = DELETE_BUTTON_RADIUS / this.view.zoom;
     const halfMinus = DELETE_MINUS_LENGTH / 2 / this.view.zoom;
@@ -697,6 +724,133 @@ export class Editor {
     ctx.moveTo(cx - halfMinus, cy);
     ctx.lineTo(cx + halfMinus, cy);
     ctx.stroke();
+  }
+
+  /** Draw the "-" delete button beside a selected joint. */
+  private drawDeleteButton() {
+    const center = this.getDeleteButtonPosition();
+    if (!center) return;
+    this.drawMinusInCircle(center);
+  }
+
+  /** The single selected element, or null when not exactly one is selected. */
+  private getElementDeleteButtonElement(): Element | null {
+    if (this.selectedElements.size !== 1) return null;
+    return [...this.selectedElements][0]!;
+  }
+
+  /**
+   * Geometry shared by the element action buttons (delete "-" and change-kind
+   * cog): the path position at the element's centre and the perpendicular
+   * (sideways) direction there. Null when not exactly one element is selected
+   * or the path is empty.
+   */
+  private getElementActionButtonGeometry(): { point: Vector<2>; perp: Vector<2> } | null {
+    if (this.selectedElements.size !== 1 || this.sequence.path.curves.length === 0) {
+      return null;
+    }
+    const element = [...this.selectedElements][0]!;
+    const lo = Math.min(element.start as number, element.end as number);
+    const hi = Math.max(element.start as number, element.end as number);
+    const midU = ((lo + hi) / 2) as PathCoordinate;
+    const [curve, curvilinear] = this.sequence.path.getCurveAndCurvilinearCoord(midU);
+    const point = curve.getPosition(curvilinear);
+    const perp = curve.getDerivative(curvilinear).normalized().getOrthogonal();
+    return { point, perp };
+  }
+
+  /**
+   * World position of the "-" delete button for a selected element. It sits
+   * beside the element's centre, offset to the side of the path
+   * (perpendicular to the tangent at the centre). Only shown while exactly
+   * one element is selected.
+   */
+  private getElementDeleteButtonPosition(): Vector<2> | null {
+    const geometry = this.getElementActionButtonGeometry();
+    if (!geometry) return null;
+    const offset = DELETE_BUTTON_OFFSET / this.view.zoom; // px -> m
+    return geometry.point.plus(geometry.perp.times(offset));
+  }
+
+  /** Draw the "-" delete button beside a selected element's centre. */
+  private drawElementDeleteButton() {
+    const center = this.getElementDeleteButtonPosition();
+    if (!center) return;
+    this.drawMinusInCircle(center);
+  }
+
+  /**
+   * World position of the "change kind" cog button for a selected element. It
+   * sits at the element's centre like the delete button but on the opposite
+   * side of the path (negative perpendicular offset). Only shown while
+   * exactly one element is selected.
+   */
+  private getElementCogButtonPosition(): Vector<2> | null {
+    const geometry = this.getElementActionButtonGeometry();
+    if (!geometry) return null;
+    const offset = DELETE_BUTTON_OFFSET / this.view.zoom; // px -> m
+    return geometry.point.plus(geometry.perp.times(-offset));
+  }
+
+  /** Draw a cog (gear): a single thick circle with 8 thick teeth sticking out. */
+  private drawCogInCircle(world: Vector<2>) {
+    const ctx = this.ctx;
+    const cx = world.x;
+    const cy = -world.y;
+
+    // The teeth reach the same outer radius as the "-" delete button, so both
+    // buttons look the same size.
+    const outerRadius = DELETE_BUTTON_RADIUS / this.view.zoom;
+    // The inner circle is smaller, so the teeth stick out from its edge. They
+    // do not traverse the circle (their inner end is exactly on its edge).
+    const circleRadius = outerRadius * 0.62;
+
+    ctx.strokeStyle = COG_BUTTON_COLOR;
+    ctx.lineWidth = COG_LINE_WIDTH / this.view.zoom;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    // Single thick circle.
+    ctx.beginPath();
+    ctx.arc(cx, cy, circleRadius, 0, 2 * Math.PI);
+    ctx.stroke();
+
+    // 8 thick teeth, from the circle edge out to the delete-button radius
+    // (thicker than long).
+    for (let i = 0; i < COG_TEETH_COUNT; i++) {
+      const angle = (i / COG_TEETH_COUNT) * 2 * Math.PI;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(angle) * circleRadius, cy + Math.sin(angle) * circleRadius);
+      ctx.lineTo(cx + Math.cos(angle) * outerRadius, cy + Math.sin(angle) * outerRadius);
+      ctx.stroke();
+    }
+  }
+
+  /** Draw the "change kind" cog button beside a selected element's centre. */
+  private drawElementCogButton() {
+    const center = this.getElementCogButtonPosition();
+    if (!center) return;
+    this.drawCogInCircle(center);
+  }
+
+  /** True when the given CSS pixel position is over the element cog button. */
+  private hitElementCogButton(screenX: number, screenY: number): boolean {
+    const center = this.getElementCogButtonPosition();
+    if (!center) return false;
+    const [iconX, iconY] = this.worldToScreen(center);
+    const dx = screenX - iconX;
+    const dy = screenY - iconY;
+    return Math.hypot(dx, dy) <= DELETE_BUTTON_HIT_RADIUS;
+  }
+
+  /** True when the given CSS pixel position is over the element delete button. */
+  private hitElementDeleteButton(screenX: number, screenY: number): boolean {
+    const center = this.getElementDeleteButtonPosition();
+    if (!center) return false;
+    const [iconX, iconY] = this.worldToScreen(center);
+    const dx = screenX - iconX;
+    const dy = screenY - iconY;
+    return Math.hypot(dx, dy) <= DELETE_BUTTON_HIT_RADIUS;
   }
 
   /** True when the given CSS pixel position is over the "-" delete button. */
@@ -910,6 +1064,24 @@ export class Editor {
       // clicking the segment moves the whole element along the path. No
       // path-editing actions are available here.
       if (this.mode !== "path") {
+        // The "change kind" cog button takes priority over selecting/picking
+        // the element, but only actually does something when a callback is
+        // wired up (the host UI shows the kind picker).
+        if (this.hitElementCogButton(screenX, screenY) && this.onElementChangeRequest) {
+          const element = this.getElementDeleteButtonElement();
+          if (element) this.onElementChangeRequest(element);
+          return;
+        }
+        // Delete button takes priority over selecting/picking the element.
+        if (this.hitElementDeleteButton(screenX, screenY)) {
+          const element = this.getElementDeleteButtonElement();
+          if (element) {
+            this.sequence.removeElement(element);
+            this.selectedElements.delete(element);
+            this.draw();
+          }
+          return;
+        }
         const element = this.pickElement(screenX, screenY);
         if (element) {
           this.selectElement(element, event.ctrlKey);

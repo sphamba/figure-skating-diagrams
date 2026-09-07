@@ -5,10 +5,15 @@ import { Path } from "../src/engine/path.js";
 import { Sequence } from "../src/engine/sequence.js";
 import {
 	BackwardClockwiseFootTurn,
+	BackwardClockwiseFootLoop,
 	BackwardCounterClockwiseFootTurn,
 	ForwardClockwiseFootLoop,
 	ForwardClockwiseFootTurn,
 	ForwardCounterClockwiseFootTurn,
+} from "../src/engine/turn.js";
+import {
+	changeFootTurnType,
+	footTurnKindChoices,
 } from "../src/engine/turn.js";
 
 
@@ -92,4 +97,25 @@ test("Element keyframes are recomputed when its start/end change", () => {
 	// Now the keyframes fall inside the new span.
 	expect(footR[0]).toBeGreaterThanOrEqual(length / 8);
 	expect(footR[footR.length - 1]).toBeLessThanOrEqual((5 * length) / 8);
+});
+
+test("changeFootTurnType converts an element's kind while preserving its span and foot", () => {
+	const start = 0.2 as PathCoordinate;
+	const end = (0.8 as PathCoordinate);
+	const turn = new ForwardClockwiseFootTurn("footR", start, end, false, true);
+	const loop = changeFootTurnType("BackwardClockwiseFootLoop", turn.toJSON());
+
+	expect(loop).toBeInstanceOf(BackwardClockwiseFootLoop);
+	expect(loop.footKey).toBe("footR");
+	expect(loop.start).toBe(start);
+	expect(loop.end).toBe(end);
+	expect(loop.smoothEntry).toBe(false);
+	expect(loop.smoothExit).toBe(true);
+});
+
+test("footTurnKindChoices lists all eight element kinds", () => {
+	expect(footTurnKindChoices).toHaveLength(8);
+	const types = footTurnKindChoices.map((choice) => choice.type);
+	expect(types).toContain("ForwardClockwiseFootTurn");
+	expect(types).toContain("BackwardCounterClockwiseFootLoop");
 });

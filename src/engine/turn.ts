@@ -372,3 +372,24 @@ const footTurnConstructorsByType: Record<string, FootTurnClass> = {
 
 /** Default length of the smooth entry/exit portion of a turn, in path units. */
 export const defaultFootTurnLength = defaultPathLengthSmooth;
+
+/** Human-readable label for each available element (foot turn) kind. */
+export const footTurnKindChoices: { type: string; label: string }[] = [
+  { type: "ForwardClockwiseFootTurn", label: "Forward clockwise turn" },
+  { type: "ForwardCounterClockwiseFootTurn", label: "Forward counter-clockwise turn" },
+  { type: "BackwardClockwiseFootTurn", label: "Backward clockwise turn" },
+  { type: "BackwardCounterClockwiseFootTurn", label: "Backward counter-clockwise turn" },
+  { type: "ForwardClockwiseFootLoop", label: "Forward clockwise loop" },
+  { type: "ForwardCounterClockwiseFootLoop", label: "Forward counter-clockwise loop" },
+  { type: "BackwardClockwiseFootLoop", label: "Backward clockwise loop" },
+  { type: "BackwardCounterClockwiseFootLoop", label: "Backward counter-clockwise loop" },
+];
+
+/**
+ * Build a foot turn of the given type from an existing element's properties
+ * (foot key, span, smoothing, loop shift). This is how an element is converted
+ * from one kind to another without moving it.
+ */
+export function changeFootTurnType(type: string, template: FootTurnJSON): FootTurn {
+  return FootTurn.fromJSON({ ...template, type });
+}
