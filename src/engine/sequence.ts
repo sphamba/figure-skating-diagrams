@@ -297,6 +297,13 @@ export class Sequence {
     if (this.keyframes[footKey].length == 0) {
       return;
     }
+    // A foot trace needs the foot's position at every point along the path.
+    // If no keyframe defines a position for this foot, there is nothing
+    // meaningful to trace, so skip it. (Production timelines always define a
+    // position, so this only affects freshly built or partial timelines.)
+    if (!this.keyframes[footKey].some((keyframe) => keyframe.data.position !== undefined)) {
+      return;
+    }
 
     let previousContactPosition: Vector<2> | undefined;
 
