@@ -3,8 +3,19 @@ import { Vector } from "./vector.js";
 
 export type Curvilinear = number & { readonly __tag: unique symbol };
 
-/** Curvilinear increment for length estimation */
-const ds = 0.05 as Curvilinear;
+/**
+ * Curvilinear increment for arc-length estimation and the uniform-to-
+ * curvilinear lookup table.
+ *
+ * This must be fine enough that the piecewise-linear interpolation in
+ * `getCurvilinearCoordFromUniform` stays accurate on curves whose speed varies
+ * strongly along their length (e.g. a path made of curves of very different
+ * lengths/shapes). A coarse step makes `Path.getPosition` return slightly wrong
+ * points, so an element (traced along the path by fixed arc-length increments)
+ * appears to change length as it is dragged across such curves. 0.001 evenly
+ * divides 1, which keeps `uniformWithinCurve` consistent with the table.
+ */
+const ds = 0.001 as Curvilinear;
 /** Number of integration steps per curve used for accurate arc-length lookup. */
 const ARC_LENGTH_SAMPLES = 256;
 

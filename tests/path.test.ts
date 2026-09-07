@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { Curve, Curvilinear } from "../src/engine/curve";
+import type { PathCoordinate } from "../src/engine/coordinates";
 import { Path } from "../src/engine/path";
 import { Vector } from "../src/engine/vector";
 
@@ -143,4 +144,115 @@ test("removeEndCurve and removeStartCurve shorten the path at the ends", () => {
 	path.removeStartCurve();
 	expect(path.curves).toHaveLength(1);
 	expect(path.curves[0]).not.toBe(first);
+});
+
+test("an element traced along the path keeps its length across curves of very different lengths", () => {
+	// A path whose consecutive curves have strongly different lengths and
+	// curvature (a long winding S curve, a tiny curve, then a long straight).
+	// This is the situation described in the editor bug report: when an element
+	// (a range of the path drawn by stepping in arc length) is dragged across
+	// such curves, its drawn length must stay constant.
+	const path = new Path();
+	path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(2, 8), new Vector(6, -8), new Vector(8, 0)));
+	path.addCurveEnd(new Curve(new Vector(8, 0), new Vector(8.1, 0.3), new Vector(8.2, -0.3), new Vector(8.3, 0)));
+	path.addCurveEnd(new Curve(new Vector(8.3, 0), new Vector(13.3, 0), new Vector(18.3, 0), new Vector(23.3, 0)));
+
+	// The arc lengths of the three curves differ by an order of magnitude.
+	const [c0, c1] = path.curves.map((curve) => curve.length);
+	expect(c1).toBeLessThan(c0 / 10);
+
+	// Draw a fixed-span element by sampling the path at arc-length steps, the
+	// same way the sequence editor renders an element.
+	const span = 5;
+	const increment = 0.02;
+	const drawnLength = (start: number) => {
+		const points: Vector<2>[] = [];
+		for (let u = start; u <= start + span; u += increment) {
+			points.push(path.getPosition(u as PathCoordinate));
+		}
+		let length = 0;
+		for (let i = 0; i < points.length - 1; i++) length += points[i]!.minus(points[i + 1]!).length();
+		return length;
+	};
+
+	// The drawn length must stay close to the arc-length span everywhere on the
+	// path. With the former coarse arc-length table this varied by several
+	// percent (the observable "element length changes while dragging" bug).
+	let min = Infinity;
+	let max = -Infinity;
+	for (let start = 0; start + span < path.length - 1e-9; start += 0.5) {
+		const length = drawnLength(start);
+		min = Math.min(min, length);
+		max = Math.max(max, length);
+	}
+	expect(min).toBeGreaterThan(span * 0.995);
+	expect(max).toBeLessThan(span * 1.005);
+});
+
+test("drawRange draws the covered sub-curves with native bezier primitives", () => {
+  // A path of two horizontal curves joined at x = 2.
+  const path = new Path();
+  path.curves = [horizontalCurve(0), horizontalCurve(1)];
+  path.updateLength();
+
+  // Record the primitives used to draw.
+  const bezierCt = { count: 0 };
+  const lineCt = { count: 0 };
+  const ctx = {
+    beginPath: () => {},
+    moveTo: () => {},
+    bezierCurveTo: () => {
+      bezierCt.count++;
+    },
+    lineTo: () => {
+      lineCt.count++;
+    },
+    stroke: () => {},
+  } as unknown as CanvasRenderingContext2DSized;
+
+  // Range covers the second half of curve 0 and all of curve 1.
+  const bound = path.getCurveAndCurvilinearCoord(path.length / 4 as PathCoordinate);
+  const uStart = bound[0].length / 2;
+  const uEnd = path.curves[0]!.length + path.curves[1]!.length;
+
+  path.drawRange(ctx, uStart as PathCoordinate, uEnd as PathCoordinate);
+
+  // Everything must be drawn with bezierCurveTo: one native draw for the
+  // whole curve 1, and one for the partial second half of curve 0.
+  expect(bezierCt.count).toBe(2);
+  // No polyline approximation anywhere.
+  expect(lineCt.count).toBe(0);
+});
+
+test("drawRange sub-bezier endpoints land exactly on the path", () => {
+  // A curved single-segment path.
+  const path = new Path();
+  path.curves = [new Curve(new Vector(0, 0), new Vector(0.5, 1), new Vector(1.5, -1), new Vector(2, 0))];
+  path.updateLength();
+  const length = path.curves[0]!.length;
+
+  let moveToPt: Vector<2> | null = null;
+  let endPt: Vector<2> | null = null;
+  const ctx = {
+    beginPath: () => {},
+    moveTo: (x: number, y: number) => {
+      moveToPt = new Vector(x, -y);
+    },
+    bezierCurveTo: (_c1x: number, _c1y: number, _c2x: number, _c2y: number, x: number, y: number) => {
+      endPt = new Vector(x, -y);
+    },
+    lineTo: () => {},
+    stroke: () => {},
+  } as unknown as CanvasRenderingContext2DSized;
+
+  const a = length / 3;
+  const b = (2 * length) / 3;
+  path.drawRange(ctx, a as PathCoordinate, b as PathCoordinate);
+
+  const expectedStart = path.getPosition(a as PathCoordinate);
+  const expectedEnd = path.getPosition(b as PathCoordinate);
+  expect(moveToPt!.x).toBeCloseTo(expectedStart.x, 6);
+  expect(moveToPt!.y).toBeCloseTo(expectedStart.y, 6);
+  expect(endPt!.x).toBeCloseTo(expectedEnd.x, 6);
+  expect(endPt!.y).toBeCloseTo(expectedEnd.y, 6);
 });

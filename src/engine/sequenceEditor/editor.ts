@@ -286,22 +286,20 @@ export class Editor {
 
     for (const element of this.sequence.elements) {
       const selected = this.selectedElements.has(element);
-      const points = this.getElementPoints(element);
+      const start = Math.min(element.start as number, element.end as number);
+      const end = Math.max(element.start as number, element.end as number);
 
-      // Black line that follows the path from start to end.
+      // Black line that follows the path from start to end. Drawn as the
+      // native canvas Bezier sub-curves of the underlying path, never as a
+      // sampled polyline.
       ctx.strokeStyle = selected ? "#d33" : "#000";
       ctx.lineWidth = (selected ? PATH_WIDTH + 2 : PATH_WIDTH) / this.view.zoom;
-      ctx.beginPath();
-      points.forEach((point, index) => {
-        if (index === 0) ctx.moveTo(point.x, -point.y);
-        else ctx.lineTo(point.x, -point.y);
-      });
-      ctx.stroke();
+      this.sequence.path.drawRange(ctx, start as PathCoordinate, end as PathCoordinate);
 
-      // Control point at each end.
+      // Control point at each end (exact path positions, not sampled).
       ctx.fillStyle = selected ? "#d33" : "#444";
-      for (const point of [points[0], points[points.length - 1]]) {
-        if (!point) continue;
+      for (const u of [start, end]) {
+        const point = this.sequence.path.getPosition(u as PathCoordinate);
         ctx.beginPath();
         ctx.arc(point.x, -point.y, nodeSize / 2, 0, 2 * Math.PI);
         ctx.fill();

@@ -268,6 +268,51 @@ export class Path {
     this.curves.forEach((curve) => curve.draw(ctx));
   }
 
+  /**
+   * Draw only the portion of the path between the path coordinates `uStart`
+   * (inclusive) and `uEnd` (exclusive), using the native canvas cubic Bezier
+   * primitive. Curves wholly inside the range are stroked as-is; a boundary
+   * curve that is only partially covered is split with de Casteljau so the
+   * drawn segment is an exact piece of the original Bezier rather than a
+   * piecewise-linear approximation.
+   *
+   * The caller is responsible for setting the stroke style and line width
+   * (each curve is stroked as its own sub-path, matching `draw`).
+   *
+   * @param ctx - The target canvas context.
+   * @param uStart - Path coordinate where the drawn portion starts.
+   * @param uEnd - Path coordinate where the drawn portion ends.
+   */
+  drawRange(ctx: CanvasRenderingContext2DSized, uStart: PathCoordinate, uEnd: PathCoordinate) {
+    if (ctx == null || this.curves.length == 0) return;
+
+    const start = Math.max(0, uStart as number);
+    const end = Math.min(this.length, uEnd as number);
+    if (end <= start) return;
+
+    let cumulated = 0;
+    for (const curve of this.curves) {
+      const curveStart = cumulated;
+      const curveEnd = cumulated + curve.length;
+      cumulated = curveEnd;
+
+      if (curveEnd <= start) continue; // Curve entirely before the range.
+      if (curveStart >= end) break; // Curve entirely after the range.
+
+      if (curveStart >= start && curveEnd <= end) {
+        // Curve fully inside the range: draw the whole Bezier natively.
+        curve.draw(ctx);
+        continue;
+      }
+
+      // Partial overlap: split the curve so the drawn part is an exact
+      // sub-Bezier between the covered curvilinear coordinates.
+      const sStart = curve.getCurvilinearCoordFromUniform(Math.max(0, start - curveStart));
+      const sEnd = curve.getCurvilinearCoordFromUniform(Math.min(curve.length, end - curveStart));
+      drawSubBezier(ctx, curve, sStart, sEnd);
+    }
+  }
+
   drawNodes(ctx: CanvasRenderingContext2DSized, size: number) {
     const nodes = [...this.curves.map((curve) => curve.p0), this.curves[this.curves.length - 1]!.p3];
     nodes.forEach((node) => {
@@ -276,4 +321,63 @@ export class Path {
       ctx.fill();
     });
   }
+}
+
+/**
+ * De Casteljau split of a cubic Bezier at parameter `t`.
+ *
+ * Returns the two sub-curves [left, right] that together reproduce the exact
+ * original Bezier: `left` spans parameter 0 to `t` and `right` spans `t` to 1.
+ * The curvilinear coordinates used by `Curve.getPosition` are the Bezier
+ * parameter, so splitting at the same value keeps the drawn segment aligned
+ * with the path.
+ */
+function splitBezierAt(
+  p0: Vector<2>,
+  p1: Vector<2>,
+  p2: Vector<2>,
+  p3: Vector<2>,
+  t: number,
+): [Vector<2>[], Vector<2>[]] {
+  const b01 = p0.plus(p1.minus(p0).times(t));
+  const b12 = p1.plus(p2.minus(p1).times(t));
+  const b23 = p2.plus(p3.minus(p2).times(t));
+  const b012 = b01.plus(b12.minus(b01).times(t));
+  const b123 = b12.plus(b23.minus(b12).times(t));
+  const b0123 = b012.plus(b123.minus(b012).times(t));
+  return [
+    [p0, b01, b012, b0123],
+    [b0123, b123, b23, p3],
+  ];
+}
+
+/**
+ * Draw the exact sub-Bezier of `curve` between the curvilinear coordinates
+ * `sStart` and `sEnd`, using the native canvas `bezierCurveTo` primitive.
+ *
+ * de Casteljau is applied twice: first the right part is kept from `sStart`
+ * to 1, then the left part of that result is kept from 0 to the normalized
+ * end parameter. The endpoints land exactly on the original path.
+ */
+function drawSubBezier(ctx: CanvasRenderingContext2DSized, curve: Curve, sStart: number, sEnd: number) {
+  if (sEnd <= sStart) return;
+
+  let points = [curve.p0, curve.p1, curve.p2, curve.p3];
+
+  // Keep the sub-curve from sStart to 1 (the right part of the split).
+  if (sStart > 0) {
+    points = splitBezierAt(points[0]!, points[1]!, points[2]!, points[3]!, sStart)[1];
+  }
+
+  // Truncate the right end to sEnd (parameter normalized within [sStart, 1]).
+  const relEnd = sEnd >= 1 ? 1 : (sEnd - sStart) / (1 - sStart);
+  if (relEnd < 1) {
+    points = splitBezierAt(points[0]!, points[1]!, points[2]!, points[3]!, relEnd)[0];
+  }
+
+  const [p0, p1, p2, p3] = points;
+  ctx.beginPath();
+  ctx.moveTo(p0!.x, -p0!.y);
+  ctx.bezierCurveTo(p1!.x, -p1!.y, p2!.x, -p2!.y, p3!.x, -p3!.y);
+  ctx.stroke();
 }
