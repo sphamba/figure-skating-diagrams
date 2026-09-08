@@ -25,7 +25,7 @@ const ADD_BUTTON_LINE_WIDTH = 1.5; // px
 const ADD_PLUS_LENGTH = 7; // px (total length of each "+" arm)
 const ADD_BUTTON_HIT_RADIUS = 14; // px
 const ADD_BUTTON_COLOR = "#d33";
-const DELETE_BUTTON_OFFSET = 20; // px (screen distance from the selected joint to the button center)
+const DELETE_BUTTON_OFFSET = 14; // px, same distance as the split button near curves
 const DELETE_BUTTON_RADIUS = 7; // px (circle radius)
 const DELETE_BUTTON_LINE_WIDTH = 1.5; // px
 const DELETE_MINUS_LENGTH = 7; // px (total length of the "-" bar)
@@ -328,7 +328,7 @@ export class Editor {
       // native canvas Bezier sub-curves of the underlying path, never as a
       // sampled polyline.
       ctx.strokeStyle = selected ? "#d33" : "#000";
-      ctx.lineWidth = (selected ? PATH_WIDTH + 2 : PATH_WIDTH) / this.view.zoom;
+      ctx.lineWidth = (PATH_WIDTH + 2) / this.view.zoom;
       this.drawElementSpan(element);
 
       // Control point at each end (exact path positions, not sampled).
