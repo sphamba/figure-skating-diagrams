@@ -14,6 +14,16 @@ export class Path {
   }
 
   updateLength() {
+    // Recompute every curve first: control points can change at any time (drag
+    // in the path editor, alignment, cuts), and a curve's stored length and
+    // uniform-coordinate table are only valid for the control points those
+    // tables were built from. Summing stale values makes the uniform
+    // coordinate axis (which path coordinates and element spans are defined
+    // on) drift away from the real geometry, so an element spanning a fixed
+    // path-coordinate range changes its real (drawn) length after any edit.
+    for (const curve of this.curves) {
+      curve.updateLength();
+    }
     this.length = this.curves.reduce((sum, curve) => sum + curve.length, 0);
   }
 

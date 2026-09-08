@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Path } from "./path";
+import { Vector } from "./vector";
 import { Sequence } from "./sequence";
 import { createDefaultFootTurn } from "./turn";
 
@@ -33,5 +34,30 @@ describe("scale-aware foot trace keyframes", () => {
     }
     // The stored sequence keyframes are unchanged.
     expect(sequence.keyframes.footL.every((k) => k.coordinate >= start && k.coordinate <= end)).toBe(true);
+  });
+});
+
+describe("path real lengths", () => {
+  it("keeps path coordinates equal to real arc length after a path edit", () => {
+    const path = new Path();
+    for (let i = 0; i < 5; i++) path.addCurveEnd();
+    expect(path.length).toBeCloseTo(5, 4);
+
+    // Drag the first curve's controls so it stretches from 1 m to 3 m.
+    const curve = path.curves[0]!;
+    curve.p1 = curve.p0.plus(new Vector(1.8, 0));
+    curve.p2 = curve.p0.plus(new Vector(2.2, 0));
+    curve.p3 = curve.p0.plus(new Vector(3, 0));
+    path.updateLength();
+
+    // The recomputed length must match the real arc length of every curve.
+    let real = 0;
+    for (const c of path.curves) real += c.arcLength(0 as never, 1 as never);
+    expect(path.length).toBeCloseTo(real, 2);
+
+    // Any 0.8 m path-coordinate span must really measure 0.8 m of arc.
+    for (let u = 0.4; u <= path.length - 0.4; u += 0.5) {
+      expect(path.arcLengthBetween((u - 0.4) as never, (u + 0.4) as never)).toBeCloseTo(0.8, 2);
+    }
   });
 });
