@@ -237,11 +237,14 @@ export class Sequence {
     uStart: PathCoordinate = 0 as PathCoordinate,
     uEnd?: PathCoordinate,
     pathColor: string = defaultPathColor,
+    minTraceWidth?: number,
+    minBladeLength?: number,
+    minDrawIncrement?: number,
   ) {
     uEnd ??= this.path.length as PathCoordinate;
 
     this.drawPath(ctx, pathWidth, uStart, uEnd, pathColor);
-    this.drawFootTraces(ctx, uStart, uEnd);
+    this.drawFootTraces(ctx, uStart, uEnd, minTraceWidth, minBladeLength, minDrawIncrement);
   }
 
   /**
@@ -313,11 +316,48 @@ export class Sequence {
     ctx: CanvasRenderingContext2DSized,
     uStart: PathCoordinate = 0 as PathCoordinate,
     uEnd?: PathCoordinate,
+    minTraceWidth?: number,
+    minBladeLength?: number,
+    minDrawIncrement?: number,
   ) {
     uEnd ??= this.path.length as PathCoordinate;
 
-    this.drawFootTrace(ctx, "footL", uStart, uEnd);
-    this.drawFootTrace(ctx, "footR", uStart, uEnd);
+    this.drawFootTrace(ctx, "footL", uStart, uEnd, minTraceWidth, minBladeLength, minDrawIncrement);
+    this.drawFootTrace(ctx, "footR", uStart, uEnd, minTraceWidth, minBladeLength, minDrawIncrement);
+  }
+
+  /**
+   * The blade length in metres used to trace the feet: the real blade length,
+   * or the given minimum when it is larger.
+   */
+  private getDrawBladeLength(minBladeLength?: number): number {
+    return minBladeLength === undefined ? bladeLength : Math.max(bladeLength, minBladeLength);
+  }
+
+  /** Scale factor between the drawn blade and the real blade. */
+  getBladeLengthScale(minBladeLength?: number): number {
+    return this.getDrawBladeLength(minBladeLength) / bladeLength;
+  }
+
+  /**
+   * Foot keyframes used for drawing. When a blade length scale is active, the
+   * keyframes each element contributes are fetched with their coordinates
+   * re-based onto the element's scaled span: the trace then renders as if the
+   * elements really spanned the scaled range. The stored keyframes of the
+   * sequence are not touched.
+   */
+  getDrawFootKeyframes(footKey: FootKey, scale: number): FootKeyframe[] {
+    if (scale === 1) {
+      return this.keyframes[footKey];
+    }
+    const keyframes: FootKeyframe[] = [];
+    for (const element of this.elements) {
+      keyframes.push(
+        ...(footKey === "footL" ? element.getLeftFootKeyframes(scale) : element.getRightFootKeyframes(scale)),
+      );
+    }
+    keyframes.sort((a, b) => a.coordinate - b.coordinate);
+    return keyframes;
   }
 
   drawFootTrace(
@@ -325,6 +365,9 @@ export class Sequence {
     footKey: FootKey,
     uStart: PathCoordinate = 0 as PathCoordinate,
     uEnd?: PathCoordinate,
+    minTraceWidth?: number,
+    minBladeLength?: number,
+    minDrawIncrement?: number,
   ) {
     uEnd ??= this.path.length as PathCoordinate;
 
@@ -343,15 +386,37 @@ export class Sequence {
     }
 
     let previousContactPosition: Vector<2> | undefined;
+    const drawBladeLength = this.getDrawBladeLength(minBladeLength);
+    // When the blade is scaled, the keyframes are fetched with their
+    // coordinates re-based onto the scaled element spans, so the trace follows
+    // the moved element ends.
+    const drawKeyframes =
+      minBladeLength === undefined
+        ? undefined
+        : this.getDrawFootKeyframes(footKey, this.getBladeLengthScale(minBladeLength));
 
+    // Path coordinate step between drawn points: the default 0.02 m, or a
+    // larger minimum given by the caller so each drawn segment never advances
+    // less than one screen pixel when zoomed out.
+    const step = Math.max(drawIncrement, minDrawIncrement ?? 0);
     for (
       let pathCoordinate = uStart;
       pathCoordinate <= uEnd;
-      pathCoordinate = (pathCoordinate + drawIncrement) as PathCoordinate
+      pathCoordinate = (pathCoordinate + step) as PathCoordinate
     ) {
-      const footRelativePosition = this.getInterpolatedValue(footKey, "position", pathCoordinate) as Vector<3>;
-      const contactPoint = this.getInterpolatedValue(footKey, "contactPoint", pathCoordinate) as number;
-      const footRelativeOrientation = this.getInterpolatedValue(footKey, "orientation", pathCoordinate) as Quaternion;
+      const footRelativePosition = this.getInterpolatedValue(
+        footKey,
+        "position",
+        pathCoordinate,
+        drawKeyframes,
+      ) as Vector<3>;
+      const contactPoint = this.getInterpolatedValue(footKey, "contactPoint", pathCoordinate, drawKeyframes) as number;
+      const footRelativeOrientation = this.getInterpolatedValue(
+        footKey,
+        "orientation",
+        pathCoordinate,
+        drawKeyframes,
+      ) as Quaternion;
       const pathOrientation = this.getPathOrientation(pathCoordinate);
       const pathPosition = this.path.getPosition(pathCoordinate);
 
@@ -359,7 +424,7 @@ export class Sequence {
       footRelativeDirection = footRelativeDirection.rotate(footRelativeOrientation);
 
       let contactRelativePosition = footRelativePosition.copy();
-      contactRelativePosition.x += (contactPoint - 0.5) * bladeLength;
+      contactRelativePosition.x += (contactPoint - 0.5) * drawBladeLength;
 
       const footOrientation = footRelativeOrientation.times(pathOrientation);
       contactRelativePosition = contactRelativePosition.rotate(footOrientation);
@@ -377,9 +442,10 @@ export class Sequence {
       } else {
         ctx.strokeStyle = onGround ? traceColorR : hoverColorR;
       }
-      ctx.lineWidth = onGround
+      const lineWidth = onGround
         ? getTraceWidth(footDirection, contactPosition.minus(previousContactPosition), traceWidth, skidWidth)
         : traceWidth;
+      ctx.lineWidth = minTraceWidth === undefined ? lineWidth : Math.max(lineWidth, minTraceWidth);
 
       ctx.beginPath();
       ctx.moveTo(previousContactPosition.x, -previousContactPosition.y);
@@ -405,18 +471,33 @@ export class Sequence {
     Key extends PartKey,
     KeyframeType extends SequenceKeyframes[Key][number],
     Property extends keyof KeyframeType["data"],
-  >(partKey: Key, property: Property, coordinate: KeyframeType["coordinate"]): [KeyframeType, KeyframeType, Relative] {
-    let keyframes = this.keyframes[partKey] as KeyframeType[];
-    keyframes = keyframes.filter((keyframe) => keyframe.data[property as keyof typeof keyframe.data] !== undefined);
-
-    let keyframeAfter = keyframes.find((keyframe) => keyframe.coordinate > coordinate);
-    if (keyframeAfter === undefined) {
-      keyframeAfter = keyframes[keyframes.length - 1]!;
+  >(
+    partKey: Key,
+    property: Property,
+    coordinate: KeyframeType["coordinate"],
+    keyframes: KeyframeType[] = this.keyframes[partKey] as KeyframeType[],
+  ): [KeyframeType, KeyframeType, Relative] {
+    let list = keyframes;
+    let filtered = list.filter((keyframe) => keyframe.data[property as keyof typeof keyframe.data] !== undefined);
+    // When a custom (e.g. scale-aware) list has no keyframe for this property,
+    // fall back to the stored part keyframes so interpolation still works.
+    if (filtered.length === 0 && list !== this.keyframes[partKey]) {
+      list = this.keyframes[partKey] as KeyframeType[];
+      filtered = list.filter((keyframe) => keyframe.data[property as keyof typeof keyframe.data] !== undefined);
+      if (filtered.length === 0) {
+        // Nothing anywhere carries this property; callers guard beforehand.
+        throw new Error(`No keyframe data for property: ${String(property)}`);
+      }
     }
 
-    const keyframeAfterIndex = keyframes.indexOf(keyframeAfter);
+    let keyframeAfter = filtered.find((keyframe) => keyframe.coordinate > coordinate);
+    if (keyframeAfter === undefined) {
+      keyframeAfter = filtered[filtered.length - 1]!;
+    }
+
+    const keyframeAfterIndex = filtered.indexOf(keyframeAfter);
     const keyframeBeforeIndex = Math.max(0, keyframeAfterIndex - 1);
-    const keyframeBefore = keyframes[keyframeBeforeIndex]!;
+    const keyframeBefore = filtered[keyframeBeforeIndex]!;
 
     let relativeCoordinate =
       (coordinate - keyframeBefore.coordinate) / (keyframeAfter.coordinate - keyframeBefore.coordinate);
@@ -432,8 +513,18 @@ export class Sequence {
     KeyframeType extends SequenceKeyframes[Key][number],
     Property extends keyof KeyframeType["data"],
     Interpolable extends KeyframeType["data"][Property],
-  >(partKey: Key, property: Property, coordinate: KeyframeType["coordinate"]): Interpolable {
-    const [keyframeBefore, keyframeAfter, easedCoordinate] = this.getKeyframesAround(partKey, property, coordinate);
+  >(
+    partKey: Key,
+    property: Property,
+    coordinate: KeyframeType["coordinate"],
+    keyframes?: KeyframeType[],
+  ): Interpolable {
+    const [keyframeBefore, keyframeAfter, easedCoordinate] = this.getKeyframesAround(
+      partKey,
+      property,
+      coordinate,
+      keyframes,
+    );
     const beforeValue = keyframeBefore.data[property as keyof typeof keyframeBefore.data];
     const afterValue = keyframeAfter.data[property as keyof typeof keyframeAfter.data];
     return interpolate(beforeValue, afterValue, easedCoordinate) as Interpolable;

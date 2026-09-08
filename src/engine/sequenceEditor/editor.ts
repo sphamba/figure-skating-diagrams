@@ -12,6 +12,18 @@ export type ControlPointKey = "p0" | "p1" | "p2" | "p3";
 
 const RINK_COLOR = "#ccc";
 const PATH_WIDTH = 1; // px
+/** Minimum blade trace width, in screen pixels. Only limits the trace when zoomed out. */
+const MIN_TRACE_WIDTH = 1; // px
+/**
+ * Minimum blade length, in screen pixels, used when element scaling is on.
+ * Only has effect when zoomed out (a blade shorter than this would be hard to
+ * follow). Elements are scaled by the same factor, about their middle point.
+ */
+const MIN_BLADE_LENGTH = 15; // px
+/** Minimum foot trace draw step, in screen pixels: when zoomed out, the
+ * default 0.02 m step would be shorter than one pixel, so the step is scaled
+ * up to keep each drawn segment at least one pixel long. */
+const MIN_DRAW_INCREMENT = 1; // px
 /** Path color in "elements" mode: translucent grey so the path stays visible but de-emphasized. */
 const ELEMENTS_PATH_COLOR = "rgba(128, 128, 128, 0.35)";
 /** Path-coordinate step used to trace an element along the path. */
@@ -77,6 +89,9 @@ export class Editor {
   sequence: Sequence;
   /** Current editing mode. "elements" disables path editing for now. */
   mode: EditMode = "path";
+  /** When true, the foot traces use a minimum blade length, and the element
+   * spans are scaled by the same factor about their middle point. */
+  scaleElements = true;
   private view: ViewState;
   /** Extra sequences drawn for their paths/traces but not editable. */
   private overlaySequences: Sequence[] = [];
@@ -285,10 +300,25 @@ export class Editor {
       return;
     }
     const pathWidth = PATH_WIDTH / this.view.zoom;
+    // Minimum blade trace width in path units, only effective when zoomed out
+    // (a trace thinner than one screen pixel would become hard to follow).
+    const minTraceWidth = MIN_TRACE_WIDTH / this.view.zoom;
+    // Minimum blade length in path units, only effective when zoomed out, and
+    // only in "path" mode (elements mode always shows real proportions).
+    const minBladeLength = this.scaleElements && this.mode === "path" ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
     // Draw the path and the foot traces (same as the home page).
     // In "elements" mode the path is de-emphasized in translucent grey.
     const pathColor = this.mode === "elements" ? ELEMENTS_PATH_COLOR : undefined;
-    sequence.draw(this.ctx, pathWidth, 0 as PathCoordinate, undefined, pathColor);
+    sequence.draw(
+      this.ctx,
+      pathWidth,
+      0 as PathCoordinate,
+      undefined,
+      pathColor,
+      minTraceWidth,
+      minBladeLength,
+      MIN_DRAW_INCREMENT / this.view.zoom,
+    );
   }
 
   /** Draw the selected curves on top of the path, in a highlight color. */
@@ -333,10 +363,7 @@ export class Editor {
 
       // Control point at each end (exact path positions, not sampled).
       ctx.fillStyle = selected ? "#d33" : "#444";
-      for (const u of [
-        Math.min(element.start as number, element.end as number),
-        Math.max(element.start as number, element.end as number),
-      ]) {
+      for (const u of this.getDisplayedSpan(element)) {
         const point = this.sequence.path.getPosition(u as PathCoordinate);
         ctx.beginPath();
         ctx.arc(point.x, -point.y, nodeSize / 2, 0, 2 * Math.PI);
@@ -348,15 +375,13 @@ export class Editor {
     // difference: it is an edit preview, not part of the sequence yet.
     if (this.provisionalElement) {
       const element = this.provisionalElement;
-      const lo = Math.min(element.start as number, element.end as number);
-      const hi = Math.max(element.start as number, element.end as number);
 
       ctx.strokeStyle = PROVISIONAL_COLOR;
       ctx.lineWidth = (PATH_WIDTH + 2) / this.view.zoom;
       this.drawElementSpan(element);
 
       ctx.fillStyle = PROVISIONAL_COLOR;
-      for (const u of [lo, hi]) {
+      for (const u of this.getDisplayedSpan(element)) {
         const point = this.sequence.path.getPosition(u as PathCoordinate);
         ctx.beginPath();
         ctx.arc(point.x, -point.y, nodeSize / 2, 0, 2 * Math.PI);
@@ -371,11 +396,29 @@ export class Editor {
     this.drawProvisionalAddButton();
   }
 
+  /**
+   * The element span as displayed (in increasing order): the real span, or,
+   * when element scaling is on and zoomed out, the span scaled about its
+   * middle point to match the scaled blade length. Coordinates are clamped to
+   * the path range: a scaled span may extend past the path end points, where
+   * the path does not exist.
+   */
+  private getDisplayedSpan(element: Element): [PathCoordinate, PathCoordinate] {
+    const minBladeLength = this.scaleElements && this.mode === "path" ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
+    const factor = this.sequence.getBladeLengthScale(minBladeLength);
+    const [start, end] = factor === 1 ? [element.start, element.end] : element.scaleAboutMiddle(factor);
+    const pathLength = this.sequence.path.length;
+    const clamp = (u: number) => Math.max(0, Math.min(pathLength, u));
+    return [
+      clamp(Math.min(start as number, end as number)) as PathCoordinate,
+      clamp(Math.max(start as number, end as number)) as PathCoordinate,
+    ];
+  }
+
   /** Trace an element's span along the path, as native Bezier sub-curves. */
   private drawElementSpan(element: Element) {
-    const start = Math.min(element.start as number, element.end as number);
-    const end = Math.max(element.start as number, element.end as number);
-    this.sequence.path.drawRange(this.ctx, start as PathCoordinate, end as PathCoordinate);
+    const [start, end] = this.getDisplayedSpan(element);
+    this.sequence.path.drawRange(this.ctx, start, end);
   }
 
   /** Sampled world-space points along the path covered by an element. */

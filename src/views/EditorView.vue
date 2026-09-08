@@ -5,6 +5,7 @@ import Card from "openvue/card";
 import Tag from "openvue/tag";
 import Fieldset from "openvue/fieldset";
 import SelectButton from "openvue/selectbutton";
+import Checkbox from "openvue/checkbox";
 import Dialog from "openvue/dialog";
 import Listbox from "openvue/listbox";
 import { Editor, type EditMode } from "@/engine/sequenceEditor/editor";
@@ -22,6 +23,8 @@ const editModeOptions = [
   { label: "Elements", value: "elements" },
 ];
 const editMode = ref<EditMode>("path");
+/** When checked, foot traces and elements are scaled up when zoomed out. */
+const scaleElements = ref(true);
 
 /** Overlay state for the "change element kind" picker. */
 const elementChangeOpen = ref(false);
@@ -78,6 +81,16 @@ watch(editMode, (mode) => {
     editor.draw();
   }
 });
+watch(
+  scaleElements,
+  (value) => {
+    if (editor) {
+      editor.scaleElements = value;
+      editor.draw();
+    }
+  },
+  { immediate: true },
+);
 
 function emptySequence(): Sequence {
   return new Sequence(new Path());
@@ -190,6 +203,10 @@ function closeElementChange() {
               :allow-empty="false"
               class="w-full"
             />
+            <div v-if="editMode === 'path'" class="editor-view__scale-checkbox">
+              <Checkbox v-model="scaleElements" binary input-id="scale-elements" />
+              <label for="scale-elements">Scale elements</label>
+            </div>
           </div>
 
           <div class="editor-view__actions">
@@ -285,6 +302,12 @@ function closeElementChange() {
 
 .editor-view__help {
   margin-top: 1rem;
+}
+
+.editor-view__scale-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .editor-view__hint {

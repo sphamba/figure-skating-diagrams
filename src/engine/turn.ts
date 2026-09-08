@@ -61,21 +61,33 @@ export abstract class FootTurn extends Element {
     return (this.end - this.pathCoordinate) as PathCoordinate;
   }
 
-  /** The turn is performed on the skating foot. The free foot has no keyframes. */
-  getLeftFootKeyframes(): FootKeyframe[] {
-    return this.footKey === "footL" ? this.createKeyframes() : [];
+  /** The turn is performed on the skating foot. The free foot has no keyframes.
+   * When a span scale is given, the keyframes are recomputed as if the element
+   * spanned the span scaled about its middle point: same kind, moved ends. The
+   * element itself is never modified. */
+  getLeftFootKeyframes(spanScale?: number): FootKeyframe[] {
+    return this.footKey === "footL" ? this.createScaledKeyframes(spanScale) : [];
   }
 
-  getRightFootKeyframes(): FootKeyframe[] {
-    return this.footKey === "footR" ? this.createKeyframes() : [];
+  getRightFootKeyframes(spanScale?: number): FootKeyframe[] {
+    return this.footKey === "footR" ? this.createScaledKeyframes(spanScale) : [];
   }
 
-  getHipsKeyframes(): HipsKeyframe[] {
+  getHipsKeyframes(_spanScale?: number): HipsKeyframe[] {
     return [];
   }
 
-  /** Compute the turn keyframes from the element's start and end coordinates. */
-  protected abstract createKeyframes(): FootKeyframe[];
+  /** Keyframes for this foot, recomputed for a scaled span when requested. */
+  private createScaledKeyframes(spanScale?: number): FootKeyframe[] {
+    if (spanScale === undefined || spanScale === 1) {
+      return this.createKeyframes(this.start, this.end);
+    }
+    const [start, end] = scaledSpan(this.start, this.end, spanScale);
+    return this.createKeyframes(start, end);
+  }
+
+  /** Compute the turn keyframes from the element's span. */
+  protected abstract createKeyframes(start: PathCoordinate, end: PathCoordinate): FootKeyframe[];
 
   /** Serialize this turn to a plain JSON object. */
   toJSON(): FootTurnJSON {
@@ -104,6 +116,15 @@ export abstract class FootTurn extends Element {
       json.loopShift as PathCoordinate | undefined,
     );
   }
+}
+
+/**
+ * The span scaled about its middle point by the given factor, computed only
+ * from the given coordinates: no element state is used or modified.
+ */
+function scaledSpan(start: PathCoordinate, end: PathCoordinate, factor: number): [PathCoordinate, PathCoordinate] {
+  const middle = (start + end) / 2;
+  return [(middle + (start - middle) * factor) as PathCoordinate, (middle + (end - middle) * factor) as PathCoordinate];
 }
 
 export type FootTurnConstructor = new (
@@ -138,10 +159,13 @@ abstract class FootHalfTurn extends FootTurn {
     return this.forward ? 1 : 0;
   }
 
-  createKeyframes(): FootKeyframe[] {
-    const pathCoordinateShifts = [-this.pathLengthEntry, 0, this.pathLengthExit];
+  createKeyframes(start: PathCoordinate, end: PathCoordinate): FootKeyframe[] {
+    const pathCoordinate = ((start + end) / 2) as PathCoordinate;
+    const pathLengthEntry = (pathCoordinate - start) as PathCoordinate;
+    const pathLengthExit = (end - pathCoordinate) as PathCoordinate;
+    const pathCoordinateShifts = [-pathLengthEntry, 0, pathLengthExit];
     const pathCoordinates = pathCoordinateShifts.map(
-      (pathCoordinateShift) => (this.pathCoordinate + pathCoordinateShift) as PathCoordinate,
+      (pathCoordinateShift) => (pathCoordinate + pathCoordinateShift) as PathCoordinate,
     );
 
     const keyframes: FootKeyframe[] = [];
@@ -257,12 +281,15 @@ abstract class FootLoop extends FootTurn {
     return { ...super.toJSON(), loopShift: this.loopShift };
   }
 
-  createKeyframes(): FootKeyframe[] {
+  createKeyframes(start: PathCoordinate, end: PathCoordinate): FootKeyframe[] {
     if (!this.loopShift) return [];
 
-    const pathCoordinateShifts = [-this.pathLengthEntry, 0, this.pathLengthExit];
+    const pathCoordinate = ((start + end) / 2) as PathCoordinate;
+    const pathLengthEntry = (pathCoordinate - start) as PathCoordinate;
+    const pathLengthExit = (end - pathCoordinate) as PathCoordinate;
+    const pathCoordinateShifts = [-pathLengthEntry, 0, pathLengthExit];
     const pathCoordinates = pathCoordinateShifts.map(
-      (pathCoordinateShift) => (this.pathCoordinate + pathCoordinateShift) as PathCoordinate,
+      (pathCoordinateShift) => (pathCoordinate + pathCoordinateShift) as PathCoordinate,
     );
     const contactPoints = [0.5, this.contactPointTurn, 0.5];
     const lateralShift = (this.clockwise ? 1 : -1) * (this.forward ? 1 : -1) * this.loopShift;
