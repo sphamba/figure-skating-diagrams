@@ -393,3 +393,17 @@ export const footTurnKindChoices: { type: string; label: string }[] = [
 export function changeFootTurnType(type: string, template: FootTurnJSON): FootTurn {
   return FootTurn.fromJSON({ ...template, type });
 }
+
+/**
+ * Build a fresh foot turn of the first available kind (the default kind) with
+ * the given span. Used for provisional, not-yet-added elements.
+ */
+export function createDefaultFootTurn(
+  start: PathCoordinate,
+  end: PathCoordinate,
+  footKey: FootKey = "footL",
+): FootTurn {
+  const type = footTurnKindChoices[0]!.type;
+  const constructor = footTurnConstructorsByType[type]!;
+  return new constructor(footKey, start, end);
+}

@@ -47,6 +47,10 @@ const helpItems = computed<HelpItem[]>(() =>
     ? [
         { keys: ["wheel"], description: "zoom" },
         { keys: ["right drag"], description: "move the view" },
+        { keys: ["left click"], description: "on the path: create a provisional element" },
+        { keys: ["left drag"], description: "on the path: create a provisional element over the dragged range" },
+        { keys: ["drag"], description: "a provisional element: move it or its ends" },
+        { keys: ["+"], description: "on the provisional element: add it to the sequence" },
       ]
     : [
         { keys: ["wheel"], description: "zoom" },

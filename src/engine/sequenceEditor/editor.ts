@@ -3,6 +3,7 @@ import type { PathCoordinate } from "../coordinates.js";
 import type { Element } from "../element.js";
 import { LENGTH, WIDTH, CORNER_RADIUS } from "../rink.js";
 import type { CanvasRenderingContext2DSized } from "../rinkCanvas.js";
+import { createDefaultFootTurn } from "../turn.js";
 import { Sequence } from "../sequence.js";
 import { Vector } from "../vector.js";
 
@@ -34,6 +35,10 @@ const DELETE_BUTTON_COLOR = "#d33";
 const COG_BUTTON_COLOR = "#444";
 const COG_LINE_WIDTH = 3.5; // px (thick circle and teeth, thicker than the short teeth are long)
 const COG_TEETH_COUNT = 8;
+/** Color of the provisional (not yet added) element and its "+" button. */
+const PROVISIONAL_COLOR = "#1976d2";
+/** Total path length of a newly placed provisional element, in metres. */
+const PROVISIONAL_TOTAL_LENGTH = 0.8;
 const SPLIT_BUTTON_OFFSET = 14; // px (screen distance from the curve midpoint to the button center)
 const SELECTION_RECT_FILL = "rgba(100, 149, 237, 0.2)"; // gentle blue fill
 const SELECTION_RECT_STROKE = "rgba(100, 149, 237, 0.9)";
@@ -91,6 +96,12 @@ export class Editor {
   private isDraggingPoint = false;
   private isDraggingCurve = false;
   private isSelectingRect = false;
+  /** Element drawn but not yet added to the sequence (elements mode only). */
+  private provisionalElement: Element | null = null;
+  /** Set while the provisional element is being created by a click and drag. */
+  private isCreatingProvisional = false;
+  /** Path coordinate where the provisional element creation started. */
+  private provisionalOriginU = 0;
   /** Set while dragging an element's control point along the path (elements mode). */
   private isDraggingElementPoint = false;
   /** Element whose control point is being dragged, and whether it is the start point. */
@@ -177,6 +188,7 @@ export class Editor {
     this.selected.clear();
     this.selectedCurves.clear();
     this.selectedElements.clear();
+    this.provisionalElement = null;
     this.draw();
   }
 
@@ -185,6 +197,7 @@ export class Editor {
     this.selected.clear();
     this.selectedCurves.clear();
     this.selectedElements.clear();
+    this.provisionalElement = null;
   }
 
   /**
@@ -299,7 +312,10 @@ export class Editor {
    * to how a curve is shown in path mode. Selected elements are highlighted.
    */
   private drawElements() {
-    if (this.sequence.path.curves.length === 0 || this.sequence.elements.length === 0) {
+    if (this.sequence.path.curves.length === 0) {
+      return;
+    }
+    if (this.sequence.elements.length === 0 && !this.provisionalElement) {
       return;
     }
     const ctx = this.ctx;
@@ -307,19 +323,40 @@ export class Editor {
 
     for (const element of this.sequence.elements) {
       const selected = this.selectedElements.has(element);
-      const start = Math.min(element.start as number, element.end as number);
-      const end = Math.max(element.start as number, element.end as number);
 
       // Black line that follows the path from start to end. Drawn as the
       // native canvas Bezier sub-curves of the underlying path, never as a
       // sampled polyline.
       ctx.strokeStyle = selected ? "#d33" : "#000";
       ctx.lineWidth = (selected ? PATH_WIDTH + 2 : PATH_WIDTH) / this.view.zoom;
-      this.sequence.path.drawRange(ctx, start as PathCoordinate, end as PathCoordinate);
+      this.drawElementSpan(element);
 
       // Control point at each end (exact path positions, not sampled).
       ctx.fillStyle = selected ? "#d33" : "#444";
-      for (const u of [start, end]) {
+      for (const u of [
+        Math.min(element.start as number, element.end as number),
+        Math.max(element.start as number, element.end as number),
+      ]) {
+        const point = this.sequence.path.getPosition(u as PathCoordinate);
+        ctx.beginPath();
+        ctx.arc(point.x, -point.y, nodeSize / 2, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    }
+
+    // The provisional element is drawn in its own color to show the
+    // difference: it is an edit preview, not part of the sequence yet.
+    if (this.provisionalElement) {
+      const element = this.provisionalElement;
+      const lo = Math.min(element.start as number, element.end as number);
+      const hi = Math.max(element.start as number, element.end as number);
+
+      ctx.strokeStyle = PROVISIONAL_COLOR;
+      ctx.lineWidth = (PATH_WIDTH + 2) / this.view.zoom;
+      this.drawElementSpan(element);
+
+      ctx.fillStyle = PROVISIONAL_COLOR;
+      for (const u of [lo, hi]) {
         const point = this.sequence.path.getPosition(u as PathCoordinate);
         ctx.beginPath();
         ctx.arc(point.x, -point.y, nodeSize / 2, 0, 2 * Math.PI);
@@ -330,6 +367,15 @@ export class Editor {
     // Action buttons for the selected element, on top of the elements.
     this.drawElementDeleteButton();
     this.drawElementCogButton();
+    // The "+" button of the provisional element, where the cog would be.
+    this.drawProvisionalAddButton();
+  }
+
+  /** Trace an element's span along the path, as native Bezier sub-curves. */
+  private drawElementSpan(element: Element) {
+    const start = Math.min(element.start as number, element.end as number);
+    const end = Math.max(element.start as number, element.end as number);
+    this.sequence.path.drawRange(this.ctx, start as PathCoordinate, end as PathCoordinate);
   }
 
   /** Sampled world-space points along the path covered by an element. */
@@ -362,7 +408,10 @@ export class Editor {
     let best: { element: Element; isStart: boolean } | null = null;
     let bestDistance = Infinity;
 
-    for (const element of this.sequence.elements) {
+    const elements = this.provisionalElement
+      ? [...this.sequence.elements, this.provisionalElement]
+      : this.sequence.elements;
+    for (const element of elements) {
       const points = this.getElementPoints(element);
       if (points.length === 0) continue;
       const endpoints: Array<[boolean, Vector<2>]> = [
@@ -427,6 +476,32 @@ export class Editor {
     let bestT = 0;
     let bestDistance = Infinity;
     for (let i = lo; i <= hi; i++) {
+      const { t, distance } = curves[i]!.getClosestPoint(cursor);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+        bestT = t;
+      }
+    }
+
+    return this.uniformCoordinateAt(curves, bestIndex, bestT) as PathCoordinate;
+  }
+
+  /**
+   * Point on the path closest to the cursor, considering every curve. Used
+   * when a first anchor point does not exist yet, e.g. while creating a
+   * provisional element with a click and drag.
+   *
+   * @returns The uniform path coordinate, or null if the path is empty.
+   */
+  private snapCursorToPathAnywhere(cursor: Vector<2>): PathCoordinate | null {
+    const curves = this.sequence.path.curves;
+    if (curves.length === 0) return null;
+
+    let bestIndex = 0;
+    let bestT = 0;
+    let bestDistance = Infinity;
+    for (let i = 0; i < curves.length; i++) {
       const { t, distance } = curves[i]!.getClosestPoint(cursor);
       if (distance < bestDistance) {
         bestDistance = distance;
@@ -513,7 +588,10 @@ export class Editor {
     let best: Element | null = null;
     let bestDistance = Infinity;
 
-    for (const element of this.sequence.elements) {
+    const elements = this.provisionalElement
+      ? [...this.sequence.elements, this.provisionalElement]
+      : this.sequence.elements;
+    for (const element of elements) {
       const points = this.getElementPoints(element);
       if (points.length === 0) continue;
 
@@ -606,6 +684,11 @@ export class Editor {
 
   /** Draw a "+" inside a circle at the given world point. */
   private drawPlusInCircle(world: Vector<2>) {
+    this.drawPlusInCircleWithColor(world, ADD_BUTTON_COLOR);
+  }
+
+  /** Draw a "+" inside a circle at the given world point, in the given color. */
+  private drawPlusInCircleWithColor(world: Vector<2>, color: string) {
     const ctx = this.ctx;
     const cx = world.x;
     const cy = -world.y;
@@ -613,7 +696,7 @@ export class Editor {
     const radius = ADD_BUTTON_RADIUS / this.view.zoom;
     const halfPlus = ADD_PLUS_LENGTH / 2 / this.view.zoom;
 
-    ctx.strokeStyle = ADD_BUTTON_COLOR;
+    ctx.strokeStyle = color;
     ctx.lineWidth = ADD_BUTTON_LINE_WIDTH / this.view.zoom;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -833,6 +916,130 @@ export class Editor {
     this.drawCogInCircle(center);
   }
 
+  /** True when the given element is the provisional, not-yet-added one. */
+  private isProvisionalElement(element: Element): boolean {
+    return element === this.provisionalElement;
+  }
+
+  /**
+   * Create the provisional element centered on the given path coordinate with
+   * the default span, remember the coordinate as the origin of a possible
+   * creation drag, and drop every selection (creating it deselects the other
+   * elements).
+   */
+  private startProvisionalCreation(u: number) {
+    this.placeProvisionalElement(u);
+    this.isCreatingProvisional = true;
+    this.provisionalOriginU = u;
+  }
+
+  /**
+   * Extend the provisional element being created to the given path
+   * coordinate: the span goes from the creation origin to the current point.
+   * Dragging "backwards" along the path swaps which end is start and which is
+   * end, so the span stays valid. When the cursor is back on the origin, the
+   * centered default span is restored.
+   */
+  private updateProvisionalCreation(cursor: Vector<2>) {
+    if (this.sequence.path.curves.length === 0) return;
+    const u = this.snapCursorToPathAnywhere(cursor);
+    if (u == null) return;
+    const origin = this.provisionalOriginU;
+    if (Math.abs(u - origin) < 1e-9) {
+      this.placeProvisionalElement(origin);
+      return;
+    }
+    this.setProvisionalSpan(Math.min(origin, u), Math.max(origin, u));
+  }
+
+  /** Give the provisional element the span [u - half, u + half], clamped. */
+  private placeProvisionalElement(u: number) {
+    const half = PROVISIONAL_TOTAL_LENGTH / 2;
+    this.setProvisionalSpan(u - half, u + half);
+  }
+
+  /** Set the provisional element's span to [start, end], clamped to the path. */
+  private setProvisionalSpan(start: number, end: number) {
+    const path = this.sequence.path;
+    if (path.curves.length === 0) return;
+    const clampedStart = Math.max(0, start) as PathCoordinate;
+    const clampedEnd = Math.min(path.length, end) as PathCoordinate;
+    if (!this.provisionalElement) {
+      this.provisionalElement = createDefaultFootTurn(clampedStart, clampedEnd);
+    } else {
+      this.provisionalElement.start = clampedStart;
+      this.provisionalElement.end = clampedEnd;
+    }
+    this.selectedElements.clear();
+    this.selectedCurves.clear();
+    this.selected.clear();
+    this.draw();
+  }
+
+  /**
+   * Path coordinate under the cursor, or null when the click is too far from
+   * the path. Used to place the provisional element on a click on the path.
+   */
+  private pickPathCoordinate(screenX: number, screenY: number): number | null {
+    const cursor = this.screenToWorld(screenX, screenY);
+    const tolerance = PICK_RADIUS / this.view.zoom;
+    const hit = this.sequence.path.pickCurve(cursor, tolerance);
+    if (!hit) return null;
+    const { t } = hit.curve.getClosestPoint(cursor);
+    return this.uniformCoordinateAt(this.sequence.path.curves, hit.curveIndex, t);
+  }
+
+  /**
+   * World position of the "+" add-to-sequence button of the provisional
+   * element. It sits where the cog button of a selected element would be: at
+   * the element's centre, offset to the opposite side of the path from the
+   * delete button.
+   */
+  private getProvisionalAddButtonPosition(): Vector<2> | null {
+    const element = this.provisionalElement;
+    if (!element || this.sequence.path.curves.length === 0) return null;
+    const lo = Math.min(element.start as number, element.end as number);
+    const hi = Math.max(element.start as number, element.end as number);
+    const midU = ((lo + hi) / 2) as PathCoordinate;
+    const [curve, curvilinear] = this.sequence.path.getCurveAndCurvilinearCoord(midU);
+    const point = curve.getPosition(curvilinear);
+    const perp = curve.getDerivative(curvilinear).normalized().getOrthogonal();
+    const offset = DELETE_BUTTON_OFFSET / this.view.zoom; // px -> m
+    return point.plus(perp.times(-offset));
+  }
+
+  /** Draw the "+" add-to-sequence button of the provisional element. */
+  private drawProvisionalAddButton() {
+    if (!this.provisionalElement) return;
+    const center = this.getProvisionalAddButtonPosition();
+    if (!center) return;
+    this.drawPlusInCircleWithColor(center, PROVISIONAL_COLOR);
+  }
+
+  /** True when the given CSS pixel position is over the provisional element's "+" button. */
+  private hitProvisionalAddButton(screenX: number, screenY: number): boolean {
+    const center = this.getProvisionalAddButtonPosition();
+    if (!center) return false;
+    const [iconX, iconY] = this.worldToScreen(center);
+    const dx = screenX - iconX;
+    const dy = screenY - iconY;
+    return Math.hypot(dx, dy) <= ADD_BUTTON_HIT_RADIUS;
+  }
+
+  /**
+   * Add the provisional element to the sequence and open the "change kind"
+   * dialog for it (the same dialog as the cog button opens), then forget the
+   * provisional element. Does nothing when there is none.
+   */
+  private addProvisionalElement() {
+    const element = this.provisionalElement;
+    if (!element) return;
+    this.provisionalElement = null;
+    this.sequence.addElement(element);
+    if (this.onElementChangeRequest) this.onElementChangeRequest(element);
+    this.draw();
+  }
+
   /** True when the given CSS pixel position is over the element cog button. */
   private hitElementCogButton(screenX: number, screenY: number): boolean {
     const center = this.getElementCogButtonPosition();
@@ -1029,6 +1236,16 @@ export class Editor {
 
   // Event handlers /////////////////////////////////////////////////////////
 
+  /**
+   * Recompute an element's keyframes in the sequence after an edit. The
+   * provisional element is not part of the sequence, so its keyframes must
+   * not be touched: only its start and end coordinates change.
+   */
+  private updateElementKeyframes(element: Element) {
+    if (this.isProvisionalElement(element)) return;
+    this.sequence.updateElementKeyframes(element);
+  }
+
   private handleWheel(event: WheelEvent) {
     event.preventDefault();
     const [screenX, screenY] = this.screenPosition(event);
@@ -1064,6 +1281,12 @@ export class Editor {
       // clicking the segment moves the whole element along the path. No
       // path-editing actions are available here.
       if (this.mode !== "path") {
+        // The "+" button of the provisional element adds it to the sequence
+        // and opens the change-kind dialog (same dialog as the cog button).
+        if (this.hitProvisionalAddButton(screenX, screenY)) {
+          this.addProvisionalElement();
+          return;
+        }
         // The "change kind" cog button takes priority over selecting/picking
         // the element, but only actually does something when a callback is
         // wired up (the host UI shows the kind picker).
@@ -1084,7 +1307,11 @@ export class Editor {
         }
         const element = this.pickElement(screenX, screenY);
         if (element) {
-          this.selectElement(element, event.ctrlKey);
+          // Clicking on a real element discards the provisional one.
+          if (!this.isProvisionalElement(element)) this.provisionalElement = null;
+          // The provisional element can be dragged but not selected, so the
+          // selected-element action buttons never target it.
+          if (!this.isProvisionalElement(element)) this.selectElement(element, event.ctrlKey);
           const pointHit = this.pickElementControlPoint(screenX, screenY);
           if (pointHit?.element === element) {
             this.isDraggingElementPoint = true;
@@ -1093,8 +1320,21 @@ export class Editor {
           } else {
             this.startElementSegmentDrag(element, screenX, screenY);
           }
-        } else if (!event.ctrlKey) {
-          this.selectedElements.clear();
+        } else {
+          if (!event.ctrlKey) this.selectedElements.clear();
+          // Clicking the path where no element exists places (or re-centers)
+          // the provisional element there. A click anywhere else (outside the
+          // provisional element and the path) discards it.
+          const u = this.pickPathCoordinate(screenX, screenY);
+          if (u != null) {
+            // Create centered; a subsequent drag extends it from the pressed
+            // point to the cursor (works dragged backwards too).
+            this.startProvisionalCreation(u);
+          } else {
+            this.provisionalElement = null;
+          }
+          this.draw();
+          return;
         }
         this.draw();
         return;
@@ -1211,6 +1451,12 @@ export class Editor {
       return;
     }
 
+    if (this.isCreatingProvisional) {
+      const [screenX, screenY] = this.screenPosition(event);
+      this.updateProvisionalCreation(this.screenToWorld(screenX, screenY));
+      return;
+    }
+
     if (this.isDraggingElementPoint) {
       const [screenX, screenY] = this.screenPosition(event);
       if (!this.dragElement) return;
@@ -1219,7 +1465,7 @@ export class Editor {
       if (u != null) {
         if (this.dragElementPointIsStart) this.dragElement.start = u;
         else this.dragElement.end = u;
-        this.sequence.updateElementKeyframes(this.dragElement);
+        this.updateElementKeyframes(this.dragElement);
       }
       this.draw();
       return;
@@ -1254,7 +1500,7 @@ export class Editor {
         }
         this.dragElement.start = newStart;
         this.dragElement.end = newEnd;
-        this.sequence.updateElementKeyframes(this.dragElement);
+        this.updateElementKeyframes(this.dragElement);
         // Follow the cursor so the move can continue across curves smoothly
         // (the curvilinear to path conversion is anchored on newStart's curve).
         this.dragAnchorCurveIndex = this.curveIndexAt(this.sequence.path.curves, newStart as number);
@@ -1483,6 +1729,7 @@ export class Editor {
     this.isDraggingCurve = false;
     this.isDraggingElementPoint = false;
     this.isDraggingElementSegment = false;
+    this.isCreatingProvisional = false;
     this.dragElement = null;
     this.dragOrigin = null;
     this.lastDragDelta = new Vector<2>(0, 0);
