@@ -31,6 +31,7 @@ const ELEMENT_DRAW_INCREMENT = 0.02;
 const NODE_SIZE = 10; // px
 const POLYGON_ALPHA = 0.25;
 const PICK_RADIUS = 8; // px
+const RECT_CLICK_THRESHOLD = 4; // px (max movement still counted as a click)
 const ADD_BUTTON_OFFSET = 20; // px (screen distance from the path end to the button center)
 const ADD_BUTTON_RADIUS = 7; // px (circle radius)
 const ADD_BUTTON_LINE_WIDTH = 1.5; // px
@@ -124,17 +125,23 @@ export class Editor {
   private dragElementPointIsStart = false;
   /** Set while moving an element by dragging its segment (elements mode). */
   private isDraggingElementSegment = false;
-  /**
-   * Real (geometric) arc lengths, in metres, from the invisible grabbed point
-   * on the path to the element's start and end control points. These are fixed
-   * when the drag starts so the element's real length and the grabbed point's
-   * relative position are conserved while dragging.
-   */
-  private dragStartDistance = 0;
-  private dragEndDistance = 0;
+  /** Every element moved together by a segment drag, with their spans
+   * (path coordinates) at drag start. One item for a single element; all
+   * elements of the selection when a selected element's segment is dragged. */
+  private segmentDragItems: Array<{ element: Element; start0: number; end0: number }> = [];
+  /** Real arc-length offset of the group at drag start (limits from the
+   * extreme ends against the path boundaries and unselected elements). */
+  private segmentDragDeltaMin = -Infinity;
+  private segmentDragDeltaMax = Infinity;
+  /** Path coordinate of the grabbed point at drag start (delta reference). */
+  private segmentDragGrabU = 0;
   /** Curve used as the anchor (current + neighbors) for the segment drag. */
   private dragAnchorCurveIndex = 0;
   private rectAddToSelection = false;
+  /** What the rectangle selection targets (set when the drag starts). */
+  private rectTargetsElements = false;
+  /** True once the rectangle drag has actually moved (not a plain click). */
+  private rectDidMove = false;
   private rectStartX = 0;
   private rectStartY = 0;
   private rectEndX = 0;
@@ -266,9 +273,8 @@ export class Editor {
       this.drawElements();
     }
     ctx.restore();
-    if (this.mode !== "elements") {
-      this.drawSelectionRectangle();
-    }
+    // Selection rectangle, for both editing modes.
+    this.drawSelectionRectangle();
   }
 
   private transformContext() {
@@ -499,7 +505,37 @@ export class Editor {
     // opposite endpoint (start <= end).
     const other = (isStart ? element.end : element.start) as number;
     clamped = isStart ? Math.min(clamped, other) : Math.max(clamped, other);
+    // Keep the span free of overlaps: dragging the start endpoint leftwards is
+    // limited by the left neighbour, dragging the end endpoint rightwards by
+    // the right neighbour.
+    const bounds = this.neighbourBoundsAroundSpan(element.start as number, element.end as number, element);
+    clamped = isStart ? Math.max(clamped, bounds.left) : Math.min(clamped, bounds.right);
     return clamped as PathCoordinate;
+  }
+
+  /**
+   * Path-coordinate limits that a span [start, end] may not cross without
+   * overlapping another element. Elements entirely to the left (their end at
+   * or before `start`) give the left limit; elements entirely to the right
+   * (their start at or after `end`) give the right limit. `exclude` is skipped
+   * (one element, or a set of them, e.g. all elements being dragged).
+   */
+  private neighbourBoundsAroundSpan(
+    start: number,
+    end: number,
+    exclude: Element | Set<Element> | null,
+  ): { left: number; right: number } {
+    const path = this.sequence.path;
+    let left = 0;
+    let right = path.length;
+    for (const other of this.sequence.elements) {
+      if (other === exclude || (exclude instanceof Set && exclude.has(other))) continue;
+      const os = Math.min(other.start as number, other.end as number);
+      const oe = Math.max(other.start as number, other.end as number);
+      if (oe <= start) left = Math.max(left, oe);
+      else if (os >= end) right = Math.min(right, os);
+    }
+    return { left, right };
   }
 
   /**
@@ -557,15 +593,14 @@ export class Editor {
   }
 
   /**
-   * Begin moving an element by dragging its segment. Records the real
-   * (geometric) arc lengths along the path between the invisible grabbed point
-   * (the path point closest to the cursor, clamped into the element's span) and
-   * the element's two control points.
+   * Begin moving one element (or, when it belongs to a multi-selection, the
+   * whole selection) by dragging its segment. Records each moved element's
+   * span at drag start plus the real arc-length offsets the group may still
+   * travel left and right before its extreme ends touch a limit: the path
+   * boundaries or an unselected neighbouring element.
    *
-   * These real lengths, not the approximate path-coordinate span, are what must
-   * stay fixed. The path coordinate is only a coarse lookup-table approximation
-   * of arc length, so conserving the path-coordinate span lets an element's
-   * drawn length drift when it is dragged across a curve whose speed varies.
+   * Real (geometric) arc lengths are used throughout, so dragging across a
+   * curve with varying speed does not drift the elements' drawn lengths.
    */
   private startElementSegmentDrag(element: Element, screenX: number, screenY: number) {
     const path = this.sequence.path;
@@ -579,19 +614,39 @@ export class Editor {
 
     const startU = element.start as number;
     const endU = element.end as number;
-    // The grabbed point lies on the element, so clamp it into its span. This
-    // keeps both real lengths non-negative (the grabbed point never falls
-    // outside the element) so its real length is exactly conserved.
+    // The grabbed point lies on the element, so clamp it into its span.
     const lo = Math.min(startU, endU);
     const hi = Math.max(startU, endU);
     const clampedGrab = Math.min(Math.max(grabbedU as number, lo), hi);
 
     this.isDraggingElementSegment = true;
     this.dragElement = element;
-    // Real (geometric) arc lengths from the grabbed point to each control point.
-    this.dragStartDistance = path.arcLengthBetween(lo as PathCoordinate, clampedGrab as PathCoordinate);
-    this.dragEndDistance = path.arcLengthBetween(clampedGrab as PathCoordinate, hi as PathCoordinate);
+    this.segmentDragGrabU = clampedGrab;
     this.dragAnchorCurveIndex = anchorIndex;
+
+    // The whole selection moves together, unless the provisional element
+    // (never selected) or a lone element is grabbed.
+    const moving = new Set<Element>([element]);
+    if (!this.isProvisionalElement(element) && this.selectedElements.has(element) && this.selectedElements.size > 1) {
+      for (const selected of this.selectedElements) moving.add(selected);
+    }
+
+    this.segmentDragItems = [];
+    let dMin = -Infinity;
+    let dMax = Infinity;
+    for (const moved of moving) {
+      const s0 = Math.min(moved.start as number, moved.end as number);
+      const e0 = Math.max(moved.start as number, moved.end as number);
+      this.segmentDragItems.push({ element: moved, start0: s0, end0: e0 });
+      // Limits for this element: the nearest unselected elements and the path
+      // boundaries. Over all moved elements, the group can only travel as far
+      // as the tightest limit (the extremes of the selection).
+      const bounds = this.neighbourBoundsAroundSpan(s0, e0, moving);
+      dMin = Math.max(dMin, -path.arcLengthBetween(bounds.left as PathCoordinate, s0 as PathCoordinate));
+      dMax = Math.min(dMax, path.arcLengthBetween(e0 as PathCoordinate, bounds.right as PathCoordinate));
+    }
+    this.segmentDragDeltaMin = dMin;
+    this.segmentDragDeltaMax = dMax;
   }
 
   /** Index of the curve containing the given path coordinate (clamped). */
@@ -992,7 +1047,9 @@ export class Editor {
       this.placeProvisionalElement(origin);
       return;
     }
-    this.setProvisionalSpan(Math.min(origin, u), Math.max(origin, u));
+    // The origin decides which side is compressed when the dragged span
+    // crosses an existing element, so it stops against its boundary.
+    this.setProvisionalSpan(Math.min(origin, u), Math.max(origin, u), origin);
   }
 
   /** Give the provisional element the span [u - half, u + half], clamped. */
@@ -1001,17 +1058,37 @@ export class Editor {
     this.setProvisionalSpan(u - half, u + half);
   }
 
-  /** Set the provisional element's span to [start, end], clamped to the path. */
-  private setProvisionalSpan(start: number, end: number) {
+  /**
+   * Set the provisional element's span to [start, end], clamped to the path
+   * and to the free gaps between the existing elements, so it never overlaps
+   * them. `anchor` (an origin path coordinate inside the desired span, e.g.
+   * the creation origin) decides which side is compressed when the desired
+   * span crosses an occupied one; it defaults to the span's midpoint.
+   */
+  private setProvisionalSpan(start: number, end: number, anchor?: number) {
     const path = this.sequence.path;
     if (path.curves.length === 0) return;
     const clampedStart = Math.max(0, start) as PathCoordinate;
     const clampedEnd = Math.min(path.length, end) as PathCoordinate;
+    // Free space around the anchor point: the provisional element must not
+    // overlap any existing element.
+    const mid = anchor ?? ((clampedStart as number) + (clampedEnd as number)) / 2;
+    let left = 0;
+    let right = path.length;
+    for (const other of this.sequence.elements) {
+      const os = Math.min(other.start as number, other.end as number);
+      const oe = Math.max(other.start as number, other.end as number);
+      if (oe <= mid) left = Math.max(left, oe);
+      else right = Math.min(right, os);
+    }
+    const lo = Math.max(clampedStart as number, left);
+    const hi = Math.min(clampedEnd as number, right);
+    const finalStart = Math.max(lo, Math.min(hi, lo)) as PathCoordinate;
     if (!this.provisionalElement) {
-      this.provisionalElement = createDefaultFootTurn(clampedStart, clampedEnd);
+      this.provisionalElement = createDefaultFootTurn(finalStart, hi as PathCoordinate);
     } else {
-      this.provisionalElement.start = clampedStart;
-      this.provisionalElement.end = clampedEnd;
+      this.provisionalElement.start = finalStart;
+      this.provisionalElement.end = hi as PathCoordinate;
     }
     this.selectedElements.clear();
     this.selectedCurves.clear();
@@ -1364,17 +1441,25 @@ export class Editor {
             this.startElementSegmentDrag(element, screenX, screenY);
           }
         } else {
-          if (!event.ctrlKey) this.selectedElements.clear();
           // Clicking the path where no element exists places (or re-centers)
-          // the provisional element there. A click anywhere else (outside the
-          // provisional element and the path) discards it.
+          // the provisional element there. A drag starting anywhere else
+          // (outside the provisional element and the path) draws a selection
+          // rectangle for elements; a plain click there discards the
+          // provisional element.
           const u = this.pickPathCoordinate(screenX, screenY);
           if (u != null) {
             // Create centered; a subsequent drag extends it from the pressed
             // point to the cursor (works dragged backwards too).
             this.startProvisionalCreation(u);
           } else {
-            this.provisionalElement = null;
+            this.isSelectingRect = true;
+            this.rectDidMove = false;
+            this.rectTargetsElements = true;
+            this.rectAddToSelection = event.ctrlKey;
+            this.rectStartX = screenX;
+            this.rectStartY = screenY;
+            this.rectEndX = screenX;
+            this.rectEndY = screenY;
           }
           this.draw();
           return;
@@ -1457,6 +1542,8 @@ export class Editor {
         } else {
           // Left drag on empty space draws a selection rectangle (no longer pans).
           this.isSelectingRect = true;
+          this.rectDidMove = false;
+          this.rectTargetsElements = false;
           this.rectAddToSelection = event.ctrlKey;
           this.rectStartX = screenX;
           this.rectStartY = screenY;
@@ -1488,6 +1575,12 @@ export class Editor {
 
     if (this.isSelectingRect) {
       const [screenX, screenY] = this.screenPosition(event);
+      if (
+        Math.abs(screenX - this.rectStartX) > RECT_CLICK_THRESHOLD ||
+        Math.abs(screenY - this.rectStartY) > RECT_CLICK_THRESHOLD
+      ) {
+        this.rectDidMove = true;
+      }
       this.rectEndX = screenX;
       this.rectEndY = screenY;
       this.draw();
@@ -1516,37 +1609,28 @@ export class Editor {
 
     if (this.isDraggingElementSegment) {
       const [screenX, screenY] = this.screenPosition(event);
-      if (!this.dragElement) return;
       const world = this.screenToWorld(screenX, screenY);
       const path = this.sequence.path;
-      const pathLen = path.length;
-      const total = this.dragStartDistance + this.dragEndDistance;
-      const snappedU = this.snapCursorToPathNearCurve(this.dragAnchorCurveIndex, world);
-      if (snappedU != null) {
-        const grabbed = snappedU as number;
-        // Walk the real (geometric) arc lengths from the grabbed point to each
-        // control point along the path, so the element's real length (not its
-        // approximate path-coordinate span) is conserved during the drag.
-        let newStart = path.moveAlongByArcLength(grabbed as PathCoordinate, -this.dragStartDistance);
-        let newEnd = path.moveAlongByArcLength(grabbed as PathCoordinate, this.dragEndDistance);
-        // If a path boundary was hit, re-anchor the whole span to preserve its
-        // total real length instead of letting it shrink against the edge.
-        if (total >= pathLen) {
-          newStart = 0 as PathCoordinate;
-          newEnd = pathLen as PathCoordinate;
-        } else if ((newStart as number) <= 1e-9) {
-          newStart = 0 as PathCoordinate;
-          newEnd = path.moveAlongByArcLength(0 as PathCoordinate, total);
-        } else if ((newEnd as number) >= pathLen - 1e-9) {
-          newEnd = pathLen as PathCoordinate;
-          newStart = path.moveAlongByArcLength(pathLen as PathCoordinate, -total);
+      const currentGrab = this.snapCursorToPathNearCurve(this.dragAnchorCurveIndex, world);
+      if (currentGrab != null) {
+        // Real arc-length offset of the grabbed point from its position at
+        // drag start, clamped to the group's movement limits so its extreme
+        // ends stop against the path boundaries and unselected elements.
+        // arcLengthBetween returns 0 when its end is not after its start, so
+        // the magnitude is measured in the direction of the movement.
+        const delta =
+          (currentGrab as number) >= this.segmentDragGrabU
+            ? path.arcLengthBetween(this.segmentDragGrabU as PathCoordinate, currentGrab as PathCoordinate)
+            : -path.arcLengthBetween(currentGrab as PathCoordinate, this.segmentDragGrabU as PathCoordinate);
+        const clamped = Math.min(Math.max(delta, this.segmentDragDeltaMin), this.segmentDragDeltaMax);
+        // Every element keeps its real length: its two control points move by
+        // the same real arc-length offset from their spans at drag start, so
+        // the whole selection moves rigidly along the path.
+        for (const item of this.segmentDragItems) {
+          item.element.start = path.moveAlongByArcLength(item.start0 as PathCoordinate, clamped);
+          item.element.end = path.moveAlongByArcLength(item.end0 as PathCoordinate, clamped);
+          this.updateElementKeyframes(item.element);
         }
-        this.dragElement.start = newStart;
-        this.dragElement.end = newEnd;
-        this.updateElementKeyframes(this.dragElement);
-        // Follow the cursor so the move can continue across curves smoothly
-        // (the curvilinear to path conversion is anchored on newStart's curve).
-        this.dragAnchorCurveIndex = this.curveIndexAt(this.sequence.path.curves, newStart as number);
       }
       this.draw();
       return;
@@ -1676,8 +1760,12 @@ export class Editor {
     this.draw();
   }
 
-  /** Select the control points inside the dragged rectangle. */
+  /** Select the control points (or elements) inside the dragged rectangle. */
   private finishSelectionRectangle() {
+    if (this.rectTargetsElements) {
+      this.finishElementSelectionRectangle();
+      return;
+    }
     const x0 = Math.min(this.rectStartX, this.rectEndX);
     const x1 = Math.max(this.rectStartX, this.rectEndX);
     const y0 = Math.min(this.rectStartY, this.rectEndY);
@@ -1701,6 +1789,32 @@ export class Editor {
     } else {
       this.selected = new Set(hits);
     }
+    this.selectedCurves.clear();
+  }
+
+  /**
+   * Select every element with at least one of its sampled points inside the
+   * dragged rectangle. The provisional element is not selectable.
+   */
+  private finishElementSelectionRectangle() {
+    const x0 = Math.min(this.rectStartX, this.rectEndX);
+    const x1 = Math.max(this.rectStartX, this.rectEndX);
+    const y0 = Math.min(this.rectStartY, this.rectEndY);
+    const y1 = Math.max(this.rectStartY, this.rectEndY);
+
+    // Keep an added element only if a point actually falls in (or stays in)
+    // this rectangle, so ctrl + drag shrinks the selection as expected.
+    const hits = new Set<Element>();
+    if (this.rectAddToSelection) for (const element of this.selectedElements) hits.add(element);
+    for (const element of this.sequence.elements) {
+      const inside = this.getElementPoints(element).some((point) => {
+        const [screenX, screenY] = this.worldToScreen(point);
+        return screenX >= x0 && screenX <= x1 && screenY >= y0 && screenY <= y1;
+      });
+      if (inside) hits.add(element);
+    }
+    this.selectedElements = hits;
+    this.selected.clear();
     this.selectedCurves.clear();
   }
 
@@ -1764,7 +1878,14 @@ export class Editor {
 
   private handleMouseUp() {
     if (this.isSelectingRect) {
-      this.finishSelectionRectangle();
+      if (this.rectDidMove) {
+        this.finishSelectionRectangle();
+      } else if (this.rectTargetsElements) {
+        // A plain click on empty space (not the start of a drag) discards the
+        // provisional element and drops the element selection.
+        this.provisionalElement = null;
+        this.selectedElements.clear();
+      }
       this.isSelectingRect = false;
     }
     this.isPanning = false;
