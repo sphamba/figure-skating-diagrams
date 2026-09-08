@@ -274,8 +274,9 @@ export class Curve {
 
   /** Move first endpoint and control point to align with preceeding curve
    * @param c - Preceeding curve
+   * @param length - If given, p1 is placed at this distance from p0. Otherwise the current p0-p1 distance is conserved.
    */
-  alignStart(c: Curve) {
+  alignStart(c: Curve, length?: number) {
     if (this.p0 != c.p3) {
       this.p0 = c.p3; // Common endpoint
     }
@@ -285,8 +286,8 @@ export class Curve {
     if (dir.lengthSquared() == 0) return; // No direction to match
     dir = dir.normalized();
 
-    // Compute p0-p1 distance, which will be conserved
-    const dist = this.p1.minus(this.p0).length();
+    // p0-p1 distance, conserved or forced to the given length
+    const dist = length ?? this.p1.minus(this.p0).length();
     if (dist == 0) return;
 
     this.p1 = this.p0.plus(dir.times(dist));
@@ -294,8 +295,9 @@ export class Curve {
 
   /** Move last endpoint and control point to align with following curve
    * @param c - Following curve
+   * @param length - If given, p2 is placed at this distance from p3. Otherwise the current p2-p3 distance is conserved.
    */
-  alignEnd(c: Curve) {
+  alignEnd(c: Curve, length?: number) {
     if (this.p3 != c.p0) {
       this.p3 = c.p0; // Common endpoint
     }
@@ -305,8 +307,8 @@ export class Curve {
     if (dir.lengthSquared() == 0) return; // No direction to match
     dir = dir.normalized();
 
-    // Compute p2-p3 distance, which will be conserved
-    const dist = this.p3.minus(this.p2).length();
+    // p2-p3 distance, conserved or forced to the given length
+    const dist = length ?? this.p3.minus(this.p2).length();
     if (dist == 0) return;
 
     this.p2 = this.p3.plus(dir.times(dist));

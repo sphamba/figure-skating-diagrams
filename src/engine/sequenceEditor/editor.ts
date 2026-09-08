@@ -243,7 +243,7 @@ export class Editor {
     return this.sequence;
   }
 
-  /** Append a 1 m straight curve at the end of the path. */
+  /** Append a 3 m straight curve at the end of the path. */
   addSegmentEnd() {
     this.sequence.path.addCurveEnd();
     this.draw();
@@ -1847,9 +1847,11 @@ export class Editor {
    * handle after it (this curve's p1 for a p0, next curve's p1 for a p3) keep
    * their offset to the anchor unchanged. This preserves the derivative at the
    * join. Dragging p1 aligns the previous curve's end handle (p2) about the
-   * shared joint so the two handles stay collinear, keeping its distance to
-   * the joint. Dragging p2 does the same on the other side: the next curve's
-   * start handle (p1) is aligned about the shared joint, keeping its distance.
+   * shared joint so the two handles stay collinear, with the same length as
+   * the dragged handle. Dragging p2 does the same on the other side: the next
+   * curve's start handle (p1) is aligned about the shared joint with the same
+   * length. The two handles about a joint always stay collinear and of equal
+   * length.
    */
   private alignNeighbors(curveIndex: number, pointKey: ControlPointKey, delta: Vector<2>) {
     const curves = this.sequence.path.curves;
@@ -1868,11 +1870,13 @@ export class Editor {
         curves[curveIndex + 1]!.p1 = curves[curveIndex + 1]!.p1.plus(delta);
       }
     } else if (pointKey === "p1" && curveIndex > 0) {
-      // Handle: mirror the previous curve's end handle (p2) about the joint.
-      curves[curveIndex - 1]!.alignEnd(curve);
+      // Handle: mirror the previous curve's end handle (p2) about the joint,
+      // with the same length as the dragged handle.
+      curves[curveIndex - 1]!.alignEnd(curve, curve.p1.minus(curve.p0).length());
     } else if (pointKey === "p2" && curveIndex < curves.length - 1) {
-      // Handle: mirror the next curve's start handle (p1) about the joint.
-      curves[curveIndex + 1]!.alignStart(curve);
+      // Handle: mirror the next curve's start handle (p1) about the joint,
+      // with the same length as the dragged handle.
+      curves[curveIndex + 1]!.alignStart(curve, curve.p2.minus(curve.p3).length());
     }
   }
 
