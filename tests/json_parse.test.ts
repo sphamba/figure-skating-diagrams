@@ -8,7 +8,7 @@ import { Sequence } from "../src/engine/sequence.js";
 
 test("Pattern loads from the public JSON asset", () => {
   const json = JSON.parse(
-    readFileSync(resolve(process.cwd(), "public/test-pattern.json"), "utf-8"),
+    readFileSync(resolve(process.cwd(), "tests/test-pattern.json"), "utf-8"),
   ) as PatternJSON;
 
   const restored = Pattern.fromJSON(json);

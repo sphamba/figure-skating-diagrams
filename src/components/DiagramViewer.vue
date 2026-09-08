@@ -5,10 +5,16 @@ import { ctx, initCanvas } from "../engine/rinkCanvas";
 
 onMounted(async () => {
   initCanvas();
-  const res = await fetch(`${import.meta.env.BASE_URL}test-pattern.json`);
-  const pattern = Pattern.fromJSON(await res.json());
-  for (const sequence of pattern.sequences) {
-    sequence.draw(ctx);
+  try {
+    const res = await fetch(`${import.meta.env.BASE_URL}test-pattern.json`);
+    const pattern = Pattern.fromJSON(await res.json());
+    for (const sequence of pattern.sequences) {
+      sequence.draw(ctx);
+    }
+  } catch (error) {
+    // The test pattern now lives in tests/ and is no longer shipped as a
+    // public asset. Keep the empty canvas if it cannot be loaded.
+    console.error("Could not load test pattern:", error);
   }
 });
 </script>

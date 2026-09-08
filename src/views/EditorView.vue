@@ -14,6 +14,8 @@ import { Sequence, type SequenceJSON } from "@/engine/sequence";
 import { FootTurn, changeFootTurnType, footTurnKindChoices } from "@/engine/turn";
 import type { Element } from "@/engine/element";
 import type { PatternJSON } from "@/engine/pattern";
+import { Curve } from "@/engine/curve";
+import { Vector } from "@/engine/vector";
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -93,13 +95,19 @@ watch(
   { immediate: true },
 );
 
-function emptySequence(): Sequence {
-  return new Sequence(new Path());
+/** Sequence shown when the editor opens. */
+function defaultSequence(): Sequence {
+  // A single straight cubic Bezier curve: 3 m long, horizontal, centered on
+  // the origin. Control points are collinear, so the curve stays a line.
+  const path = new Path();
+  path.curves.push(new Curve(new Vector(-1.5, 0), new Vector(-0.5, 0), new Vector(0.5, 0), new Vector(1.5, 0)));
+  path.updateLength();
+  return new Sequence(path);
 }
 
-onMounted(async () => {
+onMounted(() => {
   if (!canvasRef.value) return;
-  editor = new Editor(canvasRef.value, emptySequence());
+  editor = new Editor(canvasRef.value, defaultSequence());
 
   // Open the element kind picker when the user clicks the cog button on the
   // single selected element.
@@ -108,22 +116,6 @@ onMounted(async () => {
     selectedElementKind.value = (element as FootTurn).type;
     elementChangeOpen.value = true;
   };
-
-  // Load the test pattern as a starting point when available.
-  try {
-    const response = await fetch(`${import.meta.env.BASE_URL}test-pattern.json`);
-    const json = (await response.json()) as PatternJSON;
-    if (json.sequences?.length) {
-      editor.setSequence(Sequence.fromJSON(json.sequences[0] as SequenceJSON));
-      // Draw the remaining sequences' paths and foot traces too, so all
-      // feet are visible just like on the home page.
-      for (const sequence of json.sequences.slice(1)) {
-        editor.addOverlaySequence(Sequence.fromJSON(sequence as SequenceJSON));
-      }
-    }
-  } catch {
-    // Keep an empty sequence if the example cannot be loaded.
-  }
 });
 
 onBeforeUnmount(() => {
