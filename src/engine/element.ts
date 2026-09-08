@@ -13,6 +13,9 @@ export abstract class Element {
   start: PathCoordinate;
   end: PathCoordinate;
 
+  /** Name used to identify this element type when (de)serializing. */
+  abstract get type(): string;
+
   /**
    * @param start - Path coordinate where this element starts.
    * @param end - Path coordinate where this element ends.

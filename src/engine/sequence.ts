@@ -7,7 +7,7 @@ import type { FootKeyframeJSON, HipsKeyframeJSON, TimeKeyframeJSON } from "./key
 import { Path } from "./path.js";
 import { Quaternion, getQuaternionFromAngleAxis } from "./quaternion.js";
 import type { CanvasRenderingContext2DSized } from "./rinkCanvas.js";
-import { FootTurn } from "./turn.js";
+import { changeElementType } from "./turn.js";
 import type { FootTurnJSON } from "./turn.js";
 import { Vector } from "./vector.js";
 
@@ -39,7 +39,7 @@ export interface SequenceJSON {
     hips: HipsKeyframeJSON[];
     time: TimeKeyframeJSON[];
   };
-  elements: FootTurnJSON[];
+  elements: (FootTurnJSON | { type: string; start: number; end: number })[];
 }
 
 /** Relative coordinate between two keyframes, from 0 to 1 */
@@ -223,7 +223,9 @@ export class Sequence {
       hips: json.keyframes.hips.map((keyframe) => HipsKeyframe.fromJSON(keyframe)),
       time: json.keyframes.time.map((keyframe) => TimeKeyframe.fromJSON(keyframe)),
     };
-    sequence.elements = json.elements.map((element) => FootTurn.fromJSON(element));
+    sequence.elements = json.elements.map((element) =>
+      changeElementType(element.type, element as { type: string; start: number; end: number }),
+    );
     for (const element of sequence.elements) {
       sequence.registerLoadedElementKeyframes(element);
     }

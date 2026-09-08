@@ -113,8 +113,8 @@ test("changeFootTurnType converts an element's kind while preserving its span an
 	expect(loop.smoothExit).toBe(true);
 });
 
-test("footTurnKindChoices lists all eight element kinds", () => {
-	expect(footTurnKindChoices).toHaveLength(8);
+test("footTurnKindChoices lists all eight turn kinds and all set kinds", () => {
+	expect(footTurnKindChoices).toHaveLength(14);
 	const types = footTurnKindChoices.map((choice) => choice.type);
 	expect(types).toContain("ForwardClockwiseFootTurn");
 	expect(types).toContain("BackwardCounterClockwiseFootLoop");

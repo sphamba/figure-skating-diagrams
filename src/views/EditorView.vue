@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import Button from "openvue/button";
 import Card from "openvue/card";
 import Tag from "openvue/tag";
@@ -11,7 +11,8 @@ import Listbox from "openvue/listbox";
 import { Editor, type EditMode } from "@/engine/sequenceEditor/editor";
 import { Path } from "@/engine/path";
 import { Sequence, type SequenceJSON } from "@/engine/sequence";
-import { FootTurn, changeFootTurnType, footTurnKindChoices } from "@/engine/turn";
+import { changeElementType, footTurnKindChoices } from "@/engine/turn";
+import type { PathCoordinate } from "@/engine/coordinates";
 import type { Element } from "@/engine/element";
 import type { PatternJSON } from "@/engine/pattern";
 import { Curve } from "@/engine/curve";
@@ -30,8 +31,9 @@ const scaleElements = ref(true);
 
 /** Overlay state for the "change element kind" picker. */
 const elementChangeOpen = ref(false);
-/** The single selected element we are changing the kind of. */
-const elementToChange = ref<Element | null>(null);
+/** The single selected element we are changing the kind of. A shallow ref
+ * keeps the raw element identity so it can be found in the sequence. */
+const elementToChange = shallowRef<Element | null>(null);
 /** Currently highlighted kind in the listbox. */
 const selectedElementKind = ref<string | null>(null);
 
@@ -113,7 +115,7 @@ onMounted(() => {
   // single selected element.
   editor.onElementChangeRequest = (element) => {
     elementToChange.value = element;
-    selectedElementKind.value = (element as FootTurn).type;
+    selectedElementKind.value = element.type;
     elementChangeOpen.value = true;
   };
 });
@@ -165,8 +167,9 @@ function saveFile() {
  */
 function changeElementKind(kind: string) {
   if (!editor || !elementToChange.value) return;
-  const current = elementToChange.value as FootTurn;
-  const replacement = changeFootTurnType(kind, current.toJSON());
+  const current = elementToChange.value as Element;
+  const template = current.toJSON() as { type: string; start: PathCoordinate; end: PathCoordinate };
+  const replacement = changeElementType(kind, { ...template, type: kind });
   const sequence = editor.getSequence();
   sequence.replaceElement(current, replacement);
   editor.replaceSelectedElement(current, replacement);

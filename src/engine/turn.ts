@@ -5,6 +5,7 @@ import type { PathCoordinate } from "./coordinates.js";
 import { Element } from "./element.js";
 import { type FootData, FootKeyframe, type HipsKeyframe } from "./keyframe.js";
 import { getQuaternionFromAngleAxis } from "./quaternion.js";
+import { setConstructorsByType, setKindChoices } from "./set.js";
 import type { FootKey } from "./sequence.js";
 import { Vector } from "./vector.js";
 
@@ -410,7 +411,34 @@ export const footTurnKindChoices: { type: string; label: string }[] = [
   { type: "ForwardCounterClockwiseFootLoop", label: "Forward counter-clockwise loop" },
   { type: "BackwardClockwiseFootLoop", label: "Backward clockwise loop" },
   { type: "BackwardCounterClockwiseFootLoop", label: "Backward counter-clockwise loop" },
+  ...setKindChoices,
 ];
+
+/**
+ * Build an element of the given type from an existing element's serialized
+ * properties (span, and for foot turns foot key and smoothing). This is how
+ * an element is converted from one kind to another without moving it.
+ */
+export function changeElementType(
+  type: string,
+  template: {
+    type: string;
+    start: number;
+    end: number;
+    footKey?: string;
+    smoothEntry?: boolean;
+    smoothExit?: boolean;
+    loopShift?: number;
+  },
+): Element {
+  const start = template.start as PathCoordinate;
+  const end = template.end as PathCoordinate;
+  const setConstructor = setConstructorsByType[type];
+  if (setConstructor) {
+    return new setConstructor(start, end);
+  }
+  return changeFootTurnType(type, { ...template, start, end, type } as FootTurnJSON);
+}
 
 /**
  * Build a foot turn of the given type from an existing element's properties
