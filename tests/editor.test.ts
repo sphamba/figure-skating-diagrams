@@ -16,7 +16,7 @@ function makeStraightPath(): Path {
   return path;
 }
 
-test("addSegmentEnd appends a 1 m straight curve", () => {
+test("addSegmentEnd appends a 3 m straight curve", () => {
   const editor = {
     sequence: new Sequence(makeStraightPath()),
     addSegmentEnd() {
@@ -31,10 +31,10 @@ test("addSegmentEnd appends a 1 m straight curve", () => {
   expect(curves).toHaveLength(curvesBefore + 1);
 
   const lastCurve = curves[curves.length - 1]!;
-  expect(lastCurve.length).toBeCloseTo(1, 2);
+  expect(lastCurve.length).toBeCloseTo(3, 2);
 });
 
-test("new end curve keeps the end derivative and aligns control points at 1/2 and 1/2", () => {
+test("new end curve keeps the end derivative and aligns control points at equal length", () => {
   // Use a curved last segment so the direction is non-trivial.
   const path = new Path();
   path.addCurveEnd(
@@ -55,16 +55,17 @@ test("new end curve keeps the end derivative and aligns control points at 1/2 an
   expect(lastCurve.p0.x).toBeCloseTo(endPosition.x);
   expect(lastCurve.p0.y).toBeCloseTo(endPosition.y);
 
-  // Segment end is 1 m away along the end derivative.
+  // Segment end is 3 m away along the end derivative.
   const dir = endDerivative;
-  expect(lastCurve.p3.x).toBeCloseTo(endPosition.x + dir.x);
-  expect(lastCurve.p3.y).toBeCloseTo(endPosition.y + dir.y);
+  expect(lastCurve.p3.x).toBeCloseTo(endPosition.x + 3 * dir.x);
+  expect(lastCurve.p3.y).toBeCloseTo(endPosition.y + 3 * dir.y);
 
-  // Both control points sit at 1/2 along the same straight line.
-  expect(lastCurve.p1.x).toBeCloseTo(endPosition.x + dir.x / 2);
-  expect(lastCurve.p1.y).toBeCloseTo(endPosition.y + dir.y / 2);
-  expect(lastCurve.p2.x).toBeCloseTo(endPosition.x + dir.x / 2);
-  expect(lastCurve.p2.y).toBeCloseTo(endPosition.y + dir.y / 2);
+  // The start control point matches the previous end handle length (0.5).
+  // The middle control point sits at 3/2 along the same straight line.
+  expect(lastCurve.p1.x).toBeCloseTo(endPosition.x + 0.5 * dir.x);
+  expect(lastCurve.p1.y).toBeCloseTo(endPosition.y + 0.5 * dir.y);
+  expect(lastCurve.p2.x).toBeCloseTo(endPosition.x + (3 / 2) * dir.x);
+  expect(lastCurve.p2.y).toBeCloseTo(endPosition.y + (3 / 2) * dir.y);
 
   // The new start derivative matches the previous end derivative.
   const newStartDerivative = lastCurve.getDerivative(0 as Curvilinear).normalized();

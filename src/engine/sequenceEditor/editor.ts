@@ -36,13 +36,13 @@ const ADD_BUTTON_OFFSET = 20; // px (screen distance from the path end to the bu
 const ADD_BUTTON_RADIUS = 7; // px (circle radius)
 const ADD_BUTTON_LINE_WIDTH = 1.5; // px
 const ADD_PLUS_LENGTH = 7; // px (total length of each "+" arm)
-const ADD_BUTTON_HIT_RADIUS = 14; // px
+const ADD_BUTTON_HIT_RADIUS = 9; // px, slightly above the drawn radius
 const ADD_BUTTON_COLOR = "#d33";
 const DELETE_BUTTON_OFFSET = 14; // px, same distance as the split button near curves
 const DELETE_BUTTON_RADIUS = 7; // px (circle radius)
 const DELETE_BUTTON_LINE_WIDTH = 1.5; // px
 const DELETE_MINUS_LENGTH = 7; // px (total length of the "-" bar)
-const DELETE_BUTTON_HIT_RADIUS = 14; // px
+const DELETE_BUTTON_HIT_RADIUS = 9; // px, slightly above the drawn radius
 const DELETE_BUTTON_COLOR = "#d33";
 /** The "change kind" cog button sits on the side opposite the delete button, with the same geometry. */
 const COG_BUTTON_COLOR = "#444";
@@ -484,8 +484,8 @@ export class Editor {
 
   /**
    * Snap the dragged control point of an element to the point on the path
-   * closest to the given world cursor. To avoid big jumps, only the curve the
-   * point currently lies on and its direct neighbors are considered.
+   * closest to the given world cursor. Every curve of the path is considered,
+   * so an element endpoint may move anywhere along the path.
    *
    * @returns The new path coordinate, or null when it cannot be computed.
    */
@@ -494,10 +494,7 @@ export class Editor {
     const curves = path.curves;
     if (curves.length === 0) return null;
 
-    // Curve the endpoint currently lies on.
-    const currentU = (isStart ? element.start : element.end) as number;
-    const anchorIndex = this.curveIndexAt(curves, currentU);
-    const u = this.snapCursorToPathNearCurve(anchorIndex, cursor);
+    const u = this.snapCursorToPathAnywhere(cursor);
     if (u == null) return null;
 
     let clamped = Math.max(0, Math.min(path.length, u));
@@ -1611,7 +1608,7 @@ export class Editor {
       const [screenX, screenY] = this.screenPosition(event);
       const world = this.screenToWorld(screenX, screenY);
       const path = this.sequence.path;
-      const currentGrab = this.snapCursorToPathNearCurve(this.dragAnchorCurveIndex, world);
+      const currentGrab = this.snapCursorToPathAnywhere(world);
       if (currentGrab != null) {
         // Real arc-length offset of the grabbed point from its position at
         // drag start, clamped to the group's movement limits so its extreme
