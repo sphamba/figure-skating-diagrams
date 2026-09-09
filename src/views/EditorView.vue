@@ -9,7 +9,7 @@ import Checkbox from "openvue/checkbox";
 import Dialog from "openvue/dialog";
 import Listbox from "openvue/listbox";
 import { Editor, type EditMode } from "@/engine/sequenceEditor/editor";
-import { BothForwardStroke } from "@/engine/element/stroke";
+import { BothForwardGlide } from "@/engine/element/glide";
 import { Path } from "@/engine/path";
 import { Sequence, type SequenceJSON } from "@/engine/sequence";
 import { changeElementType } from "@/engine/element/turnTypes";
@@ -36,23 +36,27 @@ const elementChangeOpen = ref(false);
 /** The single selected element we are changing the kind of. A shallow ref
  * keeps the raw element identity so it can be found in the sequence. */
 const elementToChange = shallowRef<Element | null>(null);
-/** Branch chosen on step 1. "stroke" selects stroke elements, "turn" one-foot turns. */
-const elementChangeBranch = ref<"stroke" | "turn" | null>(null);
-/** Chosen values along the stroke path: side, direction and, for a one-foot
- * stroke, the edge. A two-foot stroke has no edge step. */
+/** Branch chosen on step 1. "glide" selects static glide elements, "stroke"
+ * the crossed/normal dynamic stroke elements, "turn" one-foot turns. */
+const elementChangeBranch = ref<"glide" | "stroke" | "turn" | null>(null);
+/** Chosen values along the glide path: side, direction and, for a one-foot
+ * glide, the edge. A two-foot glide has no edge step. */
+const glidePath = ref<string[]>([]);
+/** Chosen values along the stroke path: side, direction, edge, crossed/normal. */
 const strokePath = ref<string[]>([]);
 /** Chosen values along the one-foot turn path: group, side, direction, edge. */
 const turnPath = ref<string[]>([]);
 
 /** Step 1 choices: the element kind. Clicking one goes to the next step. */
 const elementKindGroupOptions = [
+  { label: "Glide", value: "glide" },
   { label: "Stroke", value: "stroke" },
   { label: "One-foot turn", value: "turn" },
 ];
 
-/** Choice levels of the stroke path, after the kind step: side, direction,
- * edge. A two-foot stroke is neither, so it skips the edge step. */
-const strokeLevelOptions: { label: string; value: string }[][] = [
+/** Choice levels of the glide path, after the kind step: side, direction,
+ * edge. A two-foot glide is neither, so it skips the edge step. */
+const glideLevelOptions: { label: string; value: string }[][] = [
   [
     { label: "Left", value: "Left" },
     { label: "Right", value: "Right" },
@@ -66,6 +70,29 @@ const strokeLevelOptions: { label: string; value: string }[][] = [
     { label: "Inside", value: "Inside" },
     { label: "Outside", value: "Outside" },
     { label: "Neither", value: "Neither" },
+  ],
+];
+
+/** Choice levels of the stroke path, after the kind step: side, direction,
+ * edge, crossed/normal. Selecting the crossed/normal value completes the
+ * element. */
+const strokeLevelOptions: { label: string; value: string }[][] = [
+  [
+    { label: "Left", value: "Left" },
+    { label: "Right", value: "Right" },
+  ],
+  [
+    { label: "Forward", value: "Forward" },
+    { label: "Backward", value: "Backward" },
+  ],
+  [
+    { label: "Inside", value: "Inside" },
+    { label: "Outside", value: "Outside" },
+    { label: "Neither", value: "Neither" },
+  ],
+  [
+    { label: "Normal", value: "Normal" },
+    { label: "Crossed", value: "Crossed" },
   ],
 ];
 
@@ -96,10 +123,17 @@ const turnStepFinal = computed(() => turnPath.value.length >= turnLevelOptions.l
 /** Options shown at the current depth of the turn path. */
 const currentTurnOptions = computed(() => (turnStepFinal.value ? [] : turnLevelOptions[turnPath.value.length]));
 
-/** The current stroke step selects the final direction when the stroke is
- * two-foot, or the final edge for a one-foot stroke. */
-const strokeSideTwoFoot = computed(() => strokePath.value[0] === "TwoFoot");
-const strokeStepFinal = computed(() => strokePath.value.length >= (strokeSideTwoFoot.value ? 2 : 3));
+/** The current glide step selects the final direction when the glide is
+ * two-foot, or the final edge for a one-foot glide. */
+const glideSideTwoFoot = computed(() => glidePath.value[0] === "TwoFoot");
+const glideStepFinal = computed(() => glidePath.value.length >= (glideSideTwoFoot.value ? 2 : 3));
+
+/** Options shown at the current depth of the glide path. */
+const currentGlideOptions = computed(() => (glideStepFinal.value ? [] : glideLevelOptions[glidePath.value.length]));
+
+/** The current stroke step selects the final crossed/normal choice when the
+ * path is full. */
+const strokeStepFinal = computed(() => strokePath.value.length >= strokeLevelOptions.length);
 
 /** Options shown at the current depth of the stroke path. */
 const currentStrokeOptions = computed(() => (strokeStepFinal.value ? [] : strokeLevelOptions[strokePath.value.length]));
@@ -107,6 +141,14 @@ const currentStrokeOptions = computed(() => (strokeStepFinal.value ? [] : stroke
 /** Chosen labels to show as tags at the top of the dialog. */
 const chosenLabels = computed<string[]>(() => {
   if (!elementChangeBranch.value) return [];
+  if (elementChangeBranch.value === "glide") {
+    const labels = ["Glide"];
+    glidePath.value.forEach((value, level) => {
+      const option = glideLevelOptions[level]?.find((choice) => choice.value === value);
+      if (option) labels.push(option.label);
+    });
+    return labels;
+  }
   if (elementChangeBranch.value === "stroke") {
     const labels = ["Stroke"];
     strokePath.value.forEach((value, level) => {
@@ -188,9 +230,9 @@ function defaultSequence(): Sequence {
   path.curves.push(new Curve(new Vector(-2.5, 0), new Vector(-0.5, 0), new Vector(0.5, 0), new Vector(2.5, 0)));
   path.updateLength();
   const sequence = new Sequence(path);
-  // A two-foot stroke at the very beginning of the sequence: both its start
+  // A two-foot glide at the very beginning of the sequence: both its start
   // and end at 0.
-  sequence.addElement(new BothForwardStroke(0 as PathCoordinate, 0 as PathCoordinate));
+  sequence.addElement(new BothForwardGlide(0 as PathCoordinate, 0 as PathCoordinate));
   return sequence;
 }
 
@@ -204,7 +246,7 @@ onMounted(() => {
     elementToChange.value = element;
     // Start the step-by-step flow at the kind selection.
     elementChangeBranch.value = null;
-    strokePath.value = [];
+    glidePath.value = [];
     turnPath.value = [];
     elementChangeOpen.value = true;
   };
@@ -268,26 +310,42 @@ function changeElementKind(kind: string) {
 }
 
 /** Choose a kind on step 1 and go to the next step. */
-function chooseElementBranch(branch: "stroke" | "turn") {
+function chooseElementBranch(branch: "glide" | "stroke" | "turn") {
   elementChangeBranch.value = branch;
+  glidePath.value = [];
   strokePath.value = [];
   turnPath.value = [];
 }
 
-/** Choose one value of the stroke path. A two-foot stroke completes at the
- * direction step (two-foot strokes are neither); a one-foot stroke completes
+/** Choose one value of the glide path. A two-foot glide completes at the
+ * direction step (two-foot glides are neither); a one-foot glide completes
  * at the edge step. */
+function onGlideChange(value: string) {
+  const next = [...glidePath.value, value];
+  if (next.length < (next[0] === "TwoFoot" ? 2 : 3)) {
+    glidePath.value = next;
+    return;
+  }
+  // next holds side, direction and, for a one-foot glide, the edge.
+  const [side, direction, edge] = next;
+  const type =
+    side === "TwoFoot" ? `Both${direction}Glide` : `${side}${direction}${edge === "Neither" ? "" : edge}Glide`;
+  changeElementKind(type);
+  closeElementChange();
+}
+
+/** Choose one value of the stroke path. The final crossed/normal selection
+ * completes the path: it builds the element and closes the dialog. */
 function onStrokeChange(value: string) {
   const next = [...strokePath.value, value];
-  if (next.length < (next[0] === "TwoFoot" ? 2 : 3)) {
+  if (next.length < strokeLevelOptions.length) {
     strokePath.value = next;
     return;
   }
-  // next holds side, direction and, for a one-foot stroke, the edge.
-  const [side, direction, edge] = next;
-  const type =
-    side === "TwoFoot" ? `Both${direction}Stroke` : `${side}${direction}${edge === "Neither" ? "" : edge}Stroke`;
-  changeElementKind(type);
+  // next holds side, direction, edge and the crossed/normal choice in that
+  // order.
+  const [side, direction, edge, crossed] = next;
+  changeElementKind(`${side}${crossed}${direction}${edge === "Neither" ? "" : edge}Glide`);
   closeElementChange();
 }
 
@@ -307,6 +365,10 @@ function onTurnChange(value: string) {
 
 /** Go back from the current step to the previous one. */
 function previousElementChangeStep() {
+  if (elementChangeBranch.value === "glide" && glidePath.value.length > 0) {
+    glidePath.value = glidePath.value.slice(0, -1);
+    return;
+  }
   if (elementChangeBranch.value === "stroke" && strokePath.value.length > 0) {
     strokePath.value = strokePath.value.slice(0, -1);
     return;
@@ -400,9 +462,20 @@ function closeElementChange() {
           <Tag v-for="label in chosenLabels" :key="label" :value="label" />
         </div>
 
-        <!-- Stroke branch: side, then direction, then edge for one-foot strokes. -->
+        <!-- Glide branch: side, then direction, then edge for one-foot glides. -->
         <Listbox
-          v-if="elementChangeBranch === 'stroke'"
+          v-if="elementChangeBranch === 'glide'"
+          :model-value="null"
+          :options="currentGlideOptions"
+          option-label="label"
+          option-value="value"
+          class="w-full"
+          @change="(event) => onGlideChange(event.value)"
+        />
+
+        <!-- Stroke branch: side, then direction, then edge, then crossed/normal. -->
+        <Listbox
+          v-else-if="elementChangeBranch === 'stroke'"
           :model-value="null"
           :options="currentStrokeOptions"
           option-label="label"

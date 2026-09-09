@@ -1,7 +1,7 @@
 /* One-foot turns: shared turn center and keyframe routing between parts. */
 
 import type { PathCoordinate } from "../coordinates.js";
-import { halfFeetSpacing, offIceFootHeight } from "./stroke.js";
+import { halfFeetSpacing, offIceFootHeight } from "./glide.js";
 import { type FootData, FootKeyframe, HipsKeyframe } from "../keyframe.js";
 import { getQuaternionFromAngleAxis } from "../quaternion.js";
 import { Vector } from "../vector.js";
@@ -50,7 +50,7 @@ export abstract class OneFootTurn extends FootTurn {
   }
 
   /** Minimal keyframes for the free foot: two keyframes at the ends of the
-   * span, shifted like the off-ice foot of the stroke elements: half the foot
+   * span, shifted like the off-ice foot of the glide elements: half the foot
    * spacing to its side of the lateral center, lifted off the ice at a fixed
    * height, facing the direction of travel. The free foot sits opposite the
    * on-ice foot of the turn. */

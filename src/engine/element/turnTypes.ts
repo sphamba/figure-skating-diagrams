@@ -1,7 +1,7 @@
-/* Turn and stroke registry: type names, kind choices and helpers. */
+/* Turn and glide registry: type names, kind choices and helpers. */
 
 import type { PathCoordinate } from "../coordinates.js";
-import { strokeConstructorsByType, strokeKindChoices } from "./stroke.js";
+import { glideConstructorsByType, glideKindChoices } from "./glide.js";
 import { threeTurnConstructorsByType, LeftForwardInsideThreeTurn } from "./threeTurn.js";
 import { loopConstructorsByType } from "./loop.js";
 import type { Element } from "./element.js";
@@ -30,7 +30,7 @@ export const footTurnKindChoices: { type: string; label: string }[] = [
   { type: "RightForwardOutsideLoop", label: "Right forward outside loop" },
   { type: "RightBackwardInsideLoop", label: "Right backward inside loop" },
   { type: "RightBackwardOutsideLoop", label: "Right backward outside loop" },
-  ...strokeKindChoices,
+  ...glideKindChoices,
 ];
 
 /**
@@ -60,9 +60,9 @@ export function changeElementType(
 ): Element {
   const start = template.start as PathCoordinate;
   const end = template.end as PathCoordinate;
-  const strokeConstructor = strokeConstructorsByType[type];
-  if (strokeConstructor) {
-    return new strokeConstructor(start, end);
+  const glideConstructor = glideConstructorsByType[type];
+  if (glideConstructor) {
+    return new glideConstructor(start, end);
   }
   return changeFootTurnType(type, {
     ...template,

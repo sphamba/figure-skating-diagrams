@@ -7,7 +7,7 @@ import { LeftBackwardOutsideThreeTurn,
 	LeftForwardInsideThreeTurn,
 	LeftForwardOutsideThreeTurn,
 } from "../src/engine/element/threeTurn.js";
-import { LeftForwardInsideStroke } from "../src/engine/element/stroke.js";
+import { LeftForwardInsideGlide } from "../src/engine/element/glide.js";
 import { LeftBackwardInsideLoop, LeftForwardInsideLoop } from "../src/engine/element/loop.js";
 import { changeElementType } from "../src/engine/element/turnTypes.js";
 import { changeFootTurnType } from "../src/engine/element/turn.js";
@@ -107,39 +107,40 @@ test("changeFootTurnType converts an element's kind and derives the foot from th
 	expect(loop.end).toBe(end);
 });
 
-test("footTurnKindChoices lists all sixteen turn kinds and all stroke kinds", () => {
-	expect(footTurnKindChoices).toHaveLength(30);
+test("footTurnKindChoices lists all sixteen turn kinds and all glide kinds", () => {
+	// 16 turns, 14 static glides and 24 crossed/normal dynamic glides.
+	expect(footTurnKindChoices).toHaveLength(54);
 	const types = footTurnKindChoices.map((choice) => choice.type);
 	expect(types).toContain("LeftForwardInsideThreeTurn");
 	expect(types).toContain("LeftBackwardOutsideLoop");
-	expect(types).toContain("LeftForwardInsideStroke");
-	expect(types).toContain("BothForwardStroke");
+	expect(types).toContain("LeftForwardInsideGlide");
+	expect(types).toContain("BothForwardGlide");
 });
 
-test("A stroke round-trips and keeps its pose keyframes", () => {
+test("A glide round-trips and keeps its pose keyframes", () => {
 	const start = 0.2 as PathCoordinate;
 	const end = (0.8 as PathCoordinate);
-	const stroke = changeElementType("LeftForwardInsideStroke", {
-		type: "LeftForwardStroke",
+	const glide = changeElementType("LeftForwardInsideGlide", {
+		type: "LeftForwardGlide",
 		start,
 		end,
 	});
 
-	expect(stroke).toBeInstanceOf(LeftForwardInsideStroke);
-	// The pose keyframes keep the same shape as the renamed stroke kinds: two
+	expect(glide).toBeInstanceOf(LeftForwardInsideGlide);
+	// The pose keyframes keep the same shape as the renamed glide kinds: two
 	// keyframes per foot axis, the off-ice foot lifted and shifted to its side.
-	expect(stroke.getLeftFootKeyframes()).toHaveLength(2);
-	expect(stroke.getRightFootKeyframes()).toHaveLength(2);
-	expect(stroke.getHipsKeyframes()).toHaveLength(2);
-	const onIce = stroke.getLeftFootKeyframes()[0]!.data;
+	expect(glide.getLeftFootKeyframes()).toHaveLength(2);
+	expect(glide.getRightFootKeyframes()).toHaveLength(2);
+	expect(glide.getHipsKeyframes()).toHaveLength(2);
+	const onIce = glide.getLeftFootKeyframes()[0]!.data;
 	expect(onIce.position!.y).toBeCloseTo(0, 5);
 	expect(onIce.position!.z).toBeCloseTo(0, 5);
-	const free = stroke.getRightFootKeyframes()[0]!.data;
+	const free = glide.getRightFootKeyframes()[0]!.data;
 	expect(free.position!.y).toBeCloseTo(-0.15, 5);
 	expect(free.position!.z).toBeCloseTo(0.2, 5);
-	// A two-foot stroke round-trips with no edge.
-	const both = changeElementType("BothBackwardStroke", { type: "LeftForwardStroke", start, end });
-	expect(both.toJSON().type).toBe("BothBackwardStroke");
+	// A two-foot glide round-trips with no edge.
+	const both = changeElementType("BothBackwardGlide", { type: "LeftForwardGlide", start, end });
+	expect(both.toJSON().type).toBe("BothBackwardGlide");
 });
 
 test("A turn gives keyframes to the on-ice foot, the free foot and the hips", () => {
@@ -154,7 +155,7 @@ test("A turn gives keyframes to the on-ice foot, the free foot and the hips", ()
 	expect(free).toHaveLength(2);
 	expect(free[0]!.coordinate).toBe(start);
 	expect(free[1]!.coordinate).toBe(end);
-	// The free foot is shifted like the off-ice foot of the stroke elements:
+	// The free foot is shifted like the off-ice foot of the glide elements:
 	// half the foot spacing to its side, lifted off the ice, facing forward.
 	expect(free[0]!.data.position!.x).toBe(0);
 	expect(free[0]!.data.position!.y).toBeCloseTo(-0.15, 5);
