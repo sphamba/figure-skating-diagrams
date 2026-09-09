@@ -286,3 +286,33 @@ test("moveAlongByArcLength clamps at the path ends", () => {
 	expect(path.moveAlongByArcLength(0.1 as PathCoordinate, -10)).toBe(0 as PathCoordinate);
 	expect(path.moveAlongByArcLength(0.9 as PathCoordinate, 10)).toBe(path.length as PathCoordinate);
 });
+
+test("Path.fromJSON reconnects the joints of serialized curves", () => {
+	const path = new Path();
+	path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
+	path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(1 + 1 / 3, 0), new Vector(1 + 2 / 3, 0), new Vector(2, 0)));
+
+	const reloaded = Path.fromJSON(path.toJSON());
+
+	// Each joint is one shared point object again: moving a p3 moves the
+	// following p0 through the shared object, like a dragged anchor does.
+	for (let i = 1; i < reloaded.curves.length; i++) {
+		expect(reloaded.curves[i]!.p0).toBe(reloaded.curves[i - 1]!.p3);
+	}
+	reloaded.curves[1]!.p0.x = 5;
+	expect(reloaded.curves[0]!.p3.x).toBe(5);
+});
+
+test("structurally unequal joint coordinates stay separate objects", () => {
+	const path = new Path();
+	path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
+	const json = path.toJSON();
+	// A deliberate gap: the second curve starts away from the first curve's p3.
+	json.curves.push({ p0: [2, 0], p1: [2 + 1 / 3, 0], p2: [2 + 2 / 3, 0], p3: [3, 0] });
+
+	const reloaded = Path.fromJSON(json);
+	// The unequal joint was not reconnected, so the two curves keep separate
+	// anchor objects.
+	expect(reloaded.curves[1]!.p0).not.toBe(reloaded.curves[0]!.p3);
+	expect(reloaded.curves[1]!.p0.x).toBe(2);
+});

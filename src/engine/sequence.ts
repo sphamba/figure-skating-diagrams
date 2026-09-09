@@ -53,6 +53,35 @@ const defaultPathColor = "black";
 const traceColorL = "rgb(48, 48, 210)";
 const traceColorR = "rgb(156, 0, 0)";
 
+/** Path coordinate gap, in metres, kept between the end keyframe of one
+ * element and the start keyframe of the next: boundary keyframes never
+ * overlap, not even when element spans are scaled about their middles. */
+const boundaryDelta = 0.001;
+
+/**
+ * Fixed boundary keyframe coordinates for two consecutive elements: the end
+ * keyframe coordinate of the first element and the start keyframe coordinate
+ * of the second. When the two overlap (the start is less than the delta
+ * after the end), they move to their midpoint, the end at the midpoint and
+ * the start delta after it. A zero-size element (its start equals its end)
+ * cannot withstand a delta: its
+ * own keyframe keeps its coordinate and only the keyframe of the other
+ * element moves, to the closest order-keeping coordinate.
+ */
+function boundaryCoordinates(
+  end: number,
+  start: number,
+  endElementIsZeroSize: boolean,
+  startElementIsZeroSize: boolean,
+): [number, number] {
+  if (start - end >= boundaryDelta) return [end, start];
+  if (endElementIsZeroSize && startElementIsZeroSize) return [end, start];
+  if (endElementIsZeroSize) return [end, end + boundaryDelta];
+  if (startElementIsZeroSize) return [Math.min(end, start), start];
+  const middle = (end + start) / 2;
+  return [middle, middle + boundaryDelta];
+}
+
 export class Sequence {
   path: Path;
   keyframes: SequenceKeyframes;
@@ -160,6 +189,44 @@ export class Sequence {
     for (const keyframe of footR) this.addKeyframe("footR", keyframe);
     for (const keyframe of hips) this.addKeyframe("hips", keyframe);
     this.elementKeyframes.set(element, { footL, footR, hips });
+    this.constrainElementKeyframes();
+  }
+
+  /**
+   * Make sure the end keyframe of one element and the start keyframe of the
+   * next never overlap: when they do, they move to their midpoint, with a
+   * 0.001 m delta between them keeping the order. Zero-size elements cannot
+   * withstand a delta: their own keyframe stays put and only the keyframe of
+   * the other element moves. Applied to the foot and hips keyframes of every
+   * pair of consecutive elements.
+   */
+  private constrainElementKeyframes() {
+    const elements = [...this.elements].sort((a, b) => (a.start as number) - (b.start as number));
+    for (const part of ["footL", "footR", "hips"] as const) {
+      for (let index = 0; index < elements.length - 1; index++) {
+        const endElement = elements[index];
+        const startElement = elements[index + 1];
+        if (!endElement || !startElement) continue;
+        const endKeyframes = this.elementKeyframes.get(endElement)?.[part];
+        const startKeyframes = this.elementKeyframes.get(startElement)?.[part];
+        if (!endKeyframes?.length || !startKeyframes?.length) continue;
+        const endKeyframe = endKeyframes[endKeyframes.length - 1];
+        const startKeyframe = startKeyframes[0];
+        if (!endKeyframe || !startKeyframe) continue;
+        const [end, start] = boundaryCoordinates(
+          endKeyframe.coordinate,
+          startKeyframe.coordinate,
+          endElement.start === endElement.end,
+          startElement.start === startElement.end,
+        );
+        endKeyframe.coordinate = end as PathCoordinate;
+        startKeyframe.coordinate = start as PathCoordinate;
+      }
+    }
+    // The boundary coordinates changed, so the part arrays are sorted again.
+    this.keyframes.footL.sort((a, b) => a.coordinate - b.coordinate);
+    this.keyframes.footR.sort((a, b) => a.coordinate - b.coordinate);
+    this.keyframes.hips.sort((a, b) => a.coordinate - b.coordinate);
   }
 
   /** Remove a set of keyframe objects (by identity) from a part keyframe array. */
@@ -187,6 +254,7 @@ export class Sequence {
     for (const keyframe of fresh.footR) this.addKeyframe("footR", keyframe);
     for (const keyframe of fresh.hips) this.addKeyframe("hips", keyframe);
     this.elementKeyframes.set(element, fresh);
+    this.constrainElementKeyframes();
   }
 
   /** Drop baked keyframes that structure-equal any freshly computed element keyframe. */
@@ -375,20 +443,44 @@ export class Sequence {
 
   /**
    * Foot keyframes used for drawing. When a blade length scale is active, the
-   * keyframes each element contributes are fetched with their coordinates
-   * re-based onto the element's scaled span: the trace then renders as if the
-   * elements really spanned the scaled range. The stored keyframes of the
-   * sequence are not touched.
+   * keyframes each scalable element (the turns) contributes are fetched with
+   * their coordinates re-based onto the element's scaled span: the trace then
+   * renders as if the element really spanned the scaled range. Glides and
+   * strokes do not scale, so their keyframes keep the real span. The stored
+   * keyframes of the sequence are not touched.
    */
   getDrawFootKeyframes(footKey: FootKey, scale: number): FootKeyframe[] {
     if (scale === 1) {
       return this.keyframes[footKey];
     }
+    // Each element's keyframes are re-based onto its scaled span. Scaling can
+    // make the end keyframe of one element and the start keyframe of the next
+    // overlap (zoomed out, the spans scale up about their middles), so each
+    // boundary pair is fixed the same way as the stored keyframes: at their
+    // midpoint with a 0.001 m delta keeping the order.
+    const elements = [...this.elements].sort((a, b) => (a.start as number) - (b.start as number));
     const keyframes: FootKeyframe[] = [];
-    for (const element of this.elements) {
-      keyframes.push(
-        ...(footKey === "footL" ? element.getLeftFootKeyframes(scale) : element.getRightFootKeyframes(scale)),
-      );
+    let endElement: Element | undefined;
+    let endKeyframes: FootKeyframe[] | undefined;
+    for (const element of elements) {
+      const elementScale = element.scalable ? scale : undefined;
+      const startKeyframes =
+        footKey === "footL" ? element.getLeftFootKeyframes(elementScale) : element.getRightFootKeyframes(elementScale);
+      const endKeyframe = endKeyframes?.[endKeyframes.length - 1];
+      const startKeyframe = startKeyframes[0];
+      if (endKeyframe && startKeyframe && endElement) {
+        const [end, start] = boundaryCoordinates(
+          endKeyframe.coordinate,
+          startKeyframe.coordinate,
+          endElement.start === endElement.end,
+          element.start === element.end,
+        );
+        endKeyframe.coordinate = end as PathCoordinate;
+        startKeyframe.coordinate = start as PathCoordinate;
+      }
+      keyframes.push(...startKeyframes);
+      endElement = element;
+      endKeyframes = startKeyframes;
     }
     keyframes.sort((a, b) => a.coordinate - b.coordinate);
     return keyframes;

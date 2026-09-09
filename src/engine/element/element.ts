@@ -16,6 +16,13 @@ export abstract class Element {
   /** Name used to identify this element type when (de)serializing. */
   abstract get type(): string;
 
+  /** True when the element responds to a span scale, re-basing its keyframes
+   * and displayed span onto the span scaled about its middle. Only turns
+   * scale: turns defined later inherit scaling from their base class. */
+  get scalable(): boolean {
+    return false;
+  }
+
   /**
    * @param start - Path coordinate where this element starts.
    * @param end - Path coordinate where this element ends.

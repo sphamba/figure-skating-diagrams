@@ -19,7 +19,7 @@ const MIN_TRACE_WIDTH = 2; // px
  * Only has effect when zoomed out (a blade shorter than this would be hard to
  * follow). Elements are scaled by the same factor, about their middle point.
  */
-const MIN_BLADE_LENGTH = 15; // px
+const MIN_BLADE_LENGTH = 25; // px
 /** Minimum foot trace draw step, in screen pixels: when zoomed out, the
  * default 0.02 m step would be shorter than one pixel, so the step is scaled
  * up to keep each drawn segment at least one pixel long. */
@@ -105,6 +105,12 @@ export class Editor {
    * element's kind and then replace the element via the sequence.
    */
   onElementChangeRequest?: (element: Element) => void;
+  /** Called once after every sequence mutation (an added point, curve or
+   * element, a removed one, or a completed drag). The host UI is expected to
+   * persist the sequence. Drags notify once on mouse up, not per move. */
+  onSequenceChange?: () => void;
+  /** True when a drag mutated the sequence since the last notification. */
+  private sequenceMutated = false;
   /** Indices of the curves currently selected (by clicking on their line). */
   private selectedCurves = new Set<number>();
   /** Elements currently selected (path-elements mode only). */
@@ -208,6 +214,8 @@ export class Editor {
 
   setSequence(sequence: Sequence) {
     this.sequence = sequence;
+    // A new sequence starts with no unsaved drag state.
+    this.sequenceMutated = false;
     this.selected.clear();
     this.selectedCurves.clear();
     this.selectedElements.clear();
@@ -247,6 +255,7 @@ export class Editor {
   /** Append a 3 m straight curve at the end of the path. */
   addSegmentEnd() {
     this.sequence.path.addCurveEnd();
+    this.notifySequenceChange();
     this.draw();
   }
 
@@ -454,14 +463,15 @@ export class Editor {
   /**
    * The element span as displayed (in increasing order): the real span, or,
    * when element scaling is on and zoomed out, the span scaled about its
-   * middle point to match the scaled blade length. Coordinates are clamped to
-   * the path range: a scaled span may extend past the path end points, where
-   * the path does not exist.
+   * middle point to match the scaled blade length. Only scalable elements
+   * (the turns) scale: glides and strokes keep their real span. Coordinates
+   * are clamped to the path range: a scaled span may extend past the path end
+   * points, where the path does not exist.
    */
   private getDisplayedSpan(element: Element): [PathCoordinate, PathCoordinate] {
     const minBladeLength =
       this.scaleElements && this.mode !== "elements" ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
-    const factor = this.sequence.getBladeLengthScale(minBladeLength);
+    const factor = element.scalable ? this.sequence.getBladeLengthScale(minBladeLength) : 1;
     const [start, end] = factor === 1 ? [element.start, element.end] : element.scaleAboutMiddle(factor);
     const pathLength = this.sequence.path.length;
     const clamp = (u: number) => Math.max(0, Math.min(pathLength, u));
@@ -477,11 +487,21 @@ export class Editor {
     this.sequence.path.drawRange(this.ctx, start, end);
   }
 
-  /** Sampled world-space points along the path covered by an element. */
+  /** Sampled world-space points along the path covered by an element.
+   * Every element, even a rescaled and pathrange-clamped span, is sampled
+   * with at least five points: the step is shrunk below the increment when
+   * the drawn span is too short for five increment-spaced points. */
   private getElementPoints(element: Element): Vector<2>[] {
     const path = this.sequence.path;
+    const [start, end] = this.getDisplayedSpan(element);
+    const span = (end as number) - (start as number);
+    // The step must be strictly positive: a zero-length span (e.g. a
+    // zero-size element, or a clamped span with no free space left) gave a
+    // zero step, so the loop below never advanced and hung the page. A
+    // zero-length span is fine with just one point per coordinate.
+    const step = Math.min(ELEMENT_DRAW_INCREMENT, span / 4) || ELEMENT_DRAW_INCREMENT;
     const points: Vector<2>[] = [];
-    for (let u = element.start as number; u <= (element.end as number); u += ELEMENT_DRAW_INCREMENT) {
+    for (let u = start as number; u <= (end as number); u += step) {
       points.push(path.getPosition(u as PathCoordinate));
     }
     return points;
@@ -1203,6 +1223,7 @@ export class Editor {
     if (!element) return;
     this.provisionalElement = null;
     this.sequence.addElement(element);
+    this.notifySequenceChange();
     if (this.onElementChangeRequest) this.onElementChangeRequest(element);
     this.draw();
   }
@@ -1413,6 +1434,11 @@ export class Editor {
     this.sequence.updateElementKeyframes(element);
   }
 
+  /** Notify the host UI that the sequence changed. */
+  private notifySequenceChange() {
+    if (this.onSequenceChange) this.onSequenceChange();
+  }
+
   private handleWheel(event: WheelEvent) {
     event.preventDefault();
     const [screenX, screenY] = this.screenPosition(event);
@@ -1471,6 +1497,7 @@ export class Editor {
           if (element) {
             this.sequence.removeElement(element);
             this.selectedElements.delete(element);
+            this.notifySequenceChange();
             this.draw();
           }
           return;
@@ -1529,6 +1556,7 @@ export class Editor {
             this.sequence.path.removePoint(removable.point);
           }
           this.selected.clear();
+          this.notifySequenceChange();
           this.draw();
         }
         return;
@@ -1553,6 +1581,7 @@ export class Editor {
           newSelected.add(splitCurveIndex);
           newSelected.add(splitCurveIndex + 1);
           this.selectedCurves = newSelected;
+          this.notifySequenceChange();
           this.draw();
         }
         return;
@@ -1652,6 +1681,7 @@ export class Editor {
         if (this.dragElementPointIsStart) this.dragElement.start = u;
         else this.dragElement.end = u;
         this.updateElementKeyframes(this.dragElement);
+        this.sequenceMutated = true;
       }
       this.draw();
       return;
@@ -1681,6 +1711,7 @@ export class Editor {
           item.element.end = path.moveAlongByArcLength(item.end0 as PathCoordinate, clamped);
           this.updateElementKeyframes(item.element);
         }
+        this.sequenceMutated = true;
       }
       this.draw();
       return;
@@ -1716,6 +1747,7 @@ export class Editor {
         point.y = world.y;
         this.alignNeighbors(curveIndex, pointKey, delta);
         this.sequence.path.updateLength();
+        this.sequenceMutated = true;
         this.draw();
       } else if (this.dragOrigin) {
         // Multiple points: translate each step by the change in delta, so the
@@ -1769,6 +1801,7 @@ export class Editor {
     }
 
     this.sequence.path.updateLength();
+    this.sequenceMutated = true;
     this.draw();
   }
 
@@ -1807,6 +1840,7 @@ export class Editor {
     }
 
     this.sequence.path.updateLength();
+    this.sequenceMutated = true;
     this.draw();
   }
 
@@ -1951,7 +1985,14 @@ export class Editor {
     this.dragElement = null;
     this.dragOrigin = null;
     this.lastDragDelta = new Vector<2>(0, 0);
-    this.draw();
+    // A drag mutated the sequence: notify once on mouse up, not per move.
+    if (this.sequenceMutated) {
+      this.sequenceMutated = false;
+      this.notifySequenceChange();
+      this.draw();
+    } else {
+      this.draw();
+    }
   }
 
   private resize() {

@@ -32,12 +32,30 @@ export class Path {
     return { curves: this.curves.map((curve) => curve.toJSON()) };
   }
 
-  /** Reconstruct a Path from serialized data. */
+  /** Reconstruct a Path from serialized data. Serialized curves do not share
+   * their joint objects (curve i's p3 and curve i+1's p0 are serialized but
+   * rebuilt as two distinct points), while the edit tools rely on a shared
+   * joint being one object: a dragged p3 moves the following p0 through the
+   * shared point, and a group drag moves a shared joint once. The joints are
+   * therefore reconnected: a curve's p0 becomes the previous curve's p3 when
+   * the two coordinates structurally equal, so deliberate gaps stay intact. */
   static fromJSON(json: { curves: ReturnType<Curve["toJSON"]>[] }): Path {
     const path = new Path();
     path.curves = json.curves.map((curve) => Curve.fromJSON(curve));
+    path.connectJoints();
     path.updateLength();
     return path;
+  }
+
+  /** Make each joint one shared point object again: curve i's p0 becomes the
+   * previous curve's p3 when the two coordinates structurally equal. */
+  private connectJoints() {
+    const equal = (a: Vector<2>, b: Vector<2>) => a.x === b.x && a.y === b.y;
+    for (let i = 1; i < this.curves.length; i++) {
+      const previous = this.curves[i - 1]!;
+      const curve = this.curves[i]!;
+      if (equal(curve.p0, previous.p3)) curve.p0 = previous.p3;
+    }
   }
 
   /** @param u - Uniform path coordinate, from 0 to path length */

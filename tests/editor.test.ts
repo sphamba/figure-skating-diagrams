@@ -6,6 +6,7 @@ import { Sequence } from "../src/engine/sequence";
 import type { PathCoordinate } from "../src/engine/coordinates";
 import { Vector } from "../src/engine/vector";
 import { LeftForwardOutsideThreeTurn } from "../src/engine/element/threeTurn";
+import { LeftForwardOutsideGlide } from "../src/engine/element/glide";
 
 /** Build a simple known path: a straight 1 m line along the X axis. */
 function makeStraightPath(): Path {
@@ -424,5 +425,27 @@ test("clicking the delete button next to a selected element removes it", () => {
   // After removal the selection is empty, so no delete button remains.
   expect(editorRef(editor).getElementDeleteButtonPosition()).toBeNull();
 
+  editor.destroy();
+});
+
+test("a zero-size element does not hang drawing and picking in elements mode", () => {
+  const { editor } = makeEditor();
+  editor.mode = "elements";
+  // A zero-size element: its start equals its end, so the sampling step over
+  // its displayed span would be zero. The draw loop used to hang the page
+  // before the strictly positive step guard.
+  const path = editor.getSequence().path;
+  editor.getSequence().addElement(
+    new LeftForwardOutsideGlide(0.5 as PathCoordinate, 0.5 as PathCoordinate),
+  );
+  const start = Date.now();
+  editor.draw();
+  // The click path (pickElement) samples every element too, including the
+  // endpoint tie-break and segment loops.
+  const cursor = editorRef(editor).screenToWorld(512, 512);
+  expect(editorRef(editor).pickElement(512, 512)).toBeNull();
+  expect(cursor).not.toBeNull();
+  expect(Date.now() - start).toBeLessThan(5000);
+  expect(path.length).toBeCloseTo(1);
   editor.destroy();
 });

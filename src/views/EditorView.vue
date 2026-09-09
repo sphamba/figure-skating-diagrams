@@ -239,6 +239,9 @@ onMounted(() => {
     turnPath.value = [];
     elementChangeOpen.value = true;
   };
+  // Every sequence mutation (added or removed points, curves and elements,
+  // finished drags) is persisted to local storage right away.
+  editor.onSequenceChange = () => store.saveToStorage();
 });
 
 onBeforeUnmount(() => {

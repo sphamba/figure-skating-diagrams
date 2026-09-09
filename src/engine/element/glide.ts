@@ -43,25 +43,24 @@ export abstract class Glide extends Element {
   /** Name used to identify this glide type when (de)serializing. */
   abstract readonly type: string;
 
-  getLeftFootKeyframes(spanScale?: number): FootKeyframe[] {
-    return this.createFootKeyframes("footL", this.leftOnIce, spanScale);
+  getLeftFootKeyframes(_spanScale?: number): FootKeyframe[] {
+    return this.createFootKeyframes("footL", this.leftOnIce);
   }
 
-  getRightFootKeyframes(spanScale?: number): FootKeyframe[] {
-    return this.createFootKeyframes("footR", this.rightOnIce, spanScale);
+  getRightFootKeyframes(_spanScale?: number): FootKeyframe[] {
+    return this.createFootKeyframes("footR", this.rightOnIce);
   }
 
-  getHipsKeyframes(spanScale?: number): HipsKeyframe[] {
-    const [start, end] = this.scaledKeyframeSpan(spanScale);
+  getHipsKeyframes(_spanScale?: number): HipsKeyframe[] {
     return [
       new HipsKeyframe(
-        start,
+        this.start,
         { position: new Vector<3>(0, 0, 0), orientation: getQuaternionFromAngleAxis(0) },
         "smooth",
         "smooth",
       ),
       new HipsKeyframe(
-        end,
+        this.end,
         { position: new Vector<3>(0, 0, 0), orientation: getQuaternionFromAngleAxis(0) },
         "smooth",
         "smooth",
@@ -83,24 +82,12 @@ export abstract class Glide extends Element {
     return new constructor(json.start, json.end);
   }
 
-  /** Span to place keyframes on, optionally scaled about the middle. */
-  private scaledKeyframeSpan(spanScale?: number): [PathCoordinate, PathCoordinate] {
-    if (spanScale === undefined || spanScale === 1) {
-      return [this.start, this.end];
-    }
-    const middle = (this.start + this.end) / 2;
-    return [
-      (middle + (this.start - middle) * spanScale) as PathCoordinate,
-      (middle + (this.end - middle) * spanScale) as PathCoordinate,
-    ];
-  }
-
   /** Default keyframes for one foot, at the start and the end of the span.
    * An on-ice foot is centered, except in the two-foot glide where it sits
    * half the spacing to its side. The off-ice foot always sits half the
    * spacing to its side. */
-  private createFootKeyframes(footKey: "footL" | "footR", onIce: boolean, spanScale?: number): FootKeyframe[] {
-    const [start, end] = this.scaledKeyframeSpan(spanScale);
+  private createFootKeyframes(footKey: "footL" | "footR", onIce: boolean): FootKeyframe[] {
+    const [start, end] = [this.start, this.end];
     const bothOnIce = this.leftOnIce && this.rightOnIce;
     const side = footKey === "footL" ? halfFeetSpacing : -halfFeetSpacing;
     const lateral = onIce ? (bothOnIce ? side : 0) : side;
@@ -445,20 +432,20 @@ export abstract class DynamicGlide extends Glide {
     return !this.left;
   }
 
-  getLeftFootKeyframes(spanScale?: number): FootKeyframe[] {
-    return this.dynamicFootKeyframes("footL", spanScale);
+  getLeftFootKeyframes(_spanScale?: number): FootKeyframe[] {
+    return this.dynamicFootKeyframes("footL");
   }
 
-  getRightFootKeyframes(spanScale?: number): FootKeyframe[] {
-    return this.dynamicFootKeyframes("footR", spanScale);
+  getRightFootKeyframes(_spanScale?: number): FootKeyframe[] {
+    return this.dynamicFootKeyframes("footR");
   }
 
   /** Foot keyframes of the dynamic stroke: start (both feet on the ice at the
    * sides), 95% (the free foot still on the ice, shifted to its side and
    * 0.5 m backwards along the path) and end (the free foot off the ice at the
    * same shift). Swapped when crossed, or when the stroke goes backwards. */
-  private dynamicFootKeyframes(footKey: "footL" | "footR", spanScale?: number): FootKeyframe[] {
-    const [start, t95, end] = this.scaledKeyframeCoordinates(spanScale);
+  private dynamicFootKeyframes(footKey: "footL" | "footR"): FootKeyframe[] {
+    const [start, t95, end] = this.keyframeCoordinates();
     const gliding = footKey === (this.left ? "footL" : "footR");
     let side = footKey === "footL" ? halfFeetSpacing : -halfFeetSpacing;
     const swapped = this.crossed || !this.forward;
@@ -487,16 +474,11 @@ export abstract class DynamicGlide extends Glide {
     ];
   }
 
-  /** Span to place keyframes on, with the 95% coordinate in the middle,
-   * optionally scaled about the middle. */
-  private scaledKeyframeCoordinates(spanScale?: number): [PathCoordinate, PathCoordinate, PathCoordinate] {
+  /** Span to place keyframes on, with the 95% coordinate. Glides never scale:
+   * the keyframes always sit on the real span. */
+  private keyframeCoordinates(): [PathCoordinate, PathCoordinate, PathCoordinate] {
     const t95 = (this.start + 0.95 * (this.end - this.start)) as PathCoordinate;
-    if (spanScale === undefined || spanScale === 1) {
-      return [this.start, t95, this.end];
-    }
-    const middle = (this.start + this.end) / 2;
-    const at = (coordinate: PathCoordinate) => (middle + (coordinate - middle) * spanScale) as PathCoordinate;
-    return [at(this.start), at(t95), at(this.end)];
+    return [this.start, t95, this.end];
   }
 }
 

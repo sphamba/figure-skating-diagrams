@@ -33,6 +33,12 @@ export abstract class FootTurn extends Element {
   /** Name used to identify this turn type when (de)serializing. */
   abstract readonly type: string;
 
+  /** Turns scale: their keyframes and displayed span re-base onto the span
+   * scaled about its middle when a span scale is active. */
+  get scalable(): boolean {
+    return true;
+  }
+
   constructor(footKey: FootKey, start: PathCoordinate, end: PathCoordinate) {
     super(start, end);
     this.footKey = footKey;
