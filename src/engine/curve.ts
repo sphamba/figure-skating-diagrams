@@ -356,18 +356,20 @@ export class Curve {
     // Cutpoint
     const px = this.getPosition(x);
 
-    // Scaled derivatives
-    const d0 = this.getDerivative(0 as Curvilinear).times(1 / 3);
+    // Control points. The original p1 and p2 keep their positions: the left
+    // half reuses p1 and the right half reuses p2. This changes the resulting
+    // shape (unlike a full de Casteljau split), which is intended. Both
+    // handles around the cutpoint keep the tangent of the original curve at
+    // the cutpoint and share the same length: the shorter of the two
+    // parameter-scaled lengths.
     const dx = this.getDerivative(x).times(1 / 3);
-    const d3 = this.getDerivative(1 as Curvilinear).times(1 / 3);
+    const common = Math.min(x, 1 - x);
+    const handleLength = dx.length() * common;
+    const direction = dx.normalized();
+    const c2 = px.minus(direction.times(handleLength));
+    const c3 = px.plus(direction.times(handleLength));
 
-    // Control points
-    const c1 = this.p0.plus(d0.times(x));
-    const c2 = px.minus(dx.times(x));
-    const c3 = px.plus(dx.times(1 - x));
-    const c4 = this.p3.minus(d3.times(1 - x));
-
-    return [new Curve(this.p0, c1, c2, px), new Curve(px, c3, c4, this.p3)];
+    return [new Curve(this.p0, this.p1, c2, px), new Curve(px, c3, this.p2, this.p3)];
   }
 }
 

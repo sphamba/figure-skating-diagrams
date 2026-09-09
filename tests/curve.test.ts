@@ -231,26 +231,52 @@ test("Cut curve", () => {
 	const curve = new Curve(p1, p2, p3, p4);
 	const [newCurve1, newCurve2] = curve.cut(0.2 as Curvilinear);
 
+	const px = curve.getPosition(0.2 as Curvilinear);
+	const dx = curve.getDerivative(0.2 as Curvilinear).times(1 / 3);
 	const precision = 15; // decimal places
-	const coordsOriginal = [0, 0.2, 0.2, 1] as Curvilinear[];
-	const coordsNew = [0, 1, 0, 1] as Curvilinear[];
-	const newCurves = [newCurve1, newCurve1, newCurve2, newCurve2];
-	const derivativeScales = [0.2, 0.2, 0.8, 0.8];
 
-	for (let i = 0; i < 4; i++) {
-		const coordOriginal = coordsOriginal[i];
-		const coordNew = coordsNew[i];
-		const newCurve = newCurves[i];
-		const scale = derivativeScales[i];
+	// The original p1 and p2 keep their positions: the left half reuses p1
+	// and the right half reuses p2 (the resulting shape changes, intended).
+	expect(newCurve1.p0.x).toBeCloseTo(p1.x, precision);
+	expect(newCurve1.p0.y).toBeCloseTo(p1.y, precision);
+	expect(newCurve1.p1.x).toBeCloseTo(p2.x, precision);
+	expect(newCurve1.p1.y).toBeCloseTo(p2.y, precision);
+	expect(newCurve2.p2.x).toBeCloseTo(p3.x, precision);
+	expect(newCurve2.p2.y).toBeCloseTo(p3.y, precision);
+	expect(newCurve2.p3.x).toBeCloseTo(p4.x, precision);
+	expect(newCurve2.p3.y).toBeCloseTo(p4.y, precision);
 
-		const positionOriginal = curve.getPosition(coordOriginal);
-		const positionNew = newCurve.getPosition(coordNew);
-		expect(positionOriginal.x).toBeCloseTo(positionNew.x, precision);
-		expect(positionOriginal.y).toBeCloseTo(positionNew.y, precision);
+	// Both halves meet at the cutpoint.
+	expect(newCurve1.p3.x).toBeCloseTo(px.x, precision);
+	expect(newCurve1.p3.y).toBeCloseTo(px.y, precision);
+	expect(newCurve2.p0.x).toBeCloseTo(px.x, precision);
+	expect(newCurve2.p0.y).toBeCloseTo(px.y, precision);
 
-		const derivativeOriginal = curve.getDerivative(coordOriginal);
-		const derivativeNew = newCurve.getDerivative(coordNew);
-		expect(derivativeOriginal.x * scale).toBeCloseTo(derivativeNew.x, precision);
-		expect(derivativeOriginal.y * scale).toBeCloseTo(derivativeNew.y, precision);
+	// The handles around the cutpoint keep the tangent of the original curve
+	// at the cutpoint and share the same length: the shorter of the two
+	// parameter-scaled lengths.
+	const dx = curve.getDerivative(0.2 as Curvilinear).times(1 / 3);
+	const common = Math.min(0.2, 0.8);
+	const handle1 = px.minus(dx.normalized().times(dx.length() * common));
+	const handle2 = px.plus(dx.normalized().times(dx.length() * common));
+	expect(newCurve1.p2.x).toBeCloseTo(handle1.x, precision);
+	expect(newCurve1.p2.y).toBeCloseTo(handle1.y, precision);
+	expect(newCurve2.p1.x).toBeCloseTo(handle2.x, precision);
+	expect(newCurve2.p1.y).toBeCloseTo(handle2.y, precision);
+
+	// The two handles on the new joint have the same lengths.
+	expect(newCurve1.p3.minus(newCurve1.p2).length()).toBeCloseTo(
+		newCurve2.p1.minus(newCurve2.p0).length(),
+		precision,
+	);
+
+	// The start and end derivatives of the original curve are kept.
+	const derivativeScales = [
+		[curve.getDerivative(0 as Curvilinear), newCurve1.getDerivative(0 as Curvilinear)],
+		[curve.getDerivative(1 as Curvilinear), newCurve2.getDerivative(1 as Curvilinear)],
+	];
+	for (const [derivativeOriginal, derivativeNew] of derivativeScales) {
+		expect(derivativeOriginal.x).toBeCloseTo(derivativeNew.x, precision);
+		expect(derivativeOriginal.y).toBeCloseTo(derivativeNew.y, precision);
 	}
 });
