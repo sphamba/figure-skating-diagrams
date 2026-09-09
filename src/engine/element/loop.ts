@@ -9,8 +9,8 @@ import { OneFootTurn } from "./oneFootTurn.js";
 import type { FootTurnClass, FootTurnJSON } from "./turn.js";
 import type { FootKey } from "../sequence.js";
 
-// To have loop length equal to 1.5 * bladeLength
-const defaultLoopShift = (bladeLength * 0.9) as PathCoordinate;
+// Hardcoded loop shift: to have the loop length equal 1.5 * bladeLength
+const defaultLoopShift = (bladeLength * 1.5) as PathCoordinate;
 
 /**
  * A Loop is a full turn on one foot: the on-ice foot rotates a whole turn
@@ -19,18 +19,8 @@ const defaultLoopShift = (bladeLength * 0.9) as PathCoordinate;
  * at both ends of the element.
  */
 export abstract class Loop extends OneFootTurn {
-  loopShift: PathCoordinate;
-
-  constructor(
-    footKey: FootKey,
-    start: PathCoordinate,
-    end: PathCoordinate,
-    smoothEntry: boolean = true,
-    smoothExit: boolean = true,
-    loopShift?: PathCoordinate,
-  ) {
-    super(footKey, start, end, smoothEntry, smoothExit);
-    this.loopShift = loopShift ?? defaultLoopShift;
+  constructor(footKey: FootKey, start: PathCoordinate, end: PathCoordinate) {
+    super(footKey, start, end);
   }
 
   protected get initialAngle(): number {
@@ -46,7 +36,7 @@ export abstract class Loop extends OneFootTurn {
   }
 
   toJSON(): FootTurnJSON {
-    return { ...super.toJSON(), loopShift: this.loopShift };
+    return super.toJSON();
   }
 
   /** Hips keyframes: the hips rotate the whole turn of the loop, like the
@@ -66,9 +56,9 @@ export abstract class Loop extends OneFootTurn {
       const keyframe = new HipsKeyframe(
         coordinates[i]!,
         keyframeData,
-        // Smooth entry and exit into the turn
-        this.smoothExit && i != 1 ? "smooth" : "linear",
-        this.smoothEntry && i != 1 ? "smooth" : "linear",
+        // Hardcoded smooth entry and exit in and out of the turn
+        i != 1 ? "smooth" : "linear",
+        i != 1 ? "smooth" : "linear",
       );
       keyframes.push(keyframe);
     }
@@ -76,8 +66,6 @@ export abstract class Loop extends OneFootTurn {
   }
 
   createOnIceFootKeyframes(start: PathCoordinate, end: PathCoordinate): FootKeyframe[] {
-    if (this.loopShift === undefined) return [];
-
     const pathCoordinate = ((start + end) / 2) as PathCoordinate;
     const pathLengthEntry = (pathCoordinate - start) as PathCoordinate;
     const pathLengthExit = (end - pathCoordinate) as PathCoordinate;
@@ -86,7 +74,7 @@ export abstract class Loop extends OneFootTurn {
       (pathCoordinateShift) => (pathCoordinate + pathCoordinateShift) as PathCoordinate,
     );
     const contactPoints = [0.5, this.contactPointTurn, 0.5];
-    const lateralShift = (this.clockwise ? 1 : -1) * (this.forward ? 1 : -1) * this.loopShift;
+    const lateralShift = (this.clockwise ? 1 : -1) * (this.forward ? 1 : -1) * defaultLoopShift;
     // No shift relative to the centerline at the start and the end of the
     // turn; the shift happens in the middle of the turn only.
     const positions = [
@@ -110,9 +98,9 @@ export abstract class Loop extends OneFootTurn {
       const keyframe = new FootKeyframe(
         pathCoordinate,
         keyframeData,
-        // Smooth entry and exit into the turn
-        this.smoothExit && i != 1 ? "smooth" : "linear",
-        this.smoothEntry && i != 1 ? "smooth" : "linear",
+        // Hardcoded smooth entry and exit in and out of the turn
+        i != 1 ? "smooth" : "linear",
+        i != 1 ? "smooth" : "linear",
       );
 
       keyframes.push(keyframe);

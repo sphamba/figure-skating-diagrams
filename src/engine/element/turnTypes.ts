@@ -44,7 +44,7 @@ function footKeyFromType(type: string): FootKey {
 
 /**
  * Build an element of the given type from an existing element's serialized
- * properties (span, and for foot turns foot key and smoothing). For a
+ * properties (span, and for foot turns foot key derived from the type). For a
  * one-foot turn, the footing foot comes from the Left/Right prefix of the
  * type name. This is how an element is converted from one kind to another
  * without moving it.
@@ -56,9 +56,6 @@ export function changeElementType(
     start: number;
     end: number;
     footKey?: string;
-    smoothEntry?: boolean;
-    smoothExit?: boolean;
-    loopShift?: number;
   },
 ): Element {
   const start = template.start as PathCoordinate;

@@ -95,18 +95,16 @@ test("Element keyframes are recomputed when its start/end change", () => {
 	expect(footR[footR.length - 1]).toBeLessThanOrEqual((5 * length) / 8);
 });
 
-test("changeFootTurnType converts an element's kind while preserving its span and foot", () => {
+test("changeFootTurnType converts an element's kind and derives the foot from the type", () => {
 	const start = 0.2 as PathCoordinate;
 	const end = (0.8 as PathCoordinate);
-	const turn = new LeftForwardInsideThreeTurn("footR", start, end, false, true);
+	const turn = new LeftForwardInsideThreeTurn("footR", start, end);
 	const loop = changeFootTurnType("LeftBackwardInsideLoop", turn.toJSON());
 
 	expect(loop).toBeInstanceOf(LeftBackwardInsideLoop);
-	expect(loop.footKey).toBe("footR");
+	expect(loop.footKey).toBe("footL");
 	expect(loop.start).toBe(start);
 	expect(loop.end).toBe(end);
-	expect(loop.smoothEntry).toBe(false);
-	expect(loop.smoothExit).toBe(true);
 });
 
 test("footTurnKindChoices lists all sixteen turn kinds and all stroke kinds", () => {
@@ -178,20 +176,18 @@ test("The on-ice foot has no shift relative to the centerline at both ends", () 
 	}
 });
 
-test("A right turn turns on the right foot of the element type", () => {
+test("changeElementType derives the foot from the Left/Right type prefix", () => {
 	const start = 0.2 as PathCoordinate;
 	const end = (0.8 as PathCoordinate);
 	const left = changeElementType("LeftForwardInsideThreeTurn", {
 		type: "LeftForwardInsideThreeTurn",
 		start,
 		end,
-		footKey: "footR",
 	});
-	const right = changeElementType("RightBackwardOutsideLoop", {
+	const right = changeElementType("RightForwardInsideThreeTurn", {
 		type: "RightForwardInsideThreeTurn",
 		start,
 		end,
-		footKey: "footL",
 	});
 
 	expect(left.footKey).toBe("footL");

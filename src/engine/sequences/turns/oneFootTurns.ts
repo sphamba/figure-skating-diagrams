@@ -72,13 +72,7 @@ function createTurn(
   const center = (path.length / 2) as PathCoordinate; // placed at path midpoint
   const halfLength = defaultFootTurnLength;
   turn.addElement(
-    new turnClass(
-      footKey,
-      (center - halfLength) as PathCoordinate,
-      (center + halfLength) as PathCoordinate,
-      true,
-      true,
-    ),
+    new turnClass(footKey, (center - halfLength) as PathCoordinate, (center + halfLength) as PathCoordinate),
   );
   turn.addKeyframe(footKey, new FootKeyframe(path.length as PathCoordinate, skatingFootInitialOrFinalData)); // u = path.length
   return turn;

@@ -16,7 +16,7 @@ function makeStraightPath(): Path {
   return path;
 }
 
-test("addSegmentEnd appends a 3 m straight curve", () => {
+test("addSegmentEnd appends a 5 m straight curve", () => {
   const editor = {
     sequence: new Sequence(makeStraightPath()),
     addSegmentEnd() {
@@ -31,7 +31,7 @@ test("addSegmentEnd appends a 3 m straight curve", () => {
   expect(curves).toHaveLength(curvesBefore + 1);
 
   const lastCurve = curves[curves.length - 1]!;
-  expect(lastCurve.length).toBeCloseTo(3, 2);
+  expect(lastCurve.length).toBeCloseTo(5, 2);
 });
 
 test("new end curve keeps the end derivative and aligns control points at equal length", () => {
@@ -55,17 +55,17 @@ test("new end curve keeps the end derivative and aligns control points at equal 
   expect(lastCurve.p0.x).toBeCloseTo(endPosition.x);
   expect(lastCurve.p0.y).toBeCloseTo(endPosition.y);
 
-  // Segment end is 3 m away along the end derivative.
+  // Segment end is 5 m away along the end derivative.
   const dir = endDerivative;
-  expect(lastCurve.p3.x).toBeCloseTo(endPosition.x + 3 * dir.x);
-  expect(lastCurve.p3.y).toBeCloseTo(endPosition.y + 3 * dir.y);
+  expect(lastCurve.p3.x).toBeCloseTo(endPosition.x + 5 * dir.x);
+  expect(lastCurve.p3.y).toBeCloseTo(endPosition.y + 5 * dir.y);
 
   // The start control point matches the previous end handle length (0.5).
-  // The middle control point sits at 3/2 along the same straight line.
+  // The middle control point sits at 5/2 along the same straight line.
   expect(lastCurve.p1.x).toBeCloseTo(endPosition.x + 0.5 * dir.x);
   expect(lastCurve.p1.y).toBeCloseTo(endPosition.y + 0.5 * dir.y);
-  expect(lastCurve.p2.x).toBeCloseTo(endPosition.x + (3 / 2) * dir.x);
-  expect(lastCurve.p2.y).toBeCloseTo(endPosition.y + (3 / 2) * dir.y);
+  expect(lastCurve.p2.x).toBeCloseTo(endPosition.x + (5 / 2) * dir.x);
+  expect(lastCurve.p2.y).toBeCloseTo(endPosition.y + (5 / 2) * dir.y);
 
   // The new start derivative matches the previous end derivative.
   const newStartDerivative = lastCurve.getDerivative(0 as Curvilinear).normalized();

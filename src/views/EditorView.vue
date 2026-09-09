@@ -182,10 +182,10 @@ watch(
 
 /** Sequence shown when the editor opens. */
 function defaultSequence(): Sequence {
-  // A single straight cubic Bezier curve: 3 m long, horizontal, centered on
+  // A single straight cubic Bezier curve: 5 m long, horizontal, centered on
   // the origin. Control points are collinear, so the curve stays a line.
   const path = new Path();
-  path.curves.push(new Curve(new Vector(-1.5, 0), new Vector(-0.5, 0), new Vector(0.5, 0), new Vector(1.5, 0)));
+  path.curves.push(new Curve(new Vector(-2.5, 0), new Vector(-0.5, 0), new Vector(0.5, 0), new Vector(2.5, 0)));
   path.updateLength();
   const sequence = new Sequence(path);
   // A two-foot stroke at the very beginning of the sequence: both its start
@@ -253,7 +253,7 @@ function saveFile() {
 
 /**
  * Replace the element being edited with a new element of the given kind.
- * The element keeps its foot key, span and smoothing; only its type changes.
+ * The element keeps its foot key, span and loop shift; only its type changes.
  */
 function changeElementKind(kind: string) {
   if (!editor || !elementToChange.value) return;

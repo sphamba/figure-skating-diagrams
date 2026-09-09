@@ -6,30 +6,22 @@
       "path": {
         "curves": [
           {
-            "p0": {
-              "data": [
-                0.47999999999999976,
-                -1.2
-              ]
-            },
-            "p1": {
-              "data": [
-                -1.1199999999999999,
-                -1.1999999999999997
-              ]
-            },
-            "p2": {
-              "data": [
-                -1.1199999999999997,
-                1.2
-              ]
-            },
-            "p3": {
-              "data": [
-                0.48000000000000004,
-                1.2
-              ]
-            }
+            "p0": [
+              0.47999999999999976,
+              -1.2
+            ],
+            "p1": [
+              -1.1199999999999999,
+              -1.1999999999999997
+            ],
+            "p2": [
+              -1.1199999999999997,
+              1.2
+            ],
+            "p3": [
+              0.48000000000000004,
+              1.2
+            ]
           }
         ]
       },
@@ -71,32 +63,6 @@
           },
           {
             "kind": "FootKeyframe",
-            "coordinate": 1.504989198977679,
-            "data": {
-              "position": {
-                "data": [
-                  0,
-                  0,
-                  0
-                ]
-              },
-              "orientation": {
-                "real": 1,
-                "vector": {
-                  "data": [
-                    0,
-                    0,
-                    0
-                  ]
-                }
-              },
-              "contactPoint": 0.5
-            },
-            "transitionIn": "linear",
-            "transitionOut": "smooth"
-          },
-          {
-            "kind": "FootKeyframe",
             "coordinate": 1.904989198977679,
             "data": {
               "orientation": {
@@ -116,60 +82,8 @@
           },
           {
             "kind": "FootKeyframe",
-            "coordinate": 1.904989198977679,
-            "data": {
-              "position": {
-                "data": [
-                  0,
-                  0,
-                  0
-                ]
-              },
-              "orientation": {
-                "real": 0.7071067811865476,
-                "vector": {
-                  "data": [
-                    0,
-                    0,
-                    -0.7071067811865475
-                  ]
-                }
-              },
-              "contactPoint": 1
-            },
-            "transitionIn": "linear",
-            "transitionOut": "linear"
-          },
-          {
-            "kind": "FootKeyframe",
             "coordinate": 2.304989198977679,
             "data": {
-              "orientation": {
-                "real": 6.123233995736766e-17,
-                "vector": {
-                  "data": [
-                    0,
-                    0,
-                    -1
-                  ]
-                }
-              },
-              "contactPoint": 0.5
-            },
-            "transitionIn": "smooth",
-            "transitionOut": "linear"
-          },
-          {
-            "kind": "FootKeyframe",
-            "coordinate": 2.304989198977679,
-            "data": {
-              "position": {
-                "data": [
-                  0,
-                  0,
-                  0
-                ]
-              },
               "orientation": {
                 "real": 6.123233995736766e-17,
                 "vector": {
@@ -245,32 +159,6 @@
           },
           {
             "kind": "FootKeyframe",
-            "coordinate": 1.504989198977679,
-            "data": {
-              "position": {
-                "data": [
-                  0,
-                  -0.15,
-                  0.2
-                ]
-              },
-              "orientation": {
-                "real": 1,
-                "vector": {
-                  "data": [
-                    0,
-                    0,
-                    0
-                  ]
-                }
-              },
-              "contactPoint": 0.5
-            },
-            "transitionIn": "smooth",
-            "transitionOut": "smooth"
-          },
-          {
-            "kind": "FootKeyframe",
             "coordinate": 2.304989198977679,
             "data": {
               "position": {
@@ -283,86 +171,9 @@
             },
             "transitionIn": "linear",
             "transitionOut": "linear"
-          },
-          {
-            "kind": "FootKeyframe",
-            "coordinate": 2.304989198977679,
-            "data": {
-              "position": {
-                "data": [
-                  0,
-                  -0.15,
-                  0.2
-                ]
-              },
-              "orientation": {
-                "real": 1,
-                "vector": {
-                  "data": [
-                    0,
-                    0,
-                    0
-                  ]
-                }
-              },
-              "contactPoint": 0.5
-            },
-            "transitionIn": "smooth",
-            "transitionOut": "smooth"
           }
         ],
-        "hips": [
-          {
-            "kind": "HipsKeyframe",
-            "coordinate": 1.504989198977679,
-            "data": {
-              "position": {
-                "data": [
-                  0,
-                  0,
-                  0
-                ]
-              },
-              "orientation": {
-                "real": 1,
-                "vector": {
-                  "data": [
-                    0,
-                    0,
-                    0
-                  ]
-                }
-              }
-            },
-            "transitionIn": "smooth",
-            "transitionOut": "smooth"
-          },
-          {
-            "kind": "HipsKeyframe",
-            "coordinate": 2.304989198977679,
-            "data": {
-              "position": {
-                "data": [
-                  0,
-                  0,
-                  0
-                ]
-              },
-              "orientation": {
-                "real": 1,
-                "vector": {
-                  "data": [
-                    0,
-                    0,
-                    0
-                  ]
-                }
-              }
-            },
-            "transitionIn": "smooth",
-            "transitionOut": "smooth"
-          }
-        ],
+        "hips": [],
         "time": [
           {
             "kind": "TimeKeyframe",
@@ -387,11 +198,8 @@
       "elements": [
         {
           "type": "LeftForwardInsideThreeTurn",
-          "footKey": "footL",
           "start": 1.504989198977679,
-          "end": 2.304989198977679,
-          "smoothEntry": true,
-          "smoothExit": true
+          "end": 2.304989198977679
         }
       ]
     },
@@ -399,30 +207,22 @@
       "path": {
         "curves": [
           {
-            "p0": {
-              "data": [
-                0.47999999999999976,
-                -1.2
-              ]
-            },
-            "p1": {
-              "data": [
-                -1.1199999999999999,
-                -1.1999999999999997
-              ]
-            },
-            "p2": {
-              "data": [
-                -1.1199999999999997,
-                1.2
-              ]
-            },
-            "p3": {
-              "data": [
-                0.48000000000000004,
-                1.2
-              ]
-            }
+            "p0": [
+              0.47999999999999976,
+              -1.2
+            ],
+            "p1": [
+              -1.1199999999999999,
+              -1.1999999999999997
+            ],
+            "p2": [
+              -1.1199999999999997,
+              1.2
+            ],
+            "p3": [
+              0.48000000000000004,
+              1.2
+            ]
           }
         ]
       },
@@ -478,32 +278,6 @@
                   0,
                   0.15,
                   0.2
-                ]
-              },
-              "orientation": {
-                "real": 6.123233995736766e-17,
-                "vector": {
-                  "data": [
-                    0,
-                    0,
-                    1
-                  ]
-                }
-              },
-              "contactPoint": 0.5
-            },
-            "transitionIn": "smooth",
-            "transitionOut": "smooth"
-          },
-          {
-            "kind": "FootKeyframe",
-            "coordinate": 1.504989198977679,
-            "data": {
-              "position": {
-                "data": [
-                  0,
-                  0,
-                  0
                 ]
               },
               "orientation": {
@@ -587,32 +361,6 @@
             },
             "transitionIn": "smooth",
             "transitionOut": "smooth"
-          },
-          {
-            "kind": "FootKeyframe",
-            "coordinate": 2.304989198977679,
-            "data": {
-              "position": {
-                "data": [
-                  0,
-                  0,
-                  0
-                ]
-              },
-              "orientation": {
-                "real": -1.8369701987210297e-16,
-                "vector": {
-                  "data": [
-                    0,
-                    0,
-                    -1
-                  ]
-                }
-              },
-              "contactPoint": 0.5
-            },
-            "transitionIn": "smooth",
-            "transitionOut": "smooth"
           }
         ],
         "footR": [
@@ -640,58 +388,6 @@
                   0,
                   -0.225,
                   0
-                ]
-              },
-              "orientation": {
-                "real": 6.123233995736766e-17,
-                "vector": {
-                  "data": [
-                    0,
-                    0,
-                    1
-                  ]
-                }
-              },
-              "contactPoint": 0.5
-            },
-            "transitionIn": "smooth",
-            "transitionOut": "smooth"
-          },
-          {
-            "kind": "FootKeyframe",
-            "coordinate": 1.504989198977679,
-            "data": {
-              "position": {
-                "data": [
-                  0,
-                  0,
-                  0
-                ]
-              },
-              "orientation": {
-                "real": 6.123233995736766e-17,
-                "vector": {
-                  "data": [
-                    0,
-                    0,
-                    1
-                  ]
-                }
-              },
-              "contactPoint": 0.5
-            },
-            "transitionIn": "smooth",
-            "transitionOut": "smooth"
-          },
-          {
-            "kind": "FootKeyframe",
-            "coordinate": 1.504989198977679,
-            "data": {
-              "position": {
-                "data": [
-                  0,
-                  -0.15,
-                  0.2
                 ]
               },
               "orientation": {
@@ -789,32 +485,6 @@
           },
           {
             "kind": "FootKeyframe",
-            "coordinate": 2.304989198977679,
-            "data": {
-              "position": {
-                "data": [
-                  0,
-                  -0.15,
-                  0.2
-                ]
-              },
-              "orientation": {
-                "real": 6.123233995736766e-17,
-                "vector": {
-                  "data": [
-                    0,
-                    0,
-                    1
-                  ]
-                }
-              },
-              "contactPoint": 0.5
-            },
-            "transitionIn": "smooth",
-            "transitionOut": "smooth"
-          },
-          {
-            "kind": "FootKeyframe",
             "coordinate": 3.809978397955358,
             "data": {
               "position": {
@@ -832,56 +502,6 @@
         "hips": [
           {
             "kind": "HipsKeyframe",
-            "coordinate": 1.504989198977679,
-            "data": {
-              "position": {
-                "data": [
-                  0,
-                  0,
-                  0
-                ]
-              },
-              "orientation": {
-                "real": 6.123233995736766e-17,
-                "vector": {
-                  "data": [
-                    0,
-                    0,
-                    1
-                  ]
-                }
-              }
-            },
-            "transitionIn": "smooth",
-            "transitionOut": "smooth"
-          },
-          {
-            "kind": "HipsKeyframe",
-            "coordinate": 1.904989198977679,
-            "data": {
-              "position": {
-                "data": [
-                  0,
-                  0,
-                  0
-                ]
-              },
-              "orientation": {
-                "real": -1,
-                "vector": {
-                  "data": [
-                    0,
-                    0,
-                    1.2246467991473532e-16
-                  ]
-                }
-              }
-            },
-            "transitionIn": "linear",
-            "transitionOut": "linear"
-          },
-          {
-            "kind": "HipsKeyframe",
             "coordinate": 2.304989198977679,
             "data": {
               "position": {
@@ -898,31 +518,6 @@
                     0,
                     0,
                     1
-                  ]
-                }
-              }
-            },
-            "transitionIn": "smooth",
-            "transitionOut": "smooth"
-          },
-          {
-            "kind": "HipsKeyframe",
-            "coordinate": 2.304989198977679,
-            "data": {
-              "position": {
-                "data": [
-                  0,
-                  0,
-                  0
-                ]
-              },
-              "orientation": {
-                "real": -1.8369701987210297e-16,
-                "vector": {
-                  "data": [
-                    0,
-                    0,
-                    -1
                   ]
                 }
               }
@@ -955,12 +550,8 @@
       "elements": [
         {
           "type": "LeftBackwardInsideLoop",
-          "footKey": "footL",
           "start": 1.504989198977679,
-          "end": 2.304989198977679,
-          "smoothEntry": true,
-          "smoothExit": true,
-          "loopShift": 0.225
+          "end": 2.304989198977679
         }
       ]
     }

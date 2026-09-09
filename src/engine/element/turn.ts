@@ -12,12 +12,8 @@ export const defaultFootTurnLength = (bladeLength * 1.6) as PathCoordinate;
 /** JSON shape of a FootTurn used for (de)serialization. */
 export interface FootTurnJSON {
   type: string;
-  footKey: FootKey;
   start: PathCoordinate;
   end: PathCoordinate;
-  smoothEntry: boolean;
-  smoothExit: boolean;
-  loopShift?: PathCoordinate;
 }
 
 /**
@@ -28,8 +24,6 @@ export interface FootTurnJSON {
  */
 export abstract class FootTurn extends Element {
   footKey: FootKey;
-  smoothEntry: boolean;
-  smoothExit: boolean;
   /** True when the turn rotates to the left. */
   abstract readonly left: boolean;
   /** True when the entry edge travels forward along the path. */
@@ -39,17 +33,9 @@ export abstract class FootTurn extends Element {
   /** Name used to identify this turn type when (de)serializing. */
   abstract readonly type: string;
 
-  constructor(
-    footKey: FootKey,
-    start: PathCoordinate,
-    end: PathCoordinate,
-    smoothEntry: boolean = true,
-    smoothExit: boolean = true,
-  ) {
+  constructor(footKey: FootKey, start: PathCoordinate, end: PathCoordinate) {
     super(start, end);
     this.footKey = footKey;
-    this.smoothEntry = smoothEntry;
-    this.smoothExit = smoothExit;
   }
 
   /** True when the turn rotates clockwise: a left turn on an inside edge
@@ -81,11 +67,8 @@ export abstract class FootTurn extends Element {
   toJSON(): FootTurnJSON {
     return {
       type: this.type,
-      footKey: this.footKey,
       start: this.start,
       end: this.end,
-      smoothEntry: this.smoothEntry,
-      smoothExit: this.smoothExit,
     };
   }
 
@@ -96,14 +79,8 @@ export abstract class FootTurn extends Element {
     if (!constructor) {
       throw new Error(`Unknown foot turn type: ${json.type}`);
     }
-    return new constructor(
-      json.footKey as FootKey,
-      json.start as PathCoordinate,
-      json.end as PathCoordinate,
-      json.smoothEntry,
-      json.smoothExit,
-      json.loopShift as PathCoordinate | undefined,
-    );
+    const footKey = json.type.startsWith("Right") ? "footR" : "footL";
+    return new constructor(footKey, json.start as PathCoordinate, json.end as PathCoordinate);
   }
 }
 
@@ -116,23 +93,10 @@ function scaledSpan(start: PathCoordinate, end: PathCoordinate, factor: number):
   return [(middle + (start - middle) * factor) as PathCoordinate, (middle + (end - middle) * factor) as PathCoordinate];
 }
 
-export type FootTurnConstructor = new (
-  footKey: FootKey,
-  start: PathCoordinate,
-  end: PathCoordinate,
-  smoothEntry?: boolean,
-  smoothExit?: boolean,
-) => FootTurn;
+export type FootTurnConstructor = new (footKey: FootKey, start: PathCoordinate, end: PathCoordinate) => FootTurn;
 
 /** A turn constructor, with the optional loop shift of loops. */
-export type FootTurnClass = new (
-  footKey: FootKey,
-  start: PathCoordinate,
-  end: PathCoordinate,
-  smoothEntry?: boolean,
-  smoothExit?: boolean,
-  loopShift?: PathCoordinate,
-) => FootTurn;
+export type FootTurnClass = new (footKey: FootKey, start: PathCoordinate, end: PathCoordinate) => FootTurn;
 
 /** Map a turn type name to its constructor, for deserialization. Filled by
  * turnTypes.ts, which imports the concrete turn modules. */
@@ -140,7 +104,7 @@ export const footTurnConstructorsByType: Record<string, FootTurnClass> = {};
 
 /**
  * Build a foot turn of the given type from an existing element's properties
- * (foot key, span, smoothing, loop shift). This is how an element is converted
+ * (foot key and span). This is how an element is converted
  * from one kind to another without moving it.
  */
 export function changeFootTurnType(type: string, template: FootTurnJSON): FootTurn {

@@ -41,7 +41,7 @@ describe("path real lengths", () => {
   it("keeps path coordinates equal to real arc length after a path edit", () => {
     const path = new Path();
     for (let i = 0; i < 5; i++) path.addCurveEnd();
-    expect(path.length).toBeCloseTo(15, 4);
+    expect(path.length).toBeCloseTo(25, 4);
 
     // Drag the first curve's controls so it stretches from 1 m to 3 m.
     const curve = path.curves[0]!;

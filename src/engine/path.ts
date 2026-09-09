@@ -187,14 +187,14 @@ export class Path {
     this.updateLength();
   }
 
-  /** Create 3m straight curve aligned with end of Path (or at center of rink if Path empty).*/
+  /** Create 5m straight curve aligned with end of Path (or at center of rink if Path empty).*/
   createNewEndCurve(): Curve {
     const lastCurve = this.curves[this.curves.length - 1];
     let p0: Vector<2>;
     let dir: Vector<2>;
 
     if (this.curves.length == 0) {
-      // 3m straight line at center of rink
+      // 5m straight line at center of rink
       p0 = new Vector<2>(0, -0.5);
       dir = new Vector<2>(0, 1);
     } else {
@@ -204,13 +204,13 @@ export class Path {
     }
 
     // Keep the handle length continuous with the previous curve
-    let handleLength = 3 / 2;
+    let handleLength = 5 / 2;
     if (this.curves.length > 0) {
       const lastHandleLength = lastCurve!.p2.minus(lastCurve!.p3).length();
       if (lastHandleLength > 0) handleLength = lastHandleLength;
     }
 
-    return new Curve(p0, p0.plus(dir.times(handleLength)), p0.plus(dir.times(3 / 2)), p0.plus(dir.times(3))); // 3m straight line
+    return new Curve(p0, p0.plus(dir.times(handleLength)), p0.plus(dir.times(5 / 2)), p0.plus(dir.times(5))); // 5m straight line
   }
 
   addCurveStart(newCurve?: Curve) {
@@ -226,14 +226,14 @@ export class Path {
     this.updateLength();
   }
 
-  /** Create 3m straight curve aligned with start of Path (or at center of rink if Path empty).*/
+  /** Create 5m straight curve aligned with start of Path (or at center of rink if Path empty).*/
   createNewStartCurve(): Curve {
     const firstCurve = this.curves[0];
     let p0: Vector<2>;
     let dir: Vector<2>;
 
     if (this.curves.length == 0) {
-      // 3m straight line at center of rink
+      // 5m straight line at center of rink
       p0 = new Vector<2>(0, -0.5);
       dir = new Vector<2>(0, 1);
     } else {
@@ -246,13 +246,13 @@ export class Path {
     }
 
     // Keep the handle length continuous with the next curve
-    let handleLength = 3 / 2;
+    let handleLength = 5 / 2;
     if (this.curves.length > 0) {
       const firstHandleLength = firstCurve!.p1.minus(firstCurve!.p0).length();
       if (firstHandleLength > 0) handleLength = firstHandleLength;
     }
 
-    return new Curve(p0, p0.plus(dir.times(handleLength)), p0.plus(dir.times(3 / 2)), p0.plus(dir.times(3))); // 3m straight line
+    return new Curve(p0, p0.plus(dir.times(handleLength)), p0.plus(dir.times(5 / 2)), p0.plus(dir.times(5))); // 5m straight line
   }
 
   /** @param curveIndex - Index of curve in Path

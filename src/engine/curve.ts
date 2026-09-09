@@ -46,23 +46,31 @@ export class Curve {
     this.updateLength();
   }
 
-  /** Serialize to a plain JSON object. */
-  toJSON(): { p0: { data: number[] }; p1: { data: number[] }; p2: { data: number[] }; p3: { data: number[] } } {
-    return { p0: this.p0.toJSON(), p1: this.p1.toJSON(), p2: this.p2.toJSON(), p3: this.p3.toJSON() };
+  /** Serialize to a plain JSON object. The control points are flat arrays
+   * of coordinates: p0: [x, y]. */
+  toJSON(): { p0: number[]; p1: number[]; p2: number[]; p3: number[] } {
+    return {
+      p0: this.p0.toJSON().data,
+      p1: this.p1.toJSON().data,
+      p2: this.p2.toJSON().data,
+      p3: this.p3.toJSON().data,
+    };
   }
 
-  /** Reconstruct a Curve from serialized data. */
+  /** Reconstruct a Curve from serialized data: p0: [x, y]. Also accepts the
+   * former wrapped shape p0: { data: [x, y] }. */
   static fromJSON(json: {
-    p0: { data: number[] };
-    p1: { data: number[] };
-    p2: { data: number[] };
-    p3: { data: number[] };
+    p0: number[] | { data: number[] };
+    p1: number[] | { data: number[] };
+    p2: number[] | { data: number[] };
+    p3: number[] | { data: number[] };
   }): Curve {
+    const flat = (point: number[] | { data: number[] }): number[] => (Array.isArray(point) ? point : point.data);
     return new Curve(
-      Vector.fromJSON(json.p0) as Vector<2>,
-      Vector.fromJSON(json.p1) as Vector<2>,
-      Vector.fromJSON(json.p2) as Vector<2>,
-      Vector.fromJSON(json.p3) as Vector<2>,
+      Vector.fromJSON({ data: flat(json.p0) }) as Vector<2>,
+      Vector.fromJSON({ data: flat(json.p1) }) as Vector<2>,
+      Vector.fromJSON({ data: flat(json.p2) }) as Vector<2>,
+      Vector.fromJSON({ data: flat(json.p3) }) as Vector<2>,
     );
   }
 

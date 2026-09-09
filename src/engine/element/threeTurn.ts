@@ -50,9 +50,10 @@ export abstract class ThreeTurn extends OneFootTurn {
       const keyframe = new FootKeyframe(
         pathCoordinate,
         keyframeData,
-        // Smooth entry and exit into the turn
-        this.smoothExit && i == 2 ? "smooth" : "linear",
-        this.smoothEntry && i == 0 ? "smooth" : "linear",
+        // Hardcoded smooth exit out of the turn
+        i == 2 ? "smooth" : "linear",
+        // Hardcoded smooth entry into the turn
+        i == 0 ? "smooth" : "linear",
       );
 
       keyframes.push(keyframe);
