@@ -1,13 +1,13 @@
 /* Set of 3 keyframes to define a turn */
 
-import { bladeLength } from "./constants.js";
-import type { PathCoordinate } from "./coordinates.js";
+import { bladeLength } from "../constants.js";
+import type { PathCoordinate } from "../coordinates.js";
 import { Element } from "./element.js";
-import { type FootData, FootKeyframe, type HipsKeyframe } from "./keyframe.js";
-import { getQuaternionFromAngleAxis } from "./quaternion.js";
-import { setConstructorsByType, setKindChoices } from "./set.js";
-import type { FootKey } from "./sequence.js";
-import { Vector } from "./vector.js";
+import { type FootData, FootKeyframe, type HipsKeyframe } from "../keyframe.js";
+import { getQuaternionFromAngleAxis } from "../quaternion.js";
+import { setConstructorsByType, setKindChoices } from "./basic.js";
+import type { FootKey } from "../sequence.js";
+import { Vector } from "../vector.js";
 
 // Arbitrary, depends on interpolation functions
 const defaultPathLengthSmooth = (bladeLength * 1.6) as PathCoordinate;

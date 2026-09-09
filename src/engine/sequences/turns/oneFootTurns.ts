@@ -14,9 +14,9 @@ import {
   ForwardClockwiseFootTurn,
   ForwardCounterClockwiseFootLoop,
   ForwardCounterClockwiseFootTurn,
-} from "../../turn.js";
-import type { FootTurnConstructor } from "../../turn.js";
-import { defaultFootTurnLength } from "../../turn.js";
+} from "../../element/turn.js";
+import type { FootTurnConstructor } from "../../element/turn.js";
+import { defaultFootTurnLength } from "../../element/turn.js";
 import { getUnitVectorFromAngle, Vector } from "../../vector.js";
 
 const pathRadius = 1.2; // meters

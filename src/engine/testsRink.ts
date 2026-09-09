@@ -5,7 +5,7 @@ import { Path } from "./path.js";
 import { getQuaternionFromAngleAxis, Quaternion } from "./quaternion.js";
 import { ctx } from "./rinkCanvas.js";
 import { Sequence } from "./sequence.js";
-import { ForwardCounterClockwiseFootTurn, defaultFootTurnLength } from "./turn.js";
+import { ForwardCounterClockwiseFootTurn, defaultFootTurnLength } from "./element/turn.js";
 import { Vector } from "./vector.js";
 
 export function test() {

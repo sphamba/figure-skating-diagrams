@@ -1,5 +1,5 @@
-import type { PathCoordinate } from "./coordinates.js";
-import type { FootKeyframe, HipsKeyframe } from "./keyframe.js";
+import type { PathCoordinate } from "../coordinates.js";
+import type { FootKeyframe, HipsKeyframe } from "../keyframe.js";
 
 /**
  * An element is a portion of a sequence, defined by a range of path

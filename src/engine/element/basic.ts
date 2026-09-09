@@ -1,10 +1,10 @@
 /* Set classes: elements that set a static pose for both feet and the hips. */
 
-import type { PathCoordinate } from "./coordinates.js";
+import type { PathCoordinate } from "../coordinates.js";
 import { Element } from "./element.js";
-import { type FootData, FootKeyframe, HipsKeyframe } from "./keyframe.js";
-import { getQuaternionFromAngleAxis } from "./quaternion.js";
-import { Vector } from "./vector.js";
+import { type FootData, FootKeyframe, HipsKeyframe } from "../keyframe.js";
+import { getQuaternionFromAngleAxis } from "../quaternion.js";
+import { Vector } from "../vector.js";
 
 /** Height above the ice for a foot not on the ice, in metres. */
 const offIceFootHeight = 0.2;
@@ -23,8 +23,9 @@ export interface SetJSON {
 /**
  * A Set element sets the pose for the span it covers: the feet marked as on
  * the ice rest on the ice (height 0), the other feet are lifted off the ice
- * at a fixed height. Foot orientation faces forward or backward, contact
- * points are centered, and the hips return to their default position and
+ * at a fixed height. Foot orientation faces forward or backward, on-ice
+ * feet are centered except in the both-down pose, and the off-ice foot
+ * sits half the spacing to its side of the lateral center. The hips
  * orientation. Keyframes are placed at the start and the end of the span and
  * blend smoothly into the neighboring elements.
  */
@@ -93,12 +94,14 @@ export abstract class Set extends Element {
   }
 
   /** Default keyframes for one foot, at the start and the end of the span.
-   * When both feet are on the ice they sit half the spacing to each side;
-   * a foot alone on the ice keeps the lateral center. */
+   * An on-ice foot is centered, except in the both-down pose where it sits
+   * half the spacing to its side. The off-ice foot always sits half the
+   * spacing to its side. */
   private createFootKeyframes(footKey: "footL" | "footR", onIce: boolean, spanScale?: number): FootKeyframe[] {
     const [start, end] = this.scaledKeyframeSpan(spanScale);
     const bothOnIce = this.leftOnIce && this.rightOnIce;
-    const lateral = onIce && bothOnIce ? (footKey === "footL" ? halfFeetSpacing : -halfFeetSpacing) : 0;
+    const side = footKey === "footL" ? halfFeetSpacing : -halfFeetSpacing;
+    const lateral = onIce ? (bothOnIce ? side : 0) : side;
     const data: FootData = {
       position: new Vector<3>(0, lateral, onIce ? 0 : offIceFootHeight),
       orientation: getQuaternionFromAngleAxis(this.forward ? 0 : Math.PI),

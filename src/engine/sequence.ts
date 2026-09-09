@@ -1,14 +1,14 @@
 import { bladeLength } from "./constants.js";
 import type { PathCoordinate, Time } from "./coordinates.js";
-import type { Element } from "./element.js";
+import type { Element } from "./element/element.js";
 import { interpolate } from "./interpolate.js";
 import { FootKeyframe, HipsKeyframe, TimeKeyframe, type FootData } from "./keyframe.js";
 import type { FootKeyframeJSON, HipsKeyframeJSON, TimeKeyframeJSON } from "./keyframe.js";
 import { Path } from "./path.js";
 import { Quaternion, getQuaternionFromAngleAxis } from "./quaternion.js";
 import type { CanvasRenderingContext2DSized } from "./rinkCanvas.js";
-import { changeElementType } from "./turn.js";
-import type { FootTurnJSON } from "./turn.js";
+import { changeElementType } from "./element/turn.js";
+import type { FootTurnJSON } from "./element/turn.js";
 import { Vector } from "./vector.js";
 
 type SequenceKeyframes = {
@@ -51,9 +51,7 @@ const traceWidth = 0.004;
 const skidWidth = 0.03;
 const defaultPathColor = "black";
 const traceColorL = "rgb(48, 48, 210)";
-const hoverColorL = "rgba(48, 48, 210, 0.2)";
 const traceColorR = "rgb(156, 0, 0)";
-const hoverColorR = "rgba(156, 0, 0, 0.2)";
 
 export class Sequence {
   path: Path;
@@ -424,12 +422,6 @@ export class Sequence {
       pathCoordinate <= uEnd;
       pathCoordinate = (pathCoordinate + step) as PathCoordinate
     ) {
-      const footRelativePosition = this.getInterpolatedValue(
-        footKey,
-        "position",
-        pathCoordinate,
-        drawKeyframes,
-      ) as Vector<3>;
       const contactPoint = this.getInterpolatedValue(footKey, "contactPoint", pathCoordinate, drawKeyframes) as number;
       const footRelativeOrientation = this.getInterpolatedValue(
         footKey,
@@ -439,6 +431,12 @@ export class Sequence {
       ) as Quaternion;
       const pathOrientation = this.getPathOrientation(pathCoordinate);
       const pathPosition = this.path.getPosition(pathCoordinate);
+      const footRelativePosition = this.getInterpolatedValue(
+        footKey,
+        "position",
+        pathCoordinate,
+        drawKeyframes,
+      ) as Vector<3>;
 
       let footRelativeDirection = new Vector<3>(1, 0, 0);
       footRelativeDirection = footRelativeDirection.rotate(footRelativeOrientation);
@@ -457,14 +455,22 @@ export class Sequence {
       }
 
       const onGround = contactRelativePosition.z <= 0;
-      if (footKey == "footL") {
-        ctx.strokeStyle = onGround ? traceColorL : hoverColorL;
-      } else {
-        ctx.strokeStyle = onGround ? traceColorR : hoverColorR;
+      if (!onGround) {
+        // The foot is off the ice: no trace is drawn for it.
+        previousContactPosition = contactPosition;
+        continue;
       }
-      const lineWidth = onGround
-        ? getTraceWidth(footDirection, contactPosition.minus(previousContactPosition), traceWidth, skidWidth)
-        : traceWidth;
+      if (footKey == "footL") {
+        ctx.strokeStyle = traceColorL;
+      } else {
+        ctx.strokeStyle = traceColorR;
+      }
+      const lineWidth = getTraceWidth(
+        footDirection,
+        contactPosition.minus(previousContactPosition),
+        traceWidth,
+        skidWidth,
+      );
       ctx.lineWidth = minTraceWidth === undefined ? lineWidth : Math.max(lineWidth, minTraceWidth);
 
       ctx.beginPath();
