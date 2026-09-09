@@ -13,8 +13,20 @@ test("Pattern loads from the public JSON asset", () => {
 
   const restored = Pattern.fromJSON(json);
 
-  // The reconstructed pattern serializes back to the same plain JSON object.
-  expect(restored.toJSON()).toEqual(json);
+  // The asset may carry baked body keyframes, which Sequence.toJSON()
+  // intentionally drops (they are recomputed from the elements on load).
+  // The reconstruction therefore serializes to the canonical form: assert
+  // that the canonical form round-trips identically.
+  const canonical = restored.toJSON();
+  expect(JSON.parse(JSON.stringify(canonical))).toEqual(canonical);
+
+  const restoredAgain = Pattern.fromJSON(canonical);
+  expect(restoredAgain.toJSON()).toEqual(canonical);
+
+  // The asset data itself is preserved.
+  expect(restored.name).toBe(json.name);
+  expect(restored.videoUrl).toBe(json.videoUrl);
+  expect(restored.sequences).toHaveLength(json.sequences.length);
 });
 
 test("Empty pattern round-trips through JSON", () => {
