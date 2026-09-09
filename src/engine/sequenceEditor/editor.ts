@@ -144,6 +144,40 @@ export class Editor {
   private segmentDragGrabU = 0;
   /** Curve used as the anchor (current + neighbors) for the segment drag. */
   private dragAnchorCurveIndex = 0;
+  /** Snapshot taken when an anchor control point (p0, p3) starts to be
+   * dragged. It holds the uniform axis (cumulated curve starts and lengths)
+   * before the move and the element spans as path coordinates, so the spans
+   * can be re-based after each move step: an element on the curve that ends
+   * at the dragged joint keeps its ratio within that curve, an element on the
+   * curve that starts at the joint keeps its ratio too, and an element on a
+   * later curve stays at the same relative place on its own curve. Null when
+   * no anchor point is being dragged (or a guide handle is dragged instead:
+   * moving a guide handle does not change the joint geometry). */
+  private jointMoveSnapshot: {
+    /** Index of the curve whose end anchor is dragged. -1 when the p0 of the
+     * first curve is dragged (no before-curve exists). */
+    jointCurveIndex: number;
+    curveStarts: number[];
+    curveLengths: number[];
+    items: Array<{ element: Element; start: number; end: number }>;
+  } | null = null;
+  /** One-shot snapshot taken just before a joint is removed (the interior
+   * case of the delete button). It holds the uniform axis before the removal
+   * (cumulated curve starts and lengths), the index of the first curve merged
+   * away (curveBefore of the removed joint), and the element spans as path
+   * coordinates, so the spans can be re-based after the two curves around the
+   * joint merge into one: a point between A and C keeps its ratio measured
+   * from A over the whole merged range, and a point on a curve outside the
+   * merge keeps its place on its own curve. Cleared right after the remap
+   * (deletion happens once) and in setSequence. */
+  private jointDeletionSnapshot: {
+    /** Index of the first curve merged away (curveBefore of the removed
+     * joint). The merged curve replaces it and the next one at this index. */
+    jointOldIndex: number;
+    curveStarts: number[];
+    curveLengths: number[];
+    items: Array<{ element: Element; start: number; end: number }>;
+  } | null = null;
   private rectAddToSelection = false;
   /** What the rectangle selection targets (set when the drag starts). */
   private rectTargetsElements = false;
@@ -216,6 +250,8 @@ export class Editor {
     this.sequence = sequence;
     // A new sequence starts with no unsaved drag state.
     this.sequenceMutated = false;
+    this.jointMoveSnapshot = null;
+    this.jointDeletionSnapshot = null;
     this.selected.clear();
     this.selectedCurves.clear();
     this.selectedElements.clear();
@@ -1553,7 +1589,15 @@ export class Editor {
           } else if (removable.isEnd) {
             this.sequence.path.removeEndCurve();
           } else {
+            const [curveBefore] = this.sequence.path.getCurvesAroundPoint(removable.point);
+            // Snapshot the axis and the element spans before the removal, so
+            // they can be re-based after the two curves around the joint
+            // merge into one.
+            this.jointDeletionSnapshot = this.makeJointDeletionSnapshot(this.sequence.path.curves.indexOf(curveBefore));
             this.sequence.path.removePoint(removable.point);
+            // removePoint already recomputed the curve lengths: re-base the
+            // element spans on the new axis.
+            this.remapElementsAfterCurveRemoval();
           }
           this.selected.clear();
           this.notifySequenceChange();
@@ -1606,6 +1650,13 @@ export class Editor {
           this.isDraggingPoint = true;
           this.dragOrigin = this.sequence.path.curves[picked.curveIndex]?.[picked.pointKey].copy() ?? null;
           this.lastDragDelta = new Vector<2>(0, 0);
+          // Snapshot the element spans and the uniform axis before the first
+          // move step, but only for an anchor: a guide handle (p1, p2) does
+          // not change the joint geometry, so nothing has to be re-based.
+          this.jointMoveSnapshot =
+            picked.pointKey === "p0" || picked.pointKey === "p3"
+              ? this.makeJointMoveSnapshot(picked.curveIndex, picked.pointKey)
+              : null;
         }
       } else {
         // Click on a curve line selects the curve.
@@ -1747,6 +1798,11 @@ export class Editor {
         point.y = world.y;
         this.alignNeighbors(curveIndex, pointKey, delta);
         this.sequence.path.updateLength();
+        // An anchor drag changes the lengths of the curves around the joint,
+        // so the uniform axis moves under the element spans: re-base them
+        // (points keep their ratio within the two affected curves and their
+        // place on later curves). Guide handles do not move the axis.
+        if (pointKey === "p0" || pointKey === "p3") this.remapElementsAfterJointMove();
         this.sequenceMutated = true;
         this.draw();
       } else if (this.dragOrigin) {
@@ -1923,6 +1979,156 @@ export class Editor {
   }
 
   /**
+   * Snapshot taken when an anchor drag starts: the uniform axis (cumulated
+   * curve starts and lengths, curve i starts at the sum of the lengths of the
+   * curves 0..i-1) and the span of every element (the added ones plus the
+   * provisional one) as plain path coordinates, before the anchor moves.
+   */
+  private makeJointMoveSnapshot(curveIndex: number, pointKey: "p0" | "p3") {
+    const curves = this.sequence.path.curves;
+    // The curve whose end anchor is dragged. For the p0 of the first curve no
+    // before-curve exists: only the curve that starts at the joint moves.
+    const jointCurveIndex = pointKey === "p3" ? curveIndex : curveIndex - 1;
+    if (jointCurveIndex < 0 && curves.length === 0) return null;
+
+    const curveStarts: number[] = [];
+    const curveLengths: number[] = [];
+    let cumulated = 0;
+    for (const curve of curves) {
+      curveStarts.push(cumulated);
+      curveLengths.push(curve.length);
+      cumulated += curve.length;
+    }
+
+    const items: Array<{ element: Element; start: number; end: number }> = [];
+    const elements =
+      this.provisionalElement != null ? [...this.sequence.elements, this.provisionalElement] : this.sequence.elements;
+    for (const element of elements) {
+      items.push({ element, start: element.start as number, end: element.end as number });
+    }
+    return { jointCurveIndex, curveStarts, curveLengths, items };
+  }
+
+  /**
+   * Re-base every element span recorded in the snapshot onto the uniform axis
+   * as it is after the last anchor move. Each endpoint moves to the same
+   * relative place within its containing curve: ratio preserved inside the
+   * two curves adjacent to the joint, and place on the own curve preserved on
+   * the later (geometrically unaffected) ones, whose start offset only shifts
+   * by the length change before them. The snapshot stays for the whole drag;
+   * it is cleared on mouse up (and when a new sequence is set).
+   */
+  private remapElementsAfterJointMove() {
+    const snapshot = this.jointMoveSnapshot;
+    if (!snapshot) return;
+
+    const newCurveStarts: number[] = [];
+    const newCurveLengths: number[] = [];
+    let cumulated = 0;
+    for (const curve of this.sequence.path.curves) {
+      newCurveStarts.push(cumulated);
+      newCurveLengths.push(curve.length);
+      cumulated += curve.length;
+    }
+
+    for (const item of snapshot.items) {
+      item.element.start = remapUniformAtJoint(
+        item.start,
+        snapshot.curveStarts,
+        snapshot.curveLengths,
+        newCurveStarts,
+        newCurveLengths,
+      ) as PathCoordinate;
+      item.element.end = remapUniformAtJoint(
+        item.end,
+        snapshot.curveStarts,
+        snapshot.curveLengths,
+        newCurveStarts,
+        newCurveLengths,
+      ) as PathCoordinate;
+      // Recompute the keyframes of an added element from the new span (the
+      // provisional element is skipped there).
+      this.updateElementKeyframes(item.element);
+    }
+  }
+
+  /** Cumulated curve starts and lengths of the current path, as the
+   * uniform axis on which element spans and path coordinates are defined. */
+  private axisTables(): { curveStarts: number[]; curveLengths: number[] } {
+    const curveStarts: number[] = [];
+    const curveLengths: number[] = [];
+    let cumulated = 0;
+    for (const curve of this.sequence.path.curves) {
+      curveStarts.push(cumulated);
+      curveLengths.push(curve.length);
+      cumulated += curve.length;
+    }
+    return { curveStarts, curveLengths };
+  }
+
+  /**
+   * Snapshot taken just before a joint is removed (the interior case of the
+   * delete button): the uniform axis (cumulated curve starts and lengths) and
+   * the span of every element (the added ones plus the provisional one) as
+   * plain path coordinates. `jointOldIndex` is the index of the first curve
+   * merged away (curveBefore of the removed joint); the merged curve replaces
+   * it and the next one at the same index.
+   */
+  private makeJointDeletionSnapshot(jointOldIndex: number) {
+    const { curveStarts, curveLengths } = this.axisTables();
+
+    const items: Array<{ element: Element; start: number; end: number }> = [];
+    const elements =
+      this.provisionalElement != null ? [...this.sequence.elements, this.provisionalElement] : this.sequence.elements;
+    for (const element of elements) {
+      items.push({ element, start: element.start as number, end: element.end as number });
+    }
+    return { jointOldIndex, curveStarts, curveLengths, items };
+  }
+
+  /**
+   * Re-base every element span recorded in the snapshot onto the uniform axis
+   * as it is after the joint removal. A point inside the merged range (the
+   * two curves merged away) keeps its ratio measured from the first merged
+   * curve start over the whole merged range, so AP/AC == AP'/AC' after the
+   * merge. A point on a curve outside the merge keeps its place on its own
+   * curve: its length is unchanged, only its start offset shifts by the
+   * length change before it. The snapshot is one-shot: deletion happens
+   * once, so it is cleared here.
+   */
+  private remapElementsAfterCurveRemoval() {
+    const snapshot = this.jointDeletionSnapshot;
+    if (!snapshot) return;
+
+    const { curveStarts, curveLengths } = this.axisTables();
+
+    for (const item of snapshot.items) {
+      item.element.start = remapUniformAtRemoval(
+        item.start,
+        snapshot.curveStarts,
+        snapshot.curveLengths,
+        curveStarts,
+        curveLengths,
+        snapshot.jointOldIndex,
+        2,
+      ) as PathCoordinate;
+      item.element.end = remapUniformAtRemoval(
+        item.end,
+        snapshot.curveStarts,
+        snapshot.curveLengths,
+        curveStarts,
+        curveLengths,
+        snapshot.jointOldIndex,
+        2,
+      ) as PathCoordinate;
+      // Recompute the keyframes of an added element from the new span (the
+      // provisional element is skipped there).
+      this.updateElementKeyframes(item.element);
+    }
+    this.jointDeletionSnapshot = null;
+  }
+
+  /**
    * Keep the path continuous after a control point is dragged.
    *
    * Dragging an anchor (p0 or p3) translates the flanking handles together
@@ -1982,6 +2188,7 @@ export class Editor {
     this.isDraggingElementPoint = false;
     this.isDraggingElementSegment = false;
     this.isCreatingProvisional = false;
+    this.jointMoveSnapshot = null;
     this.dragElement = null;
     this.dragOrigin = null;
     this.lastDragDelta = new Vector<2>(0, 0);
@@ -2005,6 +2212,112 @@ export class Editor {
     this.height = this.canvas.clientHeight;
     this.draw();
   }
+}
+
+/**
+ * Uniform path coordinate done where a coordinate `oldU` lands after an
+ * anchor joint moved, given the uniform axis before (old curve starts and
+ * lengths) and after (new curve starts and lengths) the move.
+ *
+ * The containing old curve is found with the snapshot tables (the last entry
+ * wins at and after its end, so a point exactly at a joint or at the path end
+ * maps into the last reached curve). A zero-length old curve gives ratio 0.
+ * The result, `newCurveStart(k) + (oldU - oldCurveStart(k)) / oldCurveLength(k)
+ * * newCurveLength(k)`, keeps the ratio within the curve: this preserves the
+ * position on the curve ending at the joint, on the one starting at it, and
+ * (because an unaffected curve keeps its length, only its start offset
+ * shifts) the place on every later curve. The result is clamped to
+ * [0, new total length].
+ */
+export function remapUniformAtJoint(
+  oldU: number,
+  oldCurveStarts: number[],
+  oldCurveLengths: number[],
+  newCurveStarts: number[],
+  newCurveLengths: number[],
+): number {
+  const oldCount = oldCurveStarts.length;
+  const newCount = newCurveStarts.length;
+  if (oldCount === 0 || newCount === 0) return 0;
+
+  const newTotal = newCurveStarts[newCount - 1]! + (newCurveLengths[newCount - 1] ?? 0);
+
+  // Index of the old curve containing oldU (at and after its end, the last
+  // reached curve wins, so boundary points stay valid).
+  let index = 0;
+  for (let i = 0; i < oldCount; i++) {
+    if (oldU >= oldCurveStarts[i]!) index = i;
+  }
+
+  const oldLen = oldCurveLengths[index] ?? 0;
+  const ratio = oldLen > 0 ? (oldU - oldCurveStarts[index]!) / oldLen : 0;
+
+  const clampedIndex = Math.min(index, newCount - 1);
+  const newStart = newCurveStarts[clampedIndex] ?? 0;
+  const newLen = newCurveLengths[clampedIndex] ?? 0;
+  return Math.max(0, Math.min(newTotal, newStart + ratio * newLen));
+}
+
+/**
+ * Uniform path coordinate of where a coordinate `oldU` lands after a joint
+ * removal, given the uniform axis before (old curve starts and lengths) and
+ * after (new curve starts and lengths) the removal, and the range of old
+ * curves merged into one: `mergedOldIndex` is the index of the first curve
+ * merged away and `mergedOldCount` the number of old curves merged (2 for
+ * `removePoint`).
+ *
+ * The containing old curve is found with the old tables (the last entry wins
+ * at and after its end, so a point exactly at a joint or at the path end maps
+ * into the last reached curve). A point on the merged range keeps its ratio
+ * measured from the first merged curve start over the whole merged length
+ * (the sum of the merged old lengths), so AP/AC == AP'/AC' over the merged
+ * curve. A point on a curve outside the merge keeps the ratio within its own
+ * curve: unchanged before the merge, and shifted (with its start offset) on
+ * the later curves, whose lengths do not change. A zero-length old curve
+ * gives ratio 0. The result is clamped to [0, new total length].
+ */
+export function remapUniformAtRemoval(
+  oldU: number,
+  oldCurveStarts: number[],
+  oldCurveLengths: number[],
+  newCurveStarts: number[],
+  newCurveLengths: number[],
+  mergedOldIndex: number,
+  mergedOldCount: number,
+): number {
+  const oldCount = oldCurveStarts.length;
+  const newCount = newCurveStarts.length;
+  if (oldCount === 0 || newCount === 0) return 0;
+
+  const newTotal = newCurveStarts[newCount - 1]! + (newCurveLengths[newCount - 1] ?? 0);
+
+  // Index of the old curve containing oldU (at and after its end, the last
+  // reached curve wins, so boundary points stay valid).
+  let index = 0;
+  for (let i = 0; i < oldCount; i++) {
+    if (oldU >= oldCurveStarts[i]!) index = i;
+  }
+
+  // Ratio within the point's own curve, or within the whole merged range
+  // when the point is on a curve that merges away.
+  const onMerged = index >= mergedOldIndex && index < mergedOldIndex + mergedOldCount;
+  const baseStart = onMerged ? oldCurveStarts[mergedOldIndex]! : oldCurveStarts[index]!;
+  let baseLength = 0;
+  if (onMerged) {
+    for (let i = 0; i < mergedOldCount; i++) baseLength += oldCurveLengths[mergedOldIndex + i] ?? 0;
+  } else {
+    baseLength = oldCurveLengths[index] ?? 0;
+  }
+  const ratio = baseLength > 0 ? (oldU - baseStart) / baseLength : 0;
+
+  // New curve index: old curves before the merge keep their index, the
+  // merged range maps to the first merged curve, and the later curves shift
+  // down by one per extra merged curve (mergedOldCount - 1).
+  const newCurveIndex = index < mergedOldIndex ? index : onMerged ? mergedOldIndex : index - (mergedOldCount - 1);
+  const clampedIndex = Math.min(newCurveIndex, newCount - 1);
+  const newStart = newCurveStarts[clampedIndex] ?? 0;
+  const newLen = newCurveLengths[clampedIndex] ?? 0;
+  return Math.max(0, Math.min(newTotal, newStart + ratio * newLen));
 }
 
 /** Shortest squared distance from point p to the segment [a, b]. */
