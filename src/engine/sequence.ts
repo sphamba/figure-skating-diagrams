@@ -266,30 +266,16 @@ export class Sequence {
     ) as SequenceKeyframes[Key];
   }
 
-  /** Serialize this sequence to a plain JSON object. Keyframes coming from
-   * the elements are not exported: they are computed from these elements. */
+  /** Serialize this sequence to a plain JSON object. Only the clock (time
+   * keyframes) is exported. The body part keyframes are not exported: on
+   * load they are computed from the elements. */
   toJSON(): SequenceJSON {
-    // Keyframes contributed by the elements, to exclude them from the export.
-    const elementKeyframeJson = new Set<string>();
-    for (const element of this.elements) {
-      const contributed = this.elementKeyframes.get(element);
-      if (!contributed) continue;
-      for (const part of [contributed.footL, contributed.footR, contributed.hips]) {
-        for (const keyframe of part) elementKeyframeJson.add(JSON.stringify(keyframe.toJSON()));
-      }
-    }
-    // Export only the keyframes that do not come from the elements.
-    const exportKeyframes = (partKey: FootOrHipsKey): unknown[] =>
-      (this.keyframes[partKey] as KeyframeType[])
-        .filter((keyframe) => !elementKeyframeJson.has(JSON.stringify(keyframe.toJSON())))
-        .map((keyframe) => keyframe.toJSON());
-
     return {
       path: this.path.toJSON(),
       keyframes: {
-        footL: exportKeyframes("footL") as FootKeyframeJSON[],
-        footR: exportKeyframes("footR") as FootKeyframeJSON[],
-        hips: exportKeyframes("hips") as HipsKeyframeJSON[],
+        footL: [],
+        footR: [],
+        hips: [],
         time: this.keyframes.time.map((keyframe) => keyframe.toJSON()),
       },
       elements: this.elements.map((element) => element.toJSON() as FootTurnJSON),
