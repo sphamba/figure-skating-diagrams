@@ -7,7 +7,7 @@ import type { FootKeyframeJSON, HipsKeyframeJSON, TimeKeyframeJSON } from "./key
 import { Path } from "./path.js";
 import { Quaternion, getQuaternionFromAngleAxis } from "./quaternion.js";
 import type { CanvasRenderingContext2DSized } from "./rinkCanvas.js";
-import { changeElementType } from "./element/turn.js";
+import { changeElementType } from "./element/turnTypes.js";
 import type { FootTurnJSON } from "./element/turn.js";
 import { Vector } from "./vector.js";
 

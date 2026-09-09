@@ -5,7 +5,7 @@ import { Path } from "../src/engine/path";
 import { Sequence } from "../src/engine/sequence";
 import type { PathCoordinate } from "../src/engine/coordinates";
 import { Vector } from "../src/engine/vector";
-import { ForwardCounterClockwiseFootTurn } from "../src/engine/turn";
+import { LeftForwardOutsideThreeTurn } from "../src/engine/element/threeTurn";
 
 /** Build a simple known path: a straight 1 m line along the X axis. */
 function makeStraightPath(): Path {
@@ -354,7 +354,7 @@ test("dragging an element by its segment keeps its real length constant", () => 
 
   const startU = (path.length * 0.2) as PathCoordinate;
   const endU = (path.length * 0.4) as PathCoordinate;
-  const el = new ForwardCounterClockwiseFootTurn("footL", startU, endU);
+  const el = new LeftForwardOutsideThreeTurn("footL", startU, endU);
   editorRef(editor).sequence.elements.push(el);
 
   const zoom = editorRef(editor).view.zoom;
@@ -395,7 +395,7 @@ test("clicking the delete button next to a selected element removes it", () => {
 
   const startU = (path.length * 0.2) as PathCoordinate;
   const endU = (path.length * 0.6) as PathCoordinate;
-  const el = new ForwardCounterClockwiseFootTurn("footL", startU, endU);
+  const el = new LeftForwardOutsideThreeTurn("footL", startU, endU);
   editorRef(editor).sequence.elements.push(el);
 
   const zoom = editorRef(editor).view.zoom;

@@ -5,7 +5,8 @@ import { Path } from "./path.js";
 import { getQuaternionFromAngleAxis, Quaternion } from "./quaternion.js";
 import { ctx } from "./rinkCanvas.js";
 import { Sequence } from "./sequence.js";
-import { ForwardCounterClockwiseFootTurn, defaultFootTurnLength } from "./element/turn.js";
+import { LeftForwardOutsideThreeTurn } from "./element/threeTurn.js";
+import { defaultFootTurnLength } from "./element/turn.js";
 import { Vector } from "./vector.js";
 
 export function test() {
@@ -90,7 +91,7 @@ export function test() {
   );
 
   sequence.addElement(
-    new ForwardCounterClockwiseFootTurn(
+    new LeftForwardOutsideThreeTurn(
       "footL",
       (path.length / 2 - defaultFootTurnLength) as PathCoordinate,
       (path.length / 2 + defaultFootTurnLength) as PathCoordinate,

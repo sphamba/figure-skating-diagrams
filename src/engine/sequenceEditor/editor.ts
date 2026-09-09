@@ -3,7 +3,7 @@ import type { PathCoordinate } from "../coordinates.js";
 import type { Element } from "../element/element.js";
 import { LENGTH, WIDTH, CORNER_RADIUS } from "../rink.js";
 import type { CanvasRenderingContext2DSized } from "../rinkCanvas.js";
-import { createDefaultFootTurn } from "../element/turn.js";
+import { createDefaultFootTurn } from "../element/turnTypes.js";
 import { Sequence } from "../sequence.js";
 import { Vector } from "../vector.js";
 

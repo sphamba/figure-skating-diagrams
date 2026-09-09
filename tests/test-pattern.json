@@ -71,6 +71,32 @@
           },
           {
             "kind": "FootKeyframe",
+            "coordinate": 1.504989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "orientation": {
+                "real": 1,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    0
+                  ]
+                }
+              },
+              "contactPoint": 0.5
+            },
+            "transitionIn": "linear",
+            "transitionOut": "smooth"
+          },
+          {
+            "kind": "FootKeyframe",
             "coordinate": 1.904989198977679,
             "data": {
               "orientation": {
@@ -90,8 +116,60 @@
           },
           {
             "kind": "FootKeyframe",
+            "coordinate": 1.904989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "orientation": {
+                "real": 0.7071067811865476,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    -0.7071067811865475
+                  ]
+                }
+              },
+              "contactPoint": 1
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "FootKeyframe",
             "coordinate": 2.304989198977679,
             "data": {
+              "orientation": {
+                "real": 6.123233995736766e-17,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    -1
+                  ]
+                }
+              },
+              "contactPoint": 0.5
+            },
+            "transitionIn": "smooth",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "FootKeyframe",
+            "coordinate": 2.304989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  0,
+                  0
+                ]
+              },
               "orientation": {
                 "real": 6.123233995736766e-17,
                 "vector": {
@@ -149,9 +227,142 @@
             },
             "transitionIn": "linear",
             "transitionOut": "linear"
+          },
+          {
+            "kind": "FootKeyframe",
+            "coordinate": 1.504989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  0,
+                  0
+                ]
+              }
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "FootKeyframe",
+            "coordinate": 1.504989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  -0.15,
+                  0.2
+                ]
+              },
+              "orientation": {
+                "real": 1,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    0
+                  ]
+                }
+              },
+              "contactPoint": 0.5
+            },
+            "transitionIn": "smooth",
+            "transitionOut": "smooth"
+          },
+          {
+            "kind": "FootKeyframe",
+            "coordinate": 2.304989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  0,
+                  0
+                ]
+              }
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "FootKeyframe",
+            "coordinate": 2.304989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  -0.15,
+                  0.2
+                ]
+              },
+              "orientation": {
+                "real": 1,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    0
+                  ]
+                }
+              },
+              "contactPoint": 0.5
+            },
+            "transitionIn": "smooth",
+            "transitionOut": "smooth"
           }
         ],
-        "hips": [],
+        "hips": [
+          {
+            "kind": "HipsKeyframe",
+            "coordinate": 1.504989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "orientation": {
+                "real": 1,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    0
+                  ]
+                }
+              }
+            },
+            "transitionIn": "smooth",
+            "transitionOut": "smooth"
+          },
+          {
+            "kind": "HipsKeyframe",
+            "coordinate": 2.304989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "orientation": {
+                "real": 1,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    0
+                  ]
+                }
+              }
+            },
+            "transitionIn": "smooth",
+            "transitionOut": "smooth"
+          }
+        ],
         "time": [
           {
             "kind": "TimeKeyframe",
@@ -175,7 +386,7 @@
       },
       "elements": [
         {
-          "type": "ForwardClockwiseFootTurn",
+          "type": "LeftForwardInsideThreeTurn",
           "footKey": "footL",
           "start": 1.504989198977679,
           "end": 2.304989198977679,
@@ -242,6 +453,166 @@
             },
             "transitionIn": "linear",
             "transitionOut": "linear"
+          },
+          {
+            "kind": "FootKeyframe",
+            "coordinate": 1.504989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  0,
+                  0
+                ]
+              }
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "FootKeyframe",
+            "coordinate": 1.504989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  0.15,
+                  0.2
+                ]
+              },
+              "orientation": {
+                "real": 6.123233995736766e-17,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    1
+                  ]
+                }
+              },
+              "contactPoint": 0.5
+            },
+            "transitionIn": "smooth",
+            "transitionOut": "smooth"
+          },
+          {
+            "kind": "FootKeyframe",
+            "coordinate": 1.504989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "orientation": {
+                "real": 6.123233995736766e-17,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    1
+                  ]
+                }
+              },
+              "contactPoint": 0.5
+            },
+            "transitionIn": "smooth",
+            "transitionOut": "smooth"
+          },
+          {
+            "kind": "FootKeyframe",
+            "coordinate": 1.904989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  -0.125,
+                  0.225,
+                  0
+                ]
+              },
+              "orientation": {
+                "real": -1,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    1.2246467991473532e-16
+                  ]
+                }
+              },
+              "contactPoint": 1
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "FootKeyframe",
+            "coordinate": 2.304989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  0,
+                  0
+                ]
+              }
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "FootKeyframe",
+            "coordinate": 2.304989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  0.15,
+                  0.2
+                ]
+              },
+              "orientation": {
+                "real": 6.123233995736766e-17,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    1
+                  ]
+                }
+              },
+              "contactPoint": 0.5
+            },
+            "transitionIn": "smooth",
+            "transitionOut": "smooth"
+          },
+          {
+            "kind": "FootKeyframe",
+            "coordinate": 2.304989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "orientation": {
+                "real": -1.8369701987210297e-16,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    -1
+                  ]
+                }
+              },
+              "contactPoint": 0.5
+            },
+            "transitionIn": "smooth",
+            "transitionOut": "smooth"
           }
         ],
         "footR": [
@@ -269,6 +640,58 @@
                   0,
                   -0.225,
                   0
+                ]
+              },
+              "orientation": {
+                "real": 6.123233995736766e-17,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    1
+                  ]
+                }
+              },
+              "contactPoint": 0.5
+            },
+            "transitionIn": "smooth",
+            "transitionOut": "smooth"
+          },
+          {
+            "kind": "FootKeyframe",
+            "coordinate": 1.504989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "orientation": {
+                "real": 6.123233995736766e-17,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    1
+                  ]
+                }
+              },
+              "contactPoint": 0.5
+            },
+            "transitionIn": "smooth",
+            "transitionOut": "smooth"
+          },
+          {
+            "kind": "FootKeyframe",
+            "coordinate": 1.504989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  -0.15,
+                  0.2
                 ]
               },
               "orientation": {
@@ -340,6 +763,58 @@
           },
           {
             "kind": "FootKeyframe",
+            "coordinate": 2.304989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "orientation": {
+                "real": 6.123233995736766e-17,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    -1
+                  ]
+                }
+              },
+              "contactPoint": 0.5
+            },
+            "transitionIn": "smooth",
+            "transitionOut": "smooth"
+          },
+          {
+            "kind": "FootKeyframe",
+            "coordinate": 2.304989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  -0.15,
+                  0.2
+                ]
+              },
+              "orientation": {
+                "real": 6.123233995736766e-17,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    1
+                  ]
+                }
+              },
+              "contactPoint": 0.5
+            },
+            "transitionIn": "smooth",
+            "transitionOut": "smooth"
+          },
+          {
+            "kind": "FootKeyframe",
             "coordinate": 3.809978397955358,
             "data": {
               "position": {
@@ -354,7 +829,108 @@
             "transitionOut": "linear"
           }
         ],
-        "hips": [],
+        "hips": [
+          {
+            "kind": "HipsKeyframe",
+            "coordinate": 1.504989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "orientation": {
+                "real": 6.123233995736766e-17,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    1
+                  ]
+                }
+              }
+            },
+            "transitionIn": "smooth",
+            "transitionOut": "smooth"
+          },
+          {
+            "kind": "HipsKeyframe",
+            "coordinate": 1.904989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "orientation": {
+                "real": -1,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    1.2246467991473532e-16
+                  ]
+                }
+              }
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "HipsKeyframe",
+            "coordinate": 2.304989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "orientation": {
+                "real": 6.123233995736766e-17,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    1
+                  ]
+                }
+              }
+            },
+            "transitionIn": "smooth",
+            "transitionOut": "smooth"
+          },
+          {
+            "kind": "HipsKeyframe",
+            "coordinate": 2.304989198977679,
+            "data": {
+              "position": {
+                "data": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "orientation": {
+                "real": -1.8369701987210297e-16,
+                "vector": {
+                  "data": [
+                    0,
+                    0,
+                    -1
+                  ]
+                }
+              }
+            },
+            "transitionIn": "smooth",
+            "transitionOut": "smooth"
+          }
+        ],
         "time": [
           {
             "kind": "TimeKeyframe",
@@ -378,8 +954,8 @@
       },
       "elements": [
         {
-          "type": "BackwardClockwiseFootLoop",
-          "footKey": "footR",
+          "type": "LeftBackwardInsideLoop",
+          "footKey": "footL",
           "start": 1.504989198977679,
           "end": 2.304989198977679,
           "smoothEntry": true,

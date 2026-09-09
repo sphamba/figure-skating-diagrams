@@ -4,10 +4,8 @@ import type { PathCoordinate, Time } from "../src/engine/coordinates";
 import { FootKeyframe, TimeKeyframe } from "../src/engine/keyframe";
 import { Path } from "../src/engine/path";
 import { Quaternion } from "../src/engine/quaternion";
-import {
-  ForwardCounterClockwiseFootLoop,
-  ForwardCounterClockwiseFootTurn,
-} from "../src/engine/turn";
+import { LeftForwardOutsideThreeTurn } from "../src/engine/element/threeTurn";
+import { LeftForwardOutsideLoop } from "../src/engine/element/loop";
 import { Sequence } from "../src/engine/sequence";
 import { Vector } from "../src/engine/vector";
 
@@ -134,13 +132,14 @@ test("replaceElement swaps an element in place and rebuilds its keyframes", () =
   const sequence = new Sequence(makeStraightLengthOnePath());
   const start = 0.25 as PathCoordinate;
   const end = 0.75 as PathCoordinate;
-  const turn = new ForwardCounterClockwiseFootTurn("footL", start, end, true, true);
+  const turn = new LeftForwardOutsideThreeTurn("footL", start, end, true, true);
   sequence.addElement(turn);
 
-  // A half turn contributes no foot position keyframes, a loop does.
-  expect(sequence.keyframes.footL.some((kf) => kf.data.position !== undefined)).toBe(false);
+  // A three-turn has only zero position keyframes on the centerline,
+  // a loop shifts the foot sideways in the middle of the turn.
+  expect(sequence.keyframes.footL.every((kf) => kf.data.position!.y === 0)).toBe(true);
 
-  const loop = new ForwardCounterClockwiseFootLoop("footL", start, end, true, true);
+  const loop = new LeftForwardOutsideLoop("footL", start, end, true, true);
   sequence.replaceElement(turn, loop);
 
   expect(sequence.elements).toHaveLength(1);

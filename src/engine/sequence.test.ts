@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Path } from "./path";
 import { Vector } from "./vector";
 import { Sequence } from "./sequence";
-import { createDefaultFootTurn } from "./element/turn";
+import { createDefaultFootTurn } from "./element/turnTypes";
 
 /** Build a straight 5 m path with one element between u=1 and u=4. */
 function makeSequence(): { sequence: Sequence; start: number; end: number } {

@@ -6,15 +6,17 @@ import { getQuaternionFromAngleAxis } from "../../quaternion.js";
 import { getOppositeFootKey, Sequence } from "../../sequence.js";
 import type { FootKey } from "../../sequence.js";
 import {
-  BackwardClockwiseFootLoop,
-  BackwardClockwiseFootTurn,
-  BackwardCounterClockwiseFootLoop,
-  BackwardCounterClockwiseFootTurn,
-  ForwardClockwiseFootLoop,
-  ForwardClockwiseFootTurn,
-  ForwardCounterClockwiseFootLoop,
-  ForwardCounterClockwiseFootTurn,
-} from "../../element/turn.js";
+  LeftBackwardInsideThreeTurn,
+  LeftBackwardOutsideThreeTurn,
+  LeftForwardInsideThreeTurn,
+  LeftForwardOutsideThreeTurn,
+} from "../../element/threeTurn.js";
+import {
+  LeftBackwardInsideLoop,
+  LeftBackwardOutsideLoop,
+  LeftForwardInsideLoop,
+  LeftForwardOutsideLoop,
+} from "../../element/loop.js";
 import type { FootTurnConstructor } from "../../element/turn.js";
 import { defaultFootTurnLength } from "../../element/turn.js";
 import { getUnitVectorFromAngle, Vector } from "../../vector.js";
@@ -110,55 +112,55 @@ counterClockwiseSPath.addCurveEnd(getArcCurve(new Vector(0, pathRadius), pathRad
 
 // 3-turns ////////////////////////////////////////////////////////////////////
 
-export const LFI_3 = createTurn("footL", clockwiseCPath, ForwardClockwiseFootTurn);
-export const LFO_3 = createTurn("footL", counterClockwiseCPath, ForwardCounterClockwiseFootTurn);
-export const LBI_3 = createTurn("footL", clockwiseCPath, BackwardClockwiseFootTurn);
-export const LBO_3 = createTurn("footL", counterClockwiseCPath, BackwardCounterClockwiseFootTurn);
-export const RFI_3 = createTurn("footR", counterClockwiseCPath, ForwardCounterClockwiseFootTurn);
-export const RFO_3 = createTurn("footR", clockwiseCPath, ForwardClockwiseFootTurn);
-export const RBI_3 = createTurn("footR", counterClockwiseCPath, BackwardCounterClockwiseFootTurn);
-export const RBO_3 = createTurn("footR", clockwiseCPath, BackwardClockwiseFootTurn);
+export const LFI_3 = createTurn("footL", clockwiseCPath, LeftForwardInsideThreeTurn);
+export const LFO_3 = createTurn("footL", counterClockwiseCPath, LeftForwardOutsideThreeTurn);
+export const LBI_3 = createTurn("footL", clockwiseCPath, LeftBackwardInsideThreeTurn);
+export const LBO_3 = createTurn("footL", counterClockwiseCPath, LeftBackwardOutsideThreeTurn);
+export const RFI_3 = createTurn("footR", counterClockwiseCPath, LeftForwardOutsideThreeTurn);
+export const RFO_3 = createTurn("footR", clockwiseCPath, LeftForwardInsideThreeTurn);
+export const RBI_3 = createTurn("footR", counterClockwiseCPath, LeftBackwardOutsideThreeTurn);
+export const RBO_3 = createTurn("footR", clockwiseCPath, LeftBackwardInsideThreeTurn);
 
 // Brackets ///////////////////////////////////////////////////////////////////
 
-export const LFI_B = createTurn("footL", clockwiseCPath, ForwardCounterClockwiseFootTurn);
-export const LFO_B = createTurn("footL", counterClockwiseCPath, ForwardClockwiseFootTurn);
-export const LBI_B = createTurn("footL", clockwiseCPath, BackwardCounterClockwiseFootTurn);
-export const LBO_B = createTurn("footL", counterClockwiseCPath, BackwardClockwiseFootTurn);
-export const RFI_B = createTurn("footR", counterClockwiseCPath, ForwardClockwiseFootTurn);
-export const RFO_B = createTurn("footR", clockwiseCPath, ForwardCounterClockwiseFootTurn);
-export const RBI_B = createTurn("footR", counterClockwiseCPath, BackwardClockwiseFootTurn);
-export const RBO_B = createTurn("footR", clockwiseCPath, BackwardCounterClockwiseFootTurn);
+export const LFI_B = createTurn("footL", clockwiseCPath, LeftForwardOutsideThreeTurn);
+export const LFO_B = createTurn("footL", counterClockwiseCPath, LeftForwardInsideThreeTurn);
+export const LBI_B = createTurn("footL", clockwiseCPath, LeftBackwardOutsideThreeTurn);
+export const LBO_B = createTurn("footL", counterClockwiseCPath, LeftBackwardInsideThreeTurn);
+export const RFI_B = createTurn("footR", counterClockwiseCPath, LeftForwardInsideThreeTurn);
+export const RFO_B = createTurn("footR", clockwiseCPath, LeftForwardOutsideThreeTurn);
+export const RBI_B = createTurn("footR", counterClockwiseCPath, LeftBackwardInsideThreeTurn);
+export const RBO_B = createTurn("footR", clockwiseCPath, LeftBackwardOutsideThreeTurn);
 
 // Rockers ////////////////////////////////////////////////////////////////////
 
-export const LFI_RK = createTurn("footL", clockwiseSPath, ForwardClockwiseFootTurn, SPathDuration);
-export const LFO_RK = createTurn("footL", counterClockwiseSPath, ForwardCounterClockwiseFootTurn, SPathDuration);
-export const LBI_RK = createTurn("footL", clockwiseSPath, BackwardClockwiseFootTurn, SPathDuration);
-export const LBO_RK = createTurn("footL", counterClockwiseSPath, BackwardCounterClockwiseFootTurn, SPathDuration);
-export const RFI_RK = createTurn("footR", counterClockwiseSPath, ForwardCounterClockwiseFootTurn, SPathDuration);
-export const RFO_RK = createTurn("footR", clockwiseSPath, ForwardClockwiseFootTurn, SPathDuration);
-export const RBI_RK = createTurn("footR", counterClockwiseSPath, BackwardCounterClockwiseFootTurn, SPathDuration);
-export const RBO_RK = createTurn("footR", clockwiseSPath, BackwardClockwiseFootTurn, SPathDuration);
+export const LFI_RK = createTurn("footL", clockwiseSPath, LeftForwardInsideThreeTurn, SPathDuration);
+export const LFO_RK = createTurn("footL", counterClockwiseSPath, LeftForwardOutsideThreeTurn, SPathDuration);
+export const LBI_RK = createTurn("footL", clockwiseSPath, LeftBackwardInsideThreeTurn, SPathDuration);
+export const LBO_RK = createTurn("footL", counterClockwiseSPath, LeftBackwardOutsideThreeTurn, SPathDuration);
+export const RFI_RK = createTurn("footR", counterClockwiseSPath, LeftForwardOutsideThreeTurn, SPathDuration);
+export const RFO_RK = createTurn("footR", clockwiseSPath, LeftForwardInsideThreeTurn, SPathDuration);
+export const RBI_RK = createTurn("footR", counterClockwiseSPath, LeftBackwardOutsideThreeTurn, SPathDuration);
+export const RBO_RK = createTurn("footR", clockwiseSPath, LeftBackwardInsideThreeTurn, SPathDuration);
 
 // Counters ///////////////////////////////////////////////////////////////////
 
-export const LFI_CTR = createTurn("footL", clockwiseSPath, ForwardCounterClockwiseFootTurn, SPathDuration);
-export const LFO_CTR = createTurn("footL", counterClockwiseSPath, ForwardClockwiseFootTurn, SPathDuration);
-export const LBI_CTR = createTurn("footL", clockwiseSPath, BackwardCounterClockwiseFootTurn, SPathDuration);
-export const LBO_CTR = createTurn("footL", counterClockwiseSPath, BackwardClockwiseFootTurn, SPathDuration);
-export const RFI_CTR = createTurn("footR", counterClockwiseSPath, ForwardClockwiseFootTurn, SPathDuration);
-export const RFO_CTR = createTurn("footR", clockwiseSPath, ForwardCounterClockwiseFootTurn, SPathDuration);
-export const RBI_CTR = createTurn("footR", counterClockwiseSPath, BackwardClockwiseFootTurn, SPathDuration);
-export const RBO_CTR = createTurn("footR", clockwiseSPath, BackwardCounterClockwiseFootTurn, SPathDuration);
+export const LFI_CTR = createTurn("footL", clockwiseSPath, LeftForwardOutsideThreeTurn, SPathDuration);
+export const LFO_CTR = createTurn("footL", counterClockwiseSPath, LeftForwardInsideThreeTurn, SPathDuration);
+export const LBI_CTR = createTurn("footL", clockwiseSPath, LeftBackwardOutsideThreeTurn, SPathDuration);
+export const LBO_CTR = createTurn("footL", counterClockwiseSPath, LeftBackwardInsideThreeTurn, SPathDuration);
+export const RFI_CTR = createTurn("footR", counterClockwiseSPath, LeftForwardInsideThreeTurn, SPathDuration);
+export const RFO_CTR = createTurn("footR", clockwiseSPath, LeftForwardOutsideThreeTurn, SPathDuration);
+export const RBI_CTR = createTurn("footR", counterClockwiseSPath, LeftBackwardInsideThreeTurn, SPathDuration);
+export const RBO_CTR = createTurn("footR", clockwiseSPath, LeftBackwardOutsideThreeTurn, SPathDuration);
 
 // Loops //////////////////////////////////////////////////////////////////////
 
-export const LFI_Loop = createTurn("footL", clockwiseCPath, ForwardClockwiseFootLoop);
-export const LFO_Loop = createTurn("footL", counterClockwiseCPath, ForwardCounterClockwiseFootLoop);
-export const LBI_Loop = createTurn("footL", clockwiseCPath, BackwardClockwiseFootLoop);
-export const LBO_Loop = createTurn("footL", counterClockwiseCPath, BackwardCounterClockwiseFootLoop);
-export const RFI_Loop = createTurn("footR", counterClockwiseCPath, ForwardCounterClockwiseFootLoop);
-export const RFO_Loop = createTurn("footR", clockwiseCPath, ForwardClockwiseFootLoop);
-export const RBI_Loop = createTurn("footR", counterClockwiseCPath, BackwardCounterClockwiseFootLoop);
-export const RBO_Loop = createTurn("footR", clockwiseCPath, BackwardClockwiseFootLoop);
+export const LFI_Loop = createTurn("footL", clockwiseCPath, LeftForwardInsideLoop);
+export const LFO_Loop = createTurn("footL", counterClockwiseCPath, LeftForwardOutsideLoop);
+export const LBI_Loop = createTurn("footL", clockwiseCPath, LeftBackwardInsideLoop);
+export const LBO_Loop = createTurn("footL", counterClockwiseCPath, LeftBackwardOutsideLoop);
+export const RFI_Loop = createTurn("footR", counterClockwiseCPath, LeftForwardOutsideLoop);
+export const RFO_Loop = createTurn("footR", clockwiseCPath, LeftForwardInsideLoop);
+export const RBI_Loop = createTurn("footR", counterClockwiseCPath, LeftBackwardOutsideLoop);
+export const RBO_Loop = createTurn("footR", clockwiseCPath, LeftBackwardInsideLoop);

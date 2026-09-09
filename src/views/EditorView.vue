@@ -9,10 +9,10 @@ import Checkbox from "openvue/checkbox";
 import Dialog from "openvue/dialog";
 import Listbox from "openvue/listbox";
 import { Editor, type EditMode } from "@/engine/sequenceEditor/editor";
+import { BothForwardStroke } from "@/engine/element/stroke";
 import { Path } from "@/engine/path";
 import { Sequence, type SequenceJSON } from "@/engine/sequence";
-import { changeElementType, footTurnKindChoices } from "@/engine/element/turn";
-import { setKindChoices } from "@/engine/element/basic";
+import { changeElementType } from "@/engine/element/turnTypes";
 import type { PathCoordinate } from "@/engine/coordinates";
 import type { Element } from "@/engine/element/element";
 import type { PatternJSON } from "@/engine/pattern";
@@ -36,37 +36,91 @@ const elementChangeOpen = ref(false);
 /** The single selected element we are changing the kind of. A shallow ref
  * keeps the raw element identity so it can be found in the sequence. */
 const elementToChange = shallowRef<Element | null>(null);
-/** Currently highlighted kind in the listbox. */
-const selectedElementKind = ref<string | null>(null);
-/** Current step of the step-by-step flow: 1 = kind, 2 = the choices. */
-const elementChangeStep = ref<1 | 2>(1);
-/** Kind chosen on step 1. "basic" selects set elements, "turn" one-foot turns. */
-const elementChangeKind = ref<"basic" | "turn" | null>(null);
+/** Branch chosen on step 1. "stroke" selects stroke elements, "turn" one-foot turns. */
+const elementChangeBranch = ref<"stroke" | "turn" | null>(null);
+/** Chosen values along the stroke path: side, direction and, for a one-foot
+ * stroke, the edge. A two-foot stroke has no edge step. */
+const strokePath = ref<string[]>([]);
+/** Chosen values along the one-foot turn path: group, side, direction, edge. */
+const turnPath = ref<string[]>([]);
 
-/** Step 1 choices: the element kind. Clicking one goes to step 2. */
+/** Step 1 choices: the element kind. Clicking one goes to the next step. */
 const elementKindGroupOptions = [
-  { label: "Basic", value: "basic" },
+  { label: "Stroke", value: "stroke" },
   { label: "One-foot turn", value: "turn" },
 ];
 
-/** Human-readable label of the kind chosen on step 1. */
-const elementChangeKindLabel = computed(() => (elementChangeKind.value === "turn" ? "One-foot turn" : "Basic"));
+/** Choice levels of the stroke path, after the kind step: side, direction,
+ * edge. A two-foot stroke is neither, so it skips the edge step. */
+const strokeLevelOptions: { label: string; value: string }[][] = [
+  [
+    { label: "Left", value: "Left" },
+    { label: "Right", value: "Right" },
+    { label: "Two-foot", value: "TwoFoot" },
+  ],
+  [
+    { label: "Forward", value: "Forward" },
+    { label: "Backward", value: "Backward" },
+  ],
+  [
+    { label: "Inside", value: "Inside" },
+    { label: "Outside", value: "Outside" },
+    { label: "Neither", value: "Neither" },
+  ],
+];
 
-/** Step 2 choices: the concrete elements of the chosen kind. */
-const elementKindOptions = computed(() => {
-  if (elementChangeKind.value === "basic") {
-    return setKindChoices.map((choice) => ({
-      label: choice.label,
-      value: choice.type,
-    }));
+/** Choice levels of the one-foot turn path, after the kind step: group,
+ * side, direction, edge. Selecting the edge completes the element. */
+const turnLevelOptions: { label: string; value: string }[][] = [
+  [
+    { label: "Three-turn", value: "ThreeTurn" },
+    { label: "Loop", value: "Loop" },
+  ],
+  [
+    { label: "Left", value: "Left" },
+    { label: "Right", value: "Right" },
+  ],
+  [
+    { label: "Forward", value: "Forward" },
+    { label: "Backward", value: "Backward" },
+  ],
+  [
+    { label: "Inside", value: "Inside" },
+    { label: "Outside", value: "Outside" },
+  ],
+];
+
+/** The current turn step selects the final edge when the path is full. */
+const turnStepFinal = computed(() => turnPath.value.length >= turnLevelOptions.length);
+
+/** Options shown at the current depth of the turn path. */
+const currentTurnOptions = computed(() => (turnStepFinal.value ? [] : turnLevelOptions[turnPath.value.length]));
+
+/** The current stroke step selects the final direction when the stroke is
+ * two-foot, or the final edge for a one-foot stroke. */
+const strokeSideTwoFoot = computed(() => strokePath.value[0] === "TwoFoot");
+const strokeStepFinal = computed(() => strokePath.value.length >= (strokeSideTwoFoot.value ? 2 : 3));
+
+/** Options shown at the current depth of the stroke path. */
+const currentStrokeOptions = computed(() => (strokeStepFinal.value ? [] : strokeLevelOptions[strokePath.value.length]));
+
+/** Chosen labels to show as tags at the top of the dialog. */
+const chosenLabels = computed<string[]>(() => {
+  if (!elementChangeBranch.value) return [];
+  if (elementChangeBranch.value === "stroke") {
+    const labels = ["Stroke"];
+    strokePath.value.forEach((value, level) => {
+      const option = strokeLevelOptions[level]?.find((choice) => choice.value === value);
+      if (option) labels.push(option.label);
+    });
+    return labels;
   }
-  const setTypes = new Set(setKindChoices.map((choice) => choice.type));
-  return footTurnKindChoices
-    .filter((choice) => !setTypes.has(choice.type))
-    .map((choice) => ({
-      label: choice.label,
-      value: choice.type,
-    }));
+  const labels = ["One-foot turn"];
+  turnPath.value.forEach((value, level) => {
+    const option = turnLevelOptions[level]?.find((choice) => choice.value === value);
+    if (option) labels.push(option.label);
+  });
+  return labels;
 });
 
 /** A help line: one or more input gestures shown as pills, plus a description. */
@@ -133,7 +187,11 @@ function defaultSequence(): Sequence {
   const path = new Path();
   path.curves.push(new Curve(new Vector(-1.5, 0), new Vector(-0.5, 0), new Vector(0.5, 0), new Vector(1.5, 0)));
   path.updateLength();
-  return new Sequence(path);
+  const sequence = new Sequence(path);
+  // A two-foot stroke at the very beginning of the sequence: both its start
+  // and end at 0.
+  sequence.addElement(new BothForwardStroke(0 as PathCoordinate, 0 as PathCoordinate));
+  return sequence;
 }
 
 onMounted(() => {
@@ -144,10 +202,10 @@ onMounted(() => {
   // single selected element.
   editor.onElementChangeRequest = (element) => {
     elementToChange.value = element;
-    selectedElementKind.value = element.type;
     // Start the step-by-step flow at the kind selection.
-    elementChangeStep.value = 1;
-    elementChangeKind.value = null;
+    elementChangeBranch.value = null;
+    strokePath.value = [];
+    turnPath.value = [];
     elementChangeOpen.value = true;
   };
 });
@@ -209,16 +267,55 @@ function changeElementKind(kind: string) {
   editor.draw();
 }
 
-/** Choose a kind on step 1 and go to step 2. */
-function chooseElementKindGroup(kind: "basic" | "turn") {
-  elementChangeKind.value = kind;
-  elementChangeStep.value = 2;
+/** Choose a kind on step 1 and go to the next step. */
+function chooseElementBranch(branch: "stroke" | "turn") {
+  elementChangeBranch.value = branch;
+  strokePath.value = [];
+  turnPath.value = [];
 }
 
-/** Go back from step 2 to the kind selection on step 1. */
+/** Choose one value of the stroke path. A two-foot stroke completes at the
+ * direction step (two-foot strokes are neither); a one-foot stroke completes
+ * at the edge step. */
+function onStrokeChange(value: string) {
+  const next = [...strokePath.value, value];
+  if (next.length < (next[0] === "TwoFoot" ? 2 : 3)) {
+    strokePath.value = next;
+    return;
+  }
+  // next holds side, direction and, for a one-foot stroke, the edge.
+  const [side, direction, edge] = next;
+  const type =
+    side === "TwoFoot" ? `Both${direction}Stroke` : `${side}${direction}${edge === "Neither" ? "" : edge}Stroke`;
+  changeElementKind(type);
+  closeElementChange();
+}
+
+/** Choose one value of the one-foot turn path. The final edge selection
+ * completes the path: it builds the element and closes the dialog. */
+function onTurnChange(value: string) {
+  const next = [...turnPath.value, value];
+  if (next.length < turnLevelOptions.length) {
+    turnPath.value = next;
+    return;
+  }
+  // next holds group, side, direction, edge in that order.
+  const [group, side, direction, edge] = next;
+  changeElementKind(`${side}${direction}${edge}${group}`);
+  closeElementChange();
+}
+
+/** Go back from the current step to the previous one. */
 function previousElementChangeStep() {
-  elementChangeKind.value = null;
-  elementChangeStep.value = 1;
+  if (elementChangeBranch.value === "stroke" && strokePath.value.length > 0) {
+    strokePath.value = strokePath.value.slice(0, -1);
+    return;
+  }
+  if (elementChangeBranch.value === "turn" && turnPath.value.length > 0) {
+    turnPath.value = turnPath.value.slice(0, -1);
+    return;
+  }
+  elementChangeBranch.value = null;
 }
 
 function closeElementChange() {
@@ -281,47 +378,59 @@ function closeElementChange() {
     <!-- Overlay to choose an element step by step: first the kind, then the choices. -->
     <Dialog
       v-model:visible="elementChangeOpen"
-      header="Choose element"
+      header="Element selection"
       modal
       class="editor-view__element-dialog"
       @hide="closeElementChange"
     >
       <!-- Step 1: element kind. Clicking a kind goes to the next step. -->
-      <template v-if="elementChangeStep === 1">
+      <template v-if="!elementChangeBranch">
         <Listbox
-          :model-value="elementChangeKind"
+          :model-value="elementChangeBranch"
           :options="elementKindGroupOptions"
           option-label="label"
           option-value="value"
           class="w-full"
-          @change="(event) => chooseElementKindGroup(event.value)"
+          @change="(event) => chooseElementBranch(event.value)"
         />
       </template>
 
-      <!-- Step 2: the choices of the chosen kind. Selecting one closes the dialog. -->
       <template v-else>
         <div class="editor-view__element-kind">
-          <Tag :value="elementChangeKindLabel" />
+          <Tag v-for="label in chosenLabels" :key="label" :value="label" />
         </div>
+
+        <!-- Stroke branch: side, then direction, then edge for one-foot strokes. -->
         <Listbox
-          :model-value="selectedElementKind"
-          :options="elementKindOptions"
+          v-if="elementChangeBranch === 'stroke'"
+          :model-value="null"
+          :options="currentStrokeOptions"
           option-label="label"
           option-value="value"
           class="w-full"
-          @change="
-            (event) => {
-              changeElementKind(event.value);
-              closeElementChange();
-            }
-          "
+          @change="(event) => onStrokeChange(event.value)"
+        />
+
+        <!-- One-foot turn branch: group, then side, then direction, then edge. -->
+        <Listbox
+          v-else
+          :model-value="null"
+          :options="currentTurnOptions"
+          option-label="label"
+          option-value="value"
+          class="w-full"
+          @change="(event) => onTurnChange(event.value)"
         />
       </template>
 
       <template #footer>
-        <template v-if="elementChangeStep === 2">
-          <Button label="Previous" severity="secondary" icon="pi pi-arrow-left" @click="previousElementChangeStep" />
-        </template>
+        <Button
+          v-if="elementChangeBranch"
+          label="Previous"
+          severity="secondary"
+          icon="pi pi-arrow-left"
+          @click="previousElementChangeStep"
+        />
         <Button label="Close" severity="secondary" icon="pi pi-times" @click="closeElementChange" />
       </template>
     </Dialog>
