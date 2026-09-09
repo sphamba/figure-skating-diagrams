@@ -72,46 +72,46 @@ test("getClosestPoint returns near-zero distance for points on the curve", () =>
 
 
 test("Get length", () => {
-	let p1 = new Vector<2>(0, 0);
-	let p2 = new Vector<2>(0.5, 0);
-	let p3 = new Vector<2>(0.5, 1);
-	let p4 = new Vector<2>(1, 1);
-	let curve = new Curve(p1, p2, p3, p4);
+	const p1 = new Vector<2>(0, 0);
+	const p2 = new Vector<2>(0.5, 0);
+	const p3 = new Vector<2>(0.5, 1);
+	const p4 = new Vector<2>(1, 1);
+	const curve = new Curve(p1, p2, p3, p4);
 
 	expect(curve.length).toBeCloseTo(1.5, 2);
 });
 
 
 test("Get position and derivatives", () => {
-	let p1 = new Vector<2>(0, 0);
-	let p2 = new Vector<2>(0.5, 0);
-	let p3 = new Vector<2>(0.5, 1);
-	let p4 = new Vector<2>(1, 1);
-	let curve = new Curve(p1, p2, p3, p4);
+	const p1 = new Vector<2>(0, 0);
+	const p2 = new Vector<2>(0.5, 0);
+	const p3 = new Vector<2>(0.5, 1);
+	const p4 = new Vector<2>(1, 1);
+	const curve = new Curve(p1, p2, p3, p4);
 
 	const precision = 15; // decimal places
-	let coord = 0.2 as Curvilinear;
+	const coord = 0.2 as Curvilinear;
 
-	let position = curve.getPosition(coord);
+	const position = curve.getPosition(coord);
 	expect(position.x).toBeCloseTo(0.248, precision);
 	expect(position.y).toBeCloseTo(0.104, precision);
 
-	let derivative = curve.getDerivative(coord);
+	const derivative = curve.getDerivative(coord);
 	expect(derivative.x).toBeCloseTo(1.02, precision);
 	expect(derivative.y).toBeCloseTo(0.96, precision);
 
-	let secondDerivative = curve.getSecondDerivative(coord);
+	const secondDerivative = curve.getSecondDerivative(coord);
 	expect(secondDerivative.x).toBeCloseTo(-1.8, precision);
 	expect(secondDerivative.y).toBeCloseTo(3.6, precision);
 });
 
 
 test("Create curve intersecting points", () => {
-	let p1 = new Vector<2>(0, 0);
-	let p2 = new Vector<2>(10 / 27, 7 / 27);
-	let p3 = new Vector<2>(17 / 27, 20 / 27);
-	let p4 = new Vector<2>(1, 1);
-	let curve = Curve.intersecting(p1, p2, p3, p4);
+	const p1 = new Vector<2>(0, 0);
+	const p2 = new Vector<2>(10 / 27, 7 / 27);
+	const p3 = new Vector<2>(17 / 27, 20 / 27);
+	const p4 = new Vector<2>(1, 1);
+	const curve = Curve.intersecting(p1, p2, p3, p4);
 
 	const precision = 15; // decimal places
 	let position: Vector<2>;
@@ -224,12 +224,12 @@ test("translating an anchor (p0/p3) with its flanking handles by the same delta 
 
 
 test("Cut curve", () => {
-	let p1 = new Vector<2>(0, 0);
-	let p2 = new Vector<2>(0.5, 0);
-	let p3 = new Vector<2>(0.5, 1);
-	let p4 = new Vector<2>(1, 1);
-	let curve = new Curve(p1, p2, p3, p4);
-	let [newCurve1, newCurve2] = curve.cut(0.2 as Curvilinear);
+	const p1 = new Vector<2>(0, 0);
+	const p2 = new Vector<2>(0.5, 0);
+	const p3 = new Vector<2>(0.5, 1);
+	const p4 = new Vector<2>(1, 1);
+	const curve = new Curve(p1, p2, p3, p4);
+	const [newCurve1, newCurve2] = curve.cut(0.2 as Curvilinear);
 
 	const precision = 15; // decimal places
 	const coordsOriginal = [0, 0.2, 0.2, 1] as Curvilinear[];
@@ -238,18 +238,18 @@ test("Cut curve", () => {
 	const derivativeScales = [0.2, 0.2, 0.8, 0.8];
 
 	for (let i = 0; i < 4; i++) {
-		let coordOriginal = coordsOriginal[i];
-		let coordNew = coordsNew[i];
-		let newCurve = newCurves[i];
-		let scale = derivativeScales[i];
+		const coordOriginal = coordsOriginal[i];
+		const coordNew = coordsNew[i];
+		const newCurve = newCurves[i];
+		const scale = derivativeScales[i];
 
-		let positionOriginal = curve.getPosition(coordOriginal);
-		let positionNew = newCurve.getPosition(coordNew);
+		const positionOriginal = curve.getPosition(coordOriginal);
+		const positionNew = newCurve.getPosition(coordNew);
 		expect(positionOriginal.x).toBeCloseTo(positionNew.x, precision);
 		expect(positionOriginal.y).toBeCloseTo(positionNew.y, precision);
 
-		let derivativeOriginal = curve.getDerivative(coordOriginal);
-		let derivativeNew = newCurve.getDerivative(coordNew);
+		const derivativeOriginal = curve.getDerivative(coordOriginal);
+		const derivativeNew = newCurve.getDerivative(coordNew);
 		expect(derivativeOriginal.x * scale).toBeCloseTo(derivativeNew.x, precision);
 		expect(derivativeOriginal.y * scale).toBeCloseTo(derivativeNew.y, precision);
 	}

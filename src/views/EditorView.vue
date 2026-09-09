@@ -12,6 +12,7 @@ import { Editor, type EditMode } from "@/engine/sequenceEditor/editor";
 import { Path } from "@/engine/path";
 import { Sequence, type SequenceJSON } from "@/engine/sequence";
 import { changeElementType, footTurnKindChoices } from "@/engine/element/turn";
+import { setKindChoices } from "@/engine/element/basic";
 import type { PathCoordinate } from "@/engine/coordinates";
 import type { Element } from "@/engine/element/element";
 import type { PatternJSON } from "@/engine/pattern";
@@ -30,21 +31,43 @@ const editMode = ref<EditMode>("view");
 /** When checked, foot traces and elements are scaled up when zoomed out. */
 const scaleElements = ref(true);
 
-/** Overlay state for the "change element kind" picker. */
+/** Overlay state for the "choose element" picker. */
 const elementChangeOpen = ref(false);
 /** The single selected element we are changing the kind of. A shallow ref
  * keeps the raw element identity so it can be found in the sequence. */
 const elementToChange = shallowRef<Element | null>(null);
 /** Currently highlighted kind in the listbox. */
 const selectedElementKind = ref<string | null>(null);
+/** Current step of the step-by-step flow: 1 = kind, 2 = the choices. */
+const elementChangeStep = ref<1 | 2>(1);
+/** Kind chosen on step 1. "basic" selects set elements, "turn" one-foot turns. */
+const elementChangeKind = ref<"basic" | "turn" | null>(null);
 
-/** Listbox options for the available element kinds (labels + type names). */
-const elementKindOptions = computed(() =>
-  footTurnKindChoices.map((choice) => ({
-    label: choice.label,
-    value: choice.type,
-  })),
-);
+/** Step 1 choices: the element kind. Clicking one goes to step 2. */
+const elementKindGroupOptions = [
+  { label: "Basic", value: "basic" },
+  { label: "One-foot turn", value: "turn" },
+];
+
+/** Human-readable label of the kind chosen on step 1. */
+const elementChangeKindLabel = computed(() => (elementChangeKind.value === "turn" ? "One-foot turn" : "Basic"));
+
+/** Step 2 choices: the concrete elements of the chosen kind. */
+const elementKindOptions = computed(() => {
+  if (elementChangeKind.value === "basic") {
+    return setKindChoices.map((choice) => ({
+      label: choice.label,
+      value: choice.type,
+    }));
+  }
+  const setTypes = new Set(setKindChoices.map((choice) => choice.type));
+  return footTurnKindChoices
+    .filter((choice) => !setTypes.has(choice.type))
+    .map((choice) => ({
+      label: choice.label,
+      value: choice.type,
+    }));
+});
 
 /** A help line: one or more input gestures shown as pills, plus a description. */
 type HelpItem = { keys: string[]; description: string };
@@ -122,6 +145,9 @@ onMounted(() => {
   editor.onElementChangeRequest = (element) => {
     elementToChange.value = element;
     selectedElementKind.value = element.type;
+    // Start the step-by-step flow at the kind selection.
+    elementChangeStep.value = 1;
+    elementChangeKind.value = null;
     elementChangeOpen.value = true;
   };
 });
@@ -183,6 +209,18 @@ function changeElementKind(kind: string) {
   editor.draw();
 }
 
+/** Choose a kind on step 1 and go to step 2. */
+function chooseElementKindGroup(kind: "basic" | "turn") {
+  elementChangeKind.value = kind;
+  elementChangeStep.value = 2;
+}
+
+/** Go back from step 2 to the kind selection on step 1. */
+function previousElementChangeStep() {
+  elementChangeKind.value = null;
+  elementChangeStep.value = 1;
+}
+
 function closeElementChange() {
   elementChangeOpen.value = false;
 }
@@ -240,23 +278,50 @@ function closeElementChange() {
       <canvas ref="canvasRef" class="editor-view__canvas-element"></canvas>
     </div>
 
-    <!-- Overlay to pick a new kind for the selected element. -->
+    <!-- Overlay to choose an element step by step: first the kind, then the choices. -->
     <Dialog
       v-model:visible="elementChangeOpen"
-      header="Change element kind"
+      header="Choose element"
       modal
       class="editor-view__element-dialog"
       @hide="closeElementChange"
     >
-      <Listbox
-        :model-value="selectedElementKind"
-        :options="elementKindOptions"
-        option-label="label"
-        option-value="value"
-        class="w-full"
-        @change="(event) => changeElementKind(event.value)"
-      />
+      <!-- Step 1: element kind. Clicking a kind goes to the next step. -->
+      <template v-if="elementChangeStep === 1">
+        <Listbox
+          :model-value="elementChangeKind"
+          :options="elementKindGroupOptions"
+          option-label="label"
+          option-value="value"
+          class="w-full"
+          @change="(event) => chooseElementKindGroup(event.value)"
+        />
+      </template>
+
+      <!-- Step 2: the choices of the chosen kind. Selecting one closes the dialog. -->
+      <template v-else>
+        <div class="editor-view__element-kind">
+          <Tag :value="elementChangeKindLabel" />
+        </div>
+        <Listbox
+          :model-value="selectedElementKind"
+          :options="elementKindOptions"
+          option-label="label"
+          option-value="value"
+          class="w-full"
+          @change="
+            (event) => {
+              changeElementKind(event.value);
+              closeElementChange();
+            }
+          "
+        />
+      </template>
+
       <template #footer>
+        <template v-if="elementChangeStep === 2">
+          <Button label="Previous" severity="secondary" icon="pi pi-arrow-left" @click="previousElementChangeStep" />
+        </template>
         <Button label="Close" severity="secondary" icon="pi pi-times" @click="closeElementChange" />
       </template>
     </Dialog>
@@ -358,5 +423,10 @@ function closeElementChange() {
 
 .editor-view__element-dialog {
   width: 320px;
+}
+
+.editor-view__element-kind {
+  display: flex;
+  margin-bottom: 0.5rem;
 }
 </style>

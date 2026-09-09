@@ -11,26 +11,26 @@ test("Interpolate numbers", () => {
 
 
 test("Interpolate vectors", () => {
-	let a = new Vector(1, 2, 3);
-	let b = new Vector(4, 5, 6);
+	const a = new Vector(1, 2, 3);
+	const b = new Vector(4, 5, 6);
 
-	let result = interpolate(a, b, 0.25);
-	let expected = new Vector(1.75, 2.75, 3.75);
+	const result = interpolate(a, b, 0.25);
+	const expected = new Vector(1.75, 2.75, 3.75);
 
 	expect(result).toEqual(expected);
 });
 
 
 test("Interpolate quaternions", () => {
-	let angle1 = 0.1;
-	let angle2 = 0.2;
-	let axis = new Vector<3>(1, 2, 3).normalized();
+	const angle1 = 0.1;
+	const angle2 = 0.2;
+	const axis = new Vector<3>(1, 2, 3).normalized();
 
-	let a = getQuaternionFromAngleAxis(angle1, axis);
-	let b = getQuaternionFromAngleAxis(angle2, axis);
+	const a = getQuaternionFromAngleAxis(angle1, axis);
+	const b = getQuaternionFromAngleAxis(angle2, axis);
 
-	let result = interpolate(a, b, 0.25);
-	let expected = getQuaternionFromAngleAxis(0.125, axis);
+	const result = interpolate(a, b, 0.25);
+	const expected = getQuaternionFromAngleAxis(0.125, axis);
 
 	const precision = 15; // decimal places
 	expect(result.real).toBeCloseTo(expected.real, precision);
