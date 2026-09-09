@@ -33,12 +33,13 @@ export abstract class Element {
   }
 
   /** Keyframes contributed to the left foot. When a span scale is given, the
-   * returned keyframes are re-based onto the span scaled about its middle,
-   * without changing the element itself. */
-  abstract getLeftFootKeyframes(spanScale?: number): FootKeyframe[];
+   * returned keyframes are re-based onto the span scaled about its middle.
+   * When a lateral scale is given, the lateral shift of the foot positions
+   * is scaled by that factor. Neither changes the element itself. */
+  abstract getLeftFootKeyframes(spanScale?: number, lateralScale?: number): FootKeyframe[];
 
   /** Keyframes contributed to the right foot (see getLeftFootKeyframes). */
-  abstract getRightFootKeyframes(spanScale?: number): FootKeyframe[];
+  abstract getRightFootKeyframes(spanScale?: number, lateralScale?: number): FootKeyframe[];
 
   /** Keyframes contributed to the hips (see getLeftFootKeyframes). */
   abstract getHipsKeyframes(spanScale?: number): HipsKeyframe[];

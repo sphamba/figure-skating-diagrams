@@ -428,12 +428,13 @@ export class Sequence {
   }
 
   /**
-   * Foot keyframes used for drawing. When a blade length scale is active, the
-   * keyframes each scalable element (the turns) contributes are fetched with
-   * their coordinates re-based onto the element's scaled span: the trace then
-   * renders as if the element really spanned the scaled range. Glides and
-   * strokes do not scale, so their keyframes keep the real span. The stored
-   * keyframes of the sequence are not touched.
+   * Foot keyframes used for drawing. When a blade length scale is active
+   * (zoomed out), the keyframes each scalable element (the turns)
+   * contributes are fetched with their coordinates re-based onto the
+   * element's scaled span: the trace then renders as if the element really
+   * spanned the scaled range. The lateral shift of the foot positions of
+   * every element (glides, strokes, and turns) is scaled by the same
+   * factor. The stored keyframes of the sequence are not touched.
    */
   getDrawFootKeyframes(footKey: FootKey, scale: number): FootKeyframe[] {
     if (scale === 1) {
@@ -451,7 +452,9 @@ export class Sequence {
     for (const element of elements) {
       const elementScale = element.scalable ? scale : undefined;
       const startKeyframes =
-        footKey === "footL" ? element.getLeftFootKeyframes(elementScale) : element.getRightFootKeyframes(elementScale);
+        footKey === "footL"
+          ? element.getLeftFootKeyframes(elementScale, scale)
+          : element.getRightFootKeyframes(elementScale, scale);
       const endKeyframe = endKeyframes?.[endKeyframes.length - 1];
       const startKeyframe = startKeyframes[0];
       if (endKeyframe && startKeyframe && endElement) {

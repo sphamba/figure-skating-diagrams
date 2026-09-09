@@ -60,11 +60,22 @@ export abstract class FootTurn extends Element {
     return scaledSpan(this.start, this.end, spanScale);
   }
 
-  /** Detailed keyframes for the on-ice foot across the (scaled) span. */
-  protected abstract createOnIceFootKeyframes(start: PathCoordinate, end: PathCoordinate): FootKeyframe[];
+  /** Detailed keyframes for the on-ice foot across the (scaled) span. When a
+   * lateral scale is given, the lateral shift is scaled by the factor. */
+  protected abstract createOnIceFootKeyframes(
+    start: PathCoordinate,
+    end: PathCoordinate,
+    lateralScale?: number,
+  ): FootKeyframe[];
 
-  /** Minimal keyframes for the free foot at the ends of the (scaled) span. */
-  protected abstract createFreeFootKeyframes(start: PathCoordinate, end: PathCoordinate): FootKeyframe[];
+  /** Minimal keyframes for the free foot at the ends of the (scaled) span.
+   * When a lateral scale is given, the lateral shift is scaled by the
+   * factor. */
+  protected abstract createFreeFootKeyframes(
+    start: PathCoordinate,
+    end: PathCoordinate,
+    lateralScale?: number,
+  ): FootKeyframe[];
 
   /** Minimal keyframes for the hips at the ends of the (scaled) span. */
   protected abstract createHipsKeyframes(start: PathCoordinate, end: PathCoordinate): HipsKeyframe[];

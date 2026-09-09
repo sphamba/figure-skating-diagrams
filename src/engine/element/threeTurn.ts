@@ -25,7 +25,7 @@ export abstract class ThreeTurn extends OneFootTurn {
     return this.forward ? 1 : 0;
   }
 
-  createOnIceFootKeyframes(start: PathCoordinate, end: PathCoordinate): FootKeyframe[] {
+  createOnIceFootKeyframes(start: PathCoordinate, end: PathCoordinate, _lateralScale?: number): FootKeyframe[] {
     const pathCoordinate = ((start + end) / 2) as PathCoordinate;
     const pathLengthEntry = (pathCoordinate - start) as PathCoordinate;
     const pathLengthExit = (end - pathCoordinate) as PathCoordinate;

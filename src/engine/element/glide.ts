@@ -43,12 +43,12 @@ export abstract class Glide extends Element {
   /** Name used to identify this glide type when (de)serializing. */
   abstract readonly type: string;
 
-  getLeftFootKeyframes(_spanScale?: number): FootKeyframe[] {
-    return this.createFootKeyframes("footL", this.leftOnIce);
+  getLeftFootKeyframes(_spanScale?: number, lateralScale?: number): FootKeyframe[] {
+    return this.createFootKeyframes("footL", this.leftOnIce, lateralScale);
   }
 
-  getRightFootKeyframes(_spanScale?: number): FootKeyframe[] {
-    return this.createFootKeyframes("footR", this.rightOnIce);
+  getRightFootKeyframes(_spanScale?: number, lateralScale?: number): FootKeyframe[] {
+    return this.createFootKeyframes("footR", this.rightOnIce, lateralScale);
   }
 
   getHipsKeyframes(_spanScale?: number): HipsKeyframe[] {
@@ -85,11 +85,13 @@ export abstract class Glide extends Element {
   /** Default keyframes for one foot, at the start and the end of the span.
    * An on-ice foot is centered, except in the two-foot glide where it sits
    * half the spacing to its side. The off-ice foot always sits half the
-   * spacing to its side. */
-  private createFootKeyframes(footKey: "footL" | "footR", onIce: boolean): FootKeyframe[] {
+   * spacing to its side. When a lateral scale is given, that lateral shift
+   * is scaled by the factor. */
+  private createFootKeyframes(footKey: "footL" | "footR", onIce: boolean, lateralScale?: number): FootKeyframe[] {
     const [start, end] = [this.start, this.end];
     const bothOnIce = this.leftOnIce && this.rightOnIce;
-    const side = footKey === "footL" ? halfFeetSpacing : -halfFeetSpacing;
+    const scale = lateralScale ?? 1;
+    const side = (footKey === "footL" ? halfFeetSpacing : -halfFeetSpacing) * scale;
     const lateral = onIce ? (bothOnIce ? side : 0) : side;
     const data: FootData = {
       position: new Vector<3>(0, lateral, onIce ? 0 : offIceFootHeight),
@@ -412,10 +414,10 @@ export class BothBackwardGlide extends Glide {
  * A dynamic glide is a crossed (crossover) or normal stroke: at the start of
  * the stroke both feet rest on the ice, shifted to the sides of the
  * centerline (swapped when the free foot crosses over, or when the stroke
- * goes backwards). One foot keeps skating the center of the element and
- * glides into the stroke (centered from 95% of completion on). The other
- * foot stays shifted to its side, shifts 0.5 m backwards along the path
- * (forwards for a backwards stroke), rests on the ice until 95% of
+ * goes backwards). One foot keeps skating the center of the element and is
+ * centered for the whole stroke. The other foot starts shifted to its side,
+ * shifts 0.5 m backwards along the path (forwards for a backwards stroke) to
+ * twice that side offset, rests on the ice until 95% of
  * completion, and lifts off at the end of the stroke.
  */
 export abstract class DynamicGlide extends Glide {
@@ -432,22 +434,25 @@ export abstract class DynamicGlide extends Glide {
     return !this.left;
   }
 
-  getLeftFootKeyframes(_spanScale?: number): FootKeyframe[] {
-    return this.dynamicFootKeyframes("footL");
+  getLeftFootKeyframes(_spanScale?: number, lateralScale?: number): FootKeyframe[] {
+    return this.dynamicFootKeyframes("footL", lateralScale);
   }
 
-  getRightFootKeyframes(_spanScale?: number): FootKeyframe[] {
-    return this.dynamicFootKeyframes("footR");
+  getRightFootKeyframes(_spanScale?: number, lateralScale?: number): FootKeyframe[] {
+    return this.dynamicFootKeyframes("footR", lateralScale);
   }
 
-  /** Foot keyframes of the dynamic stroke: start (both feet on the ice at the
-   * sides), 95% (the free foot still on the ice, shifted to its side and
-   * 0.5 m backwards along the path) and end (the free foot off the ice at the
-   * same shift). Swapped when crossed, or when the stroke goes backwards. */
-  private dynamicFootKeyframes(footKey: "footL" | "footR"): FootKeyframe[] {
+  /** Foot keyframes of the dynamic stroke: the finishing on-ice foot starts
+   * and stays centered, the other foot starts at its side offset and shifts
+   * 0.5 m backwards along the path to twice that side offset, on the ice at
+   * 95% and off the ice at the end. When a lateral scale is given, the
+   * lateral side offsets are scaled by that factor. Swapped when crossed, or
+   * when the stroke goes backwards. */
+  private dynamicFootKeyframes(footKey: "footL" | "footR", lateralScale?: number): FootKeyframe[] {
     const [start, t95, end] = this.keyframeCoordinates();
+    const scale = lateralScale ?? 1;
     const gliding = footKey === (this.left ? "footL" : "footR");
-    let side = footKey === "footL" ? halfFeetSpacing : -halfFeetSpacing;
+    let side = (footKey === "footL" ? halfFeetSpacing : -halfFeetSpacing) * scale;
     const swapped = this.crossed || !this.forward;
     if (swapped) {
       side = -side;
@@ -462,15 +467,16 @@ export abstract class DynamicGlide extends Glide {
     if (gliding) {
       const centered = onIceData(new Vector<3>(0, 0, 0));
       return [
-        new FootKeyframe(start, onIceData(new Vector<3>(0, side, 0)), "smooth", "smooth"),
-        new FootKeyframe(t95, centered, "smooth", "smooth"),
-        new FootKeyframe(end, centered, "smooth", "smooth"),
+        new FootKeyframe(start, centered, "linear", "linear"),
+        new FootKeyframe(t95, centered, "linear", "linear"),
+        new FootKeyframe(end, centered, "linear", "linear"),
       ];
     }
+    const doubleSide = side * 2;
     return [
-      new FootKeyframe(start, onIceData(new Vector<3>(0, side, 0)), "smooth", "smooth"),
-      new FootKeyframe(t95, onIceData(new Vector<3>(offset, side, 0)), "smooth", "smooth"),
-      new FootKeyframe(end, onIceData(new Vector<3>(offset, side, offIceFootHeight)), "smooth", "smooth"),
+      new FootKeyframe(start, onIceData(new Vector<3>(0, side, 0)), "linear", "linear"),
+      new FootKeyframe(t95, onIceData(new Vector<3>(offset, doubleSide, 0)), "linear", "linear"),
+      new FootKeyframe(end, onIceData(new Vector<3>(offset, doubleSide, offIceFootHeight)), "linear", "linear"),
     ];
   }
 

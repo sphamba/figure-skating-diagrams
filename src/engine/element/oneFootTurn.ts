@@ -27,12 +27,12 @@ export abstract class OneFootTurn extends FootTurn {
     return (this.end - this.pathCoordinate) as PathCoordinate;
   }
 
-  getLeftFootKeyframes(spanScale?: number): FootKeyframe[] {
-    return this.partFootKeyframes("footL", spanScale);
+  getLeftFootKeyframes(spanScale?: number, lateralScale?: number): FootKeyframe[] {
+    return this.partFootKeyframes("footL", spanScale, lateralScale);
   }
 
-  getRightFootKeyframes(spanScale?: number): FootKeyframe[] {
-    return this.partFootKeyframes("footR", spanScale);
+  getRightFootKeyframes(spanScale?: number, lateralScale?: number): FootKeyframe[] {
+    return this.partFootKeyframes("footR", spanScale, lateralScale);
   }
 
   getHipsKeyframes(spanScale?: number): HipsKeyframe[] {
@@ -42,20 +42,22 @@ export abstract class OneFootTurn extends FootTurn {
 
   /** Keyframes for one foot: turn keyframes for the on-ice foot, minimal
    * keyframes for the free foot. */
-  private partFootKeyframes(footKey: "footL" | "footR", spanScale?: number): FootKeyframe[] {
+  private partFootKeyframes(footKey: "footL" | "footR", spanScale?: number, lateralScale?: number): FootKeyframe[] {
     const [start, end] = this.keyframeSpan(spanScale);
     return footKey === this.footKey
-      ? this.createOnIceFootKeyframes(start, end)
-      : this.createFreeFootKeyframes(start, end);
+      ? this.createOnIceFootKeyframes(start, end, lateralScale)
+      : this.createFreeFootKeyframes(start, end, lateralScale);
   }
 
   /** Minimal keyframes for the free foot: two keyframes at the ends of the
    * span, shifted like the off-ice foot of the glide elements: half the foot
    * spacing to its side of the lateral center, lifted off the ice at a fixed
    * height, facing the direction of travel. The free foot sits opposite the
-   * on-ice foot of the turn. */
-  protected createFreeFootKeyframes(start: PathCoordinate, end: PathCoordinate): FootKeyframe[] {
-    const side = this.footKey === "footL" ? -halfFeetSpacing : halfFeetSpacing;
+   * on-ice foot of the turn. When a lateral scale is given, that lateral
+   * shift is scaled by the factor. */
+  protected createFreeFootKeyframes(start: PathCoordinate, end: PathCoordinate, lateralScale?: number): FootKeyframe[] {
+    const scale = lateralScale ?? 1;
+    const side = (this.footKey === "footL" ? -halfFeetSpacing : halfFeetSpacing) * scale;
     const data: FootData = {
       position: new Vector<3>(0, side, offIceFootHeight),
       orientation: getQuaternionFromAngleAxis(this.forward ? 0 : Math.PI),
@@ -74,6 +76,12 @@ export abstract class OneFootTurn extends FootTurn {
     return [new HipsKeyframe(start, data, "smooth", "smooth"), new HipsKeyframe(end, data, "smooth", "smooth")];
   }
 
-  /** Compute the turn keyframes for the on-ice foot from the element's span. */
-  protected abstract createOnIceFootKeyframes(start: PathCoordinate, end: PathCoordinate): FootKeyframe[];
+  /** Compute the turn keyframes for the on-ice foot from the element's span.
+   * When a lateral scale is given, the lateral shift is scaled by the
+   * factor. */
+  protected abstract createOnIceFootKeyframes(
+    start: PathCoordinate,
+    end: PathCoordinate,
+    lateralScale?: number,
+  ): FootKeyframe[];
 }

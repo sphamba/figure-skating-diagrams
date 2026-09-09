@@ -65,8 +65,10 @@ export abstract class Loop extends OneFootTurn {
     return keyframes;
   }
 
-  createOnIceFootKeyframes(start: PathCoordinate, end: PathCoordinate): FootKeyframe[] {
+  createOnIceFootKeyframes(start: PathCoordinate, end: PathCoordinate, lateralScale?: number): FootKeyframe[] {
     const pathCoordinate = ((start + end) / 2) as PathCoordinate;
+    const scale = lateralScale ?? 1;
+    const lateralShift = (this.clockwise ? 1 : -1) * (this.forward ? 1 : -1) * defaultLoopShift * scale;
     const pathLengthEntry = (pathCoordinate - start) as PathCoordinate;
     const pathLengthExit = (end - pathCoordinate) as PathCoordinate;
     const pathCoordinateShifts = [-pathLengthEntry, 0, pathLengthExit];
@@ -74,7 +76,6 @@ export abstract class Loop extends OneFootTurn {
       (pathCoordinateShift) => (pathCoordinate + pathCoordinateShift) as PathCoordinate,
     );
     const contactPoints = [0.5, this.contactPointTurn, 0.5];
-    const lateralShift = (this.clockwise ? 1 : -1) * (this.forward ? 1 : -1) * defaultLoopShift;
     // No shift relative to the centerline at the start and the end of the
     // turn; the shift happens in the middle of the turn only.
     const positions = [

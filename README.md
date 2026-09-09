@@ -1,6 +1,9 @@
 # Figure Skating Diagrams
 
-A web application to create and view figure skating diagrams. Built with Vue 3, Vite, TypeScript, and Pinia.
+A web application to create and view figure skating diagrams.
+
+Live demo: [https://sphamba.github.io/figure-skating-diagrams/](https://sphamba.github.io/figure-skating-diagrams/)
+
 
 ## Project structure
 
