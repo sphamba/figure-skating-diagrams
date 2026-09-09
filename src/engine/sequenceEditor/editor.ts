@@ -13,7 +13,7 @@ export type ControlPointKey = "p0" | "p1" | "p2" | "p3";
 const RINK_COLOR = "#ccc";
 const PATH_WIDTH = 1; // px
 /** Minimum blade trace width, in screen pixels. Only limits the trace when zoomed out. */
-const MIN_TRACE_WIDTH = 1; // px
+const MIN_TRACE_WIDTH = 2; // px
 /**
  * Minimum blade length, in screen pixels, used when element scaling is on.
  * Only has effect when zoomed out (a blade shorter than this would be hard to
@@ -329,19 +329,51 @@ export class Editor {
     // proportions).
     const minBladeLength =
       this.scaleElements && this.mode !== "elements" ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
-    // Draw the path and the foot traces (same as the home page).
     // In "elements" mode the path is drawn in solid black.
     const pathColor = this.mode === "elements" ? ELEMENTS_PATH_COLOR : undefined;
-    sequence.draw(
-      this.ctx,
-      pathWidth,
-      0 as PathCoordinate,
-      undefined,
-      pathColor,
-      minTraceWidth,
-      minBladeLength,
-      MIN_DRAW_INCREMENT / this.view.zoom,
-    );
+    const minDrawIncrement = MIN_DRAW_INCREMENT / this.view.zoom;
+    if (this.mode === "path" && !pathColor) {
+      // In path edit mode the foot traces are drawn at 50% opacity, so the
+      // control points stay easy to read against them.
+      sequence.drawPath(this.ctx, pathWidth, 0 as PathCoordinate, undefined, pathColor);
+      this.ctx.globalAlpha = 0.5;
+      sequence.drawFootTraces(
+        this.ctx,
+        0 as PathCoordinate,
+        undefined,
+        minTraceWidth,
+        minBladeLength,
+        minDrawIncrement,
+      );
+      this.ctx.globalAlpha = 1;
+    } else if (this.mode === "elements") {
+      // In elements edit mode the path is drawn at 50% opacity, so the element
+      // under it stays easy to read.
+      this.ctx.globalAlpha = 0.5;
+      sequence.drawPath(this.ctx, pathWidth, 0 as PathCoordinate, undefined, pathColor);
+      this.ctx.globalAlpha = 1;
+      sequence.drawFootTraces(
+        this.ctx,
+        0 as PathCoordinate,
+        undefined,
+        minTraceWidth,
+        minBladeLength,
+        minDrawIncrement,
+      );
+    } else {
+      // Draw the path and the foot traces (same as the home page) for the
+      // overlay sequences and the "view" mode.
+      sequence.draw(
+        this.ctx,
+        pathWidth,
+        0 as PathCoordinate,
+        undefined,
+        pathColor,
+        minTraceWidth,
+        minBladeLength,
+        minDrawIncrement,
+      );
+    }
   }
 
   /** Draw the selected curves on top of the path, in a highlight color. */

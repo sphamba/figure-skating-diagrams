@@ -100,6 +100,7 @@ function makeEditor() {
   const path = new Path();
   path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
   const editor = new Editor(canvas, new Sequence(path));
+  editor.mode = "path";
   return { editor, canvas };
 }
 
