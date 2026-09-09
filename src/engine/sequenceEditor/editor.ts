@@ -25,7 +25,7 @@ const MIN_BLADE_LENGTH = 15; // px
  * up to keep each drawn segment at least one pixel long. */
 const MIN_DRAW_INCREMENT = 1; // px
 /** Path color in "elements" mode: translucent grey so the path stays visible but de-emphasized. */
-const ELEMENTS_PATH_COLOR = "rgba(128, 128, 128, 0.35)";
+const ELEMENTS_PATH_COLOR = "#000";
 /** Path-coordinate step used to trace an element along the path. */
 const ELEMENT_DRAW_INCREMENT = 0.02;
 const NODE_SIZE = 10; // px
@@ -65,7 +65,7 @@ type ViewState = {
 };
 
 /** The active editing tool set. Navigation works in every mode. */
-export type EditMode = "path" | "elements";
+export type EditMode = "view" | "path" | "elements";
 
 type ControlPointSelection = {
   curveIndex: number;
@@ -88,8 +88,9 @@ export class Editor {
   height = 0;
 
   sequence: Sequence;
-  /** Current editing mode. "elements" disables path editing for now. */
-  mode: EditMode = "path";
+  /** Current editing mode. "view" shows the drawing with navigation only;
+   * "elements" disables path editing for now. */
+  mode: EditMode = "view";
   /** When true, the foot traces use a minimum blade length, and the element
    * spans are scaled by the same factor about their middle point. */
   scaleElements = true;
@@ -256,25 +257,39 @@ export class Editor {
     ctx.clearRect(0, 0, this.width, this.height);
     this.transformContext();
     this.drawRink();
-    this.drawPath();
-    for (const sequence of this.overlaySequences) {
-      this.drawPath(sequence);
+    // In "view" mode only the scaled foot traces are drawn: no path line, no
+    // element selectors, just the traces over the rink (and the overlays).
+    if (this.mode !== "view") {
+      this.drawPath();
+      for (const sequence of this.overlaySequences) {
+        this.drawPath(sequence);
+      }
     }
     this.drawSelectedCurves();
     // Path-editing controls (control points, add/split/delete buttons,
     // selection rectangle) are only meaningful while editing the path.
-    // In "elements" mode they are hidden, and selection is empty.
-    if (this.mode !== "elements") {
+    // In "view" and "elements" modes they are hidden, and selection is empty.
+    if (this.mode === "path") {
       this.drawControlHandles();
       this.drawAddButton();
       this.drawSplitButtons();
       this.drawDeleteButton();
-    } else {
+    } else if (this.mode === "elements") {
       this.drawElements();
+    } else {
+      this.drawTraces();
     }
     ctx.restore();
     // Selection rectangle, for both editing modes.
     this.drawSelectionRectangle();
+  }
+
+  /** Draw the foot traces (scaled when element scaling is on), without the
+   * path line or any editing controls. Used in "view" mode. */
+  private drawTraces() {
+    const minTraceWidth = MIN_TRACE_WIDTH / this.view.zoom;
+    const minBladeLength = this.scaleElements ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
+    this.sequence.drawTraces(this.ctx, minTraceWidth, minBladeLength, MIN_DRAW_INCREMENT / this.view.zoom);
   }
 
   private transformContext() {
@@ -310,10 +325,12 @@ export class Editor {
     // (a trace thinner than one screen pixel would become hard to follow).
     const minTraceWidth = MIN_TRACE_WIDTH / this.view.zoom;
     // Minimum blade length in path units, only effective when zoomed out, and
-    // only in "path" mode (elements mode always shows real proportions).
-    const minBladeLength = this.scaleElements && this.mode === "path" ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
+    // only in "view" and "path" modes (elements mode always shows real
+    // proportions).
+    const minBladeLength =
+      this.scaleElements && this.mode !== "elements" ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
     // Draw the path and the foot traces (same as the home page).
-    // In "elements" mode the path is de-emphasized in translucent grey.
+    // In "elements" mode the path is drawn in solid black.
     const pathColor = this.mode === "elements" ? ELEMENTS_PATH_COLOR : undefined;
     sequence.draw(
       this.ctx,
@@ -410,7 +427,8 @@ export class Editor {
    * the path does not exist.
    */
   private getDisplayedSpan(element: Element): [PathCoordinate, PathCoordinate] {
-    const minBladeLength = this.scaleElements && this.mode === "path" ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
+    const minBladeLength =
+      this.scaleElements && this.mode !== "elements" ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
     const factor = this.sequence.getBladeLengthScale(minBladeLength);
     const [start, end] = factor === 1 ? [element.start, element.end] : element.scaleAboutMiddle(factor);
     const pathLength = this.sequence.path.length;
@@ -1392,6 +1410,9 @@ export class Editor {
 
     if (event.button === 0) {
       const [screenX, screenY] = this.screenPosition(event);
+
+      // "view" mode: navigation only. The left button does nothing.
+      if (this.mode === "view") return;
 
       // "elements" mode: clicking any part of an element selects it. Clicking
       // an endpoint control point starts dragging that point along the path;

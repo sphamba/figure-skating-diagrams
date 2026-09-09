@@ -22,10 +22,11 @@ const canvasRef = ref<HTMLCanvasElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 
 const editModeOptions = [
+  { label: "View", value: "view" },
   { label: "Path", value: "path" },
   { label: "Elements", value: "elements" },
 ];
-const editMode = ref<EditMode>("path");
+const editMode = ref<EditMode>("view");
 /** When checked, foot traces and elements are scaled up when zoomed out. */
 const scaleElements = ref(true);
 
@@ -50,30 +51,35 @@ type HelpItem = { keys: string[]; description: string };
 
 /** Help commands that are actually usable in the current edit mode. */
 const helpItems = computed<HelpItem[]>(() =>
-  editMode.value === "elements"
+  editMode.value === "view"
     ? [
         { keys: ["wheel"], description: "zoom" },
         { keys: ["right drag"], description: "move the view" },
-        { keys: ["left drag"], description: "on empty space: draw a selection rectangle" },
-        { keys: ["left click"], description: "on the path: create a provisional element" },
-        { keys: ["left drag"], description: "on the path: create a provisional element over the dragged range" },
-        { keys: ["drag"], description: "a provisional element: move it or its ends" },
-        { keys: ["+"], description: "on the provisional element: add it to the sequence" },
       ]
-    : [
-        { keys: ["wheel"], description: "zoom" },
-        { keys: ["left click"], description: "on a control point: select it" },
-        { keys: ["left click"], description: "on a line: select that curve" },
-        { keys: ["drag"], description: "a selected curve: move it (and the others selected)" },
-        { keys: ["left drag"], description: "on empty space: draw a selection rectangle" },
-        { keys: ["drag"], description: "one of the selected points: move all selected points" },
-        { keys: ["ctrl", "left click"], description: "add or remove from the selection" },
-        { keys: ["ctrl", "A"], description: "select all" },
-        { keys: ["right drag"], description: "move the view" },
-        { keys: ["+"], description: "button near the end of the path: add a segment" },
-        { keys: ["+"], description: "button at the midpoint of a selected curve: split it" },
-        { keys: ["−"], description: "button beside a selected point: remove that point" },
-      ],
+    : editMode.value === "elements"
+      ? [
+          { keys: ["wheel"], description: "zoom" },
+          { keys: ["right drag"], description: "move the view" },
+          { keys: ["left drag"], description: "on empty space: draw a selection rectangle" },
+          { keys: ["left click"], description: "on the path: create a provisional element" },
+          { keys: ["left drag"], description: "on the path: create a provisional element over the dragged range" },
+          { keys: ["drag"], description: "a provisional element: move it or its ends" },
+          { keys: ["+"], description: "on the provisional element: add it to the sequence" },
+        ]
+      : [
+          { keys: ["wheel"], description: "zoom" },
+          { keys: ["left click"], description: "on a control point: select it" },
+          { keys: ["left click"], description: "on a line: select that curve" },
+          { keys: ["drag"], description: "a selected curve: move it (and the others selected)" },
+          { keys: ["left drag"], description: "on empty space: draw a selection rectangle" },
+          { keys: ["drag"], description: "one of the selected points: move all selected points" },
+          { keys: ["ctrl", "left click"], description: "add or remove from the selection" },
+          { keys: ["ctrl", "A"], description: "select all" },
+          { keys: ["right drag"], description: "move the view" },
+          { keys: ["+"], description: "button near the end of the path: add a segment" },
+          { keys: ["+"], description: "button at the midpoint of a selected curve: split it" },
+          { keys: ["−"], description: "button beside a selected point: remove that point" },
+        ],
 );
 
 let editor: Editor | null = null;
@@ -199,7 +205,7 @@ function closeElementChange() {
               :allow-empty="false"
               class="w-full"
             />
-            <div v-if="editMode === 'path'" class="editor-view__scale-checkbox">
+            <div v-if="editMode !== 'elements'" class="editor-view__scale-checkbox">
               <Checkbox v-model="scaleElements" binary input-id="scale-elements" />
               <label for="scale-elements">Scale elements</label>
             </div>

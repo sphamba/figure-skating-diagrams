@@ -249,6 +249,24 @@ export class Sequence {
     this.drawFootTraces(ctx, uStart, uEnd, minTraceWidth, minBladeLength, minDrawIncrement);
   }
 
+  /** Draw only the foot traces (no path line), from the start to the end of
+   * the path. Element scaling applies through minBladeLength. */
+  drawTraces(
+    ctx: CanvasRenderingContext2DSized,
+    minTraceWidth?: number,
+    minBladeLength?: number,
+    minDrawIncrement?: number,
+  ) {
+    this.drawFootTraces(
+      ctx,
+      0 as PathCoordinate,
+      this.path.length as PathCoordinate,
+      minTraceWidth,
+      minBladeLength,
+      minDrawIncrement,
+    );
+  }
+
   /**
    * Get the path coordinate u at a given time t using the clock.
    * @param time - Time in seconds.
