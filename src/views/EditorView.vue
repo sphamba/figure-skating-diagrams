@@ -9,15 +9,12 @@ import Checkbox from "openvue/checkbox";
 import Dialog from "openvue/dialog";
 import Listbox from "openvue/listbox";
 import { Editor, type EditMode } from "@/engine/sequenceEditor/editor";
-import { BothForwardGlide } from "@/engine/element/glide";
-import { Path } from "@/engine/path";
-import { Sequence, type SequenceJSON } from "@/engine/sequence";
+import type { SequenceJSON } from "@/engine/sequence";
 import { changeElementType } from "@/engine/element/turnTypes";
 import type { PathCoordinate } from "@/engine/coordinates";
 import type { Element } from "@/engine/element/element";
 import type { PatternJSON } from "@/engine/pattern";
-import { Curve } from "@/engine/curve";
-import { Vector } from "@/engine/vector";
+import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -203,6 +200,11 @@ const helpItems = computed<HelpItem[]>(() =>
 
 let editor: Editor | null = null;
 
+const store = useSequenceEditorStore();
+
+/** Whether the user confirmed the Clear action in the dialog. */
+const clearOpen = ref(false);
+
 watch(editMode, (mode) => {
   if (editor) {
     editor.mode = mode;
@@ -222,23 +224,10 @@ watch(
   { immediate: true },
 );
 
-/** Sequence shown when the editor opens. */
-function defaultSequence(): Sequence {
-  // A single straight cubic Bezier curve: 5 m long, horizontal, centered on
-  // the origin. Control points are collinear, so the curve stays a line.
-  const path = new Path();
-  path.curves.push(new Curve(new Vector(-2.5, 0), new Vector(-0.5, 0), new Vector(0.5, 0), new Vector(2.5, 0)));
-  path.updateLength();
-  const sequence = new Sequence(path);
-  // A two-foot glide at the very beginning of the sequence: both its start
-  // and end at 0.
-  sequence.addElement(new BothForwardGlide(0 as PathCoordinate, 0 as PathCoordinate));
-  return sequence;
-}
-
 onMounted(() => {
   if (!canvasRef.value) return;
-  editor = new Editor(canvasRef.value, defaultSequence());
+  // The state comes from the store: it was loaded from local storage on startup.
+  editor = new Editor(canvasRef.value, store.getSequence());
 
   // Open the element kind picker when the user clicks the cog button on the
   // single selected element.
@@ -269,7 +258,8 @@ async function onFileSelected(event: Event) {
   try {
     const json = JSON.parse(await file.text()) as PatternJSON | SequenceJSON;
     const sequence = isPattern(json) ? (json.sequences[0] as SequenceJSON) : json;
-    editor?.setSequence(Sequence.fromJSON(sequence));
+    store.loadFromJSON(sequence);
+    editor?.setSequence(store.getSequence());
   } catch (error) {
     console.error("Could not open sequence file:", error);
   } finally {
@@ -283,8 +273,7 @@ function isPattern(json: PatternJSON | SequenceJSON): json is PatternJSON {
 
 function saveFile() {
   if (!editor) return;
-  const json = editor.getSequence().toJSON();
-  const blob = new Blob([JSON.stringify(json, null, 2)], { type: "application/json" });
+  const blob = new Blob([store.toJSON()], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -306,7 +295,20 @@ function changeElementKind(kind: string) {
   sequence.replaceElement(current, replacement);
   editor.replaceSelectedElement(current, replacement);
   elementToChange.value = replacement;
+  // The sequence changed, so the persisted state must be updated too.
+  store.saveToStorage();
   editor.draw();
+}
+
+/** Confirmed clear: put back the default sequence and update local storage. */
+function onClearConfirmed() {
+  store.clear();
+  editor?.setSequence(store.getSequence());
+  closeClear();
+}
+
+function closeClear() {
+  clearOpen.value = false;
 }
 
 /** Choose a kind on step 1 and go to the next step. */
@@ -409,8 +411,9 @@ function closeElementChange() {
           </div>
 
           <div class="editor-view__actions">
-            <Button label="Open JSON" icon="pi pi-folder-open" class="w-full" @click="openFile" />
+            <Button label="Open JSON" icon="pi pi-folder-open" class="w-full" severity="secondary" @click="openFile" />
             <Button label="Save JSON" icon="pi pi-save" class="w-full" severity="secondary" @click="saveFile" />
+            <Button label="Clear" icon="pi pi-trash" class="w-full" severity="danger" @click="clearOpen = true" />
           </div>
 
           <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFileSelected" />
@@ -505,6 +508,21 @@ function closeElementChange() {
           @click="previousElementChangeStep"
         />
         <Button label="Close" severity="secondary" icon="pi pi-times" @click="closeElementChange" />
+      </template>
+    </Dialog>
+
+    <!-- Confirm dialog for the Clear action. -->
+    <Dialog
+      v-model:visible="clearOpen"
+      header="Clear sequence"
+      modal
+      class="editor-view__clear-dialog"
+      @hide="closeClear"
+    >
+      <p>Put back the default sequence? The current sequence will be lost.</p>
+      <template #footer>
+        <Button label="Cancel" severity="secondary" icon="pi pi-times" @click="closeClear" />
+        <Button label="Clear" severity="danger" icon="pi pi-trash" @click="onClearConfirmed" />
       </template>
     </Dialog>
   </div>
@@ -604,6 +622,10 @@ function closeElementChange() {
 }
 
 .editor-view__element-dialog {
+  width: 320px;
+}
+
+.editor-view__clear-dialog {
   width: 320px;
 }
 
