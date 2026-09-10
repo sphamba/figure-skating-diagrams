@@ -48,7 +48,7 @@ export abstract class DynamicGlide extends Glide {
     const scale = lateralScale ?? 1;
     const gliding = footKey === (this.left ? "footL" : "footR");
     let side = (footKey === "footL" ? halfFeetSpacing : -halfFeetSpacing) * scale;
-    const swapped = this.crossed || !this.forward;
+    const swapped = this.crossed;
     if (swapped) {
       side = -side;
     }

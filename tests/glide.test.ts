@@ -58,8 +58,19 @@ test("a crossed forward glide swaps the sides of the centerline", () => {
 	expectData(expectAt(g.getLeftFootKeyframes() as unknown as Kf[], 2, end), -FREE_OFFSET, -2 * SPACING, 0.2);
 });
 
-test("a normal backwards glide swaps the sides like a crossed forward one", () => {
+test("a normal backwards glide keeps the keyframe side, the foot orientation mirrors it", () => {
 	const g = glide("LeftNormalBackwardInsideGlide");
+
+	expectData(expectAt(g.getLeftFootKeyframes() as unknown as Kf[], 0, start), 0, 0, 0);
+	// The backward foot orientation mirrors the visible lateral offset, so the
+	// keyframes match a forward normal glide, with the longitudinal offset flipped.
+	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 0, start), 0, -SPACING, 0);
+	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 1, T95), FREE_OFFSET, -2 * SPACING, 0);
+	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 2, end), FREE_OFFSET, -2 * SPACING, 0.2);
+});
+
+test("a crossed backwards glide swaps the sides like a crossed forward one", () => {
+	const g = glide("LeftCrossedBackwardInsideGlide");
 
 	expectData(expectAt(g.getLeftFootKeyframes() as unknown as Kf[], 0, start), 0, 0, 0);
 	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 0, start), 0, SPACING, 0);
