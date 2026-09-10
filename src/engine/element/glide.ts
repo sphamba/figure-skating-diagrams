@@ -50,6 +50,10 @@ export abstract class Glide extends Element {
     return this.config.edge;
   }
 
+  get clockwise(): boolean {
+    return (this.leftOnIce === (this.edge === "inside")) === this.forward;
+  }
+
   getLeftFootKeyframes(_spanScale?: number, lateralScale?: number): FootKeyframe[] {
     return this.createFootKeyframes("footL", this.leftOnIce, lateralScale);
   }

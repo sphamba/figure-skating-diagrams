@@ -7,7 +7,7 @@ import { LENGTH, WIDTH, CORNER_RADIUS } from "../rink.js";
 import type { CanvasRenderingContext2DSized } from "../rinkCanvas.js";
 import { createDefaultFootTurn } from "../element/turnTypes.js";
 import { Sequence } from "../sequence.js";
-import { checkSequenceTurnCurvatures } from "./curvatureWarning.js";
+import { checkSequenceCurvatures } from "./curvatureWarning.js";
 import { Vector } from "../vector.js";
 
 const WARNING_TRIANGLE_COLOR = "#c25205";
@@ -496,7 +496,7 @@ export class Editor {
   }
 
   private drawCurvatureWarnings() {
-    const checks = checkSequenceTurnCurvatures(this.sequence);
+    const checks = checkSequenceCurvatures(this.sequence);
     for (const check of checks) {
       if (!check.invalid) continue;
       this.drawWarningTriangle(check.point, WARNING_TRIANGLE_COLOR);

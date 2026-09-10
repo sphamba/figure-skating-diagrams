@@ -6,11 +6,15 @@ import { Sequence } from "../src/engine/sequence";
 import { Vector, getUnitVectorFromAngle } from "../src/engine/vector";
 import { LeftForwardInsideThreeTurn, LeftForwardOutsideThreeTurn } from "../src/engine/element/threeTurn";
 import {
-  checkSequenceTurnCurvatures,
+  checkGlideCurvature,
+  checkSequenceCurvatures,
   checkTurnCurvature,
+  isGlideElement,
+  isStrokeElement,
   isTurnElement,
 } from "../src/engine/sequenceEditor/curvatureWarning";
-import { LeftForwardInsideGlide } from "../src/engine/element/glide";
+import { type Glide, glideConstructorsByType, LeftForwardInsideGlide } from "../src/engine/element/glide";
+import { DynamicGlide, LeftNormalForwardInsideGlide } from "../src/engine/element/stroke";
 import { Element } from "../src/engine/element/element";
 
 function getArcCurve(center: Vector<2>, radius: number, startAngle: number, endAngle: number): Curve {
@@ -88,16 +92,194 @@ test("A counterclockwise turn on a counterclockwise path is valid", () => {
   expect(checkTurnCurvature(sequence, element)[0].invalid).toBe(false);
 });
 
-test("Only one-foot turn elements are checked", () => {
+test("Turn, stroke, and glide elements are checked", () => {
   const path = clockwisePath();
   const sequence = new Sequence(path);
   const turn = new LeftForwardInsideThreeTurn("footL", 1 as PathCoordinate, 3 as PathCoordinate);
+  const stroke: Element = new LeftNormalForwardInsideGlide(0 as PathCoordinate, 1 as PathCoordinate);
   const glide: Element = new LeftForwardInsideGlide(0 as PathCoordinate, 1 as PathCoordinate);
   sequence.addElement(turn);
+  sequence.addElement(stroke);
   sequence.addElement(glide);
 
-  const checks = checkSequenceTurnCurvatures(sequence, []);
-  expect(checks.length).toBe(1);
+  const checks = checkSequenceCurvatures(sequence, []);
+  expect(checks.length).toBe(3);
   expect(isTurnElement(glide)).toBe(false);
   expect(isTurnElement(turn)).toBe(true);
+  expect(isStrokeElement(glide)).toBe(false);
+  expect(isStrokeElement(stroke)).toBe(true);
+  expect(isGlideElement(glide)).toBe(true);
+  expect(isGlideElement(stroke)).toBe(false);
+});
+
+test("A stroke on a matching path is valid", () => {
+  const path = clockwisePath();
+  const sequence = new Sequence(path);
+  const stroke = new LeftNormalForwardInsideGlide(
+    (path.length / 4) as PathCoordinate,
+    ((3 * path.length) / 4) as PathCoordinate,
+  );
+  sequence.addElement(stroke);
+
+  const checks = checkSequenceCurvatures(sequence);
+  expect(checks.length).toBe(1);
+  expect(checks[0].expectedSign).toBe(-1);
+  expect(checks[0].invalid).toBe(false);
+});
+
+test("A stroke on an opposite path is invalid", () => {
+  const path = counterclockwisePath();
+  const sequence = new Sequence(path);
+  const stroke = new LeftNormalForwardInsideGlide(
+    (path.length / 4) as PathCoordinate,
+    ((3 * path.length) / 4) as PathCoordinate,
+  );
+  sequence.addElement(stroke);
+
+  const checks = checkSequenceCurvatures(sequence);
+  expect(checks.length).toBe(1);
+  expect(checks[0].expectedSign).toBe(-1);
+  expect(checks[0].invalid).toBe(true);
+});
+
+test("A stroke with a neither edge is not checked", () => {
+  const path = clockwisePath();
+  const sequence = new Sequence(path);
+  const stroke = new (glideConstructorsByType["LeftNormalForwardGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => DynamicGlide)((path.length / 4) as PathCoordinate, ((3 * path.length) / 4) as PathCoordinate);
+  sequence.addElement(stroke);
+
+  expect(checkSequenceCurvatures(sequence)).toHaveLength(0);
+});
+
+test("A stroke is checked only at its end point", () => {
+  const path = new Path();
+  const radius = 5;
+  path.addCurveEnd(getArcCurve(new Vector(0, radius), radius, -Math.PI / 2, Math.PI / 2));
+  path.addCurveEnd(getArcCurve(new Vector(0, 3 * radius), radius, (3 * Math.PI) / 2, Math.PI / 2));
+  const sequence = new Sequence(path);
+  const stroke = new LeftNormalForwardInsideGlide((path.length / 4) as PathCoordinate, path.length as PathCoordinate);
+  sequence.addElement(stroke);
+
+  const checks = checkSequenceCurvatures(sequence);
+  expect(checks.length).toBe(1);
+  expect(checks[0].expectedSign).toBe(-1);
+  expect(checks[0].invalid).toBe(false);
+  const [curve, curvilinear] = path.getCurveAndCurvilinearCoord(path.length as PathCoordinate);
+  const expected = curve.getPosition(curvilinear);
+  expect(checks[0].point.x).toBeCloseTo(expected.x, 10);
+  expect(checks[0].point.y).toBeCloseTo(expected.y, 10);
+});
+
+test("A backward stroke on a matching path is valid", () => {
+  const path = counterclockwisePath();
+  const sequence = new Sequence(path);
+  const stroke = new (glideConstructorsByType["LeftNormalBackwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => DynamicGlide)((path.length / 4) as PathCoordinate, ((3 * path.length) / 4) as PathCoordinate);
+  sequence.addElement(stroke);
+
+  const checks = checkSequenceCurvatures(sequence);
+  expect(checks.length).toBe(1);
+  expect(checks[0].expectedSign).toBe(1);
+  expect(checks[0].invalid).toBe(false);
+});
+
+test("A crossed stroke is checked like a normal stroke", () => {
+  const path = clockwisePath();
+  const sequence = new Sequence(path);
+  const stroke = new (glideConstructorsByType["LeftCrossedForwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => DynamicGlide)((path.length / 4) as PathCoordinate, ((3 * path.length) / 4) as PathCoordinate);
+  sequence.addElement(stroke);
+
+  const checks = checkSequenceCurvatures(sequence);
+  expect(checks.length).toBe(1);
+  expect(checks[0].invalid).toBe(false);
+});
+
+test("A glide on a matching path is valid", () => {
+  const path = clockwisePath();
+  const sequence = new Sequence(path);
+  const glide = new LeftForwardInsideGlide(
+    (path.length / 4) as PathCoordinate,
+    ((3 * path.length) / 4) as PathCoordinate,
+  );
+  sequence.addElement(glide);
+
+  const checks = checkSequenceCurvatures(sequence);
+  expect(checks.length).toBe(1);
+  expect(checks[0].expectedSign).toBe(-1);
+  expect(checks[0].invalid).toBe(false);
+});
+
+test("A glide on an opposite path is invalid", () => {
+  const path = counterclockwisePath();
+  const sequence = new Sequence(path);
+  const glide = new LeftForwardInsideGlide(
+    (path.length / 4) as PathCoordinate,
+    ((3 * path.length) / 4) as PathCoordinate,
+  );
+  sequence.addElement(glide);
+
+  const checks = checkGlideCurvature(sequence, glide);
+  expect(checks.length).toBe(1);
+  expect(checks[0].expectedSign).toBe(-1);
+  expect(checks[0].invalid).toBe(true);
+});
+
+test("A glide with a neither edge is not checked", () => {
+  const path = clockwisePath();
+  const sequence = new Sequence(path);
+  const glide = new (glideConstructorsByType["LeftForwardGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => Glide)((path.length / 4) as PathCoordinate, ((3 * path.length) / 4) as PathCoordinate);
+  sequence.addElement(glide);
+
+  expect(checkSequenceCurvatures(sequence)).toHaveLength(0);
+});
+
+test("A backward glide on a matching path is valid", () => {
+  const path = counterclockwisePath();
+  const sequence = new Sequence(path);
+  const glide = new (glideConstructorsByType["LeftBackwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => Glide)((path.length / 4) as PathCoordinate, ((3 * path.length) / 4) as PathCoordinate);
+  sequence.addElement(glide);
+
+  const checks = checkSequenceCurvatures(sequence);
+  expect(checks.length).toBe(1);
+  expect(checks[0].expectedSign).toBe(1);
+  expect(checks[0].invalid).toBe(false);
+});
+
+test("A glide is checked only at its middle point", () => {
+  const path = new Path();
+  const radius = 5;
+  path.addCurveEnd(getArcCurve(new Vector(0, radius), radius, -Math.PI / 2, Math.PI / 2));
+  path.addCurveEnd(getArcCurve(new Vector(0, 3 * radius), radius, (3 * Math.PI) / 2, Math.PI / 2));
+  path.addCurveEnd(getArcCurve(new Vector(0, 5 * radius), radius, -Math.PI / 2, Math.PI / 2));
+  const sequence = new Sequence(path);
+  const glide = new LeftForwardInsideGlide(
+    (path.length / 4) as PathCoordinate,
+    ((0.95 * path.length) as PathCoordinate),
+  );
+  sequence.addElement(glide);
+
+  const checks = checkSequenceCurvatures(sequence);
+  expect(checks.length).toBe(1);
+  expect(checks[0].expectedSign).toBe(-1);
+  expect(checks[0].invalid).toBe(false);
+  const [start, end] = [path.length / 4, 0.95 * path.length];
+  const midU = ((Math.min(start, end) + Math.max(start, end)) / 2) as PathCoordinate;
+  const [curve, curvilinear] = path.getCurveAndCurvilinearCoord(midU);
+  const expectedPoint = curve.getPosition(curvilinear);
+  expect(checks[0].point.x).toBeCloseTo(expectedPoint.x, 10);
+  expect(checks[0].point.y).toBeCloseTo(expectedPoint.y, 10);
 });
