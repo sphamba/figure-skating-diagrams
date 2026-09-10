@@ -16,6 +16,10 @@ const WARNING_TRIANGLE_SIZE = 30; // px, side length of the filled warning trian
 export type ControlPointKey = "p0" | "p1" | "p2" | "p3";
 
 const RINK_COLOR = "#ccc";
+const RINK_CENTERLINE_COLOR = "#fff";
+const RINK_CENTERLINE_WIDTH = 3; // px on screen
+const RINK_CENTERLINE_DASH = 10; // dash, px on screen
+const RINK_CENTERLINE_GAP = 6; // gap, px on screen
 const PATH_WIDTH = 1; // px
 const MIN_TRACE_WIDTH = 2; // px
 const MIN_BLADE_LENGTH = 25; // px, only effective when zoomed out
@@ -34,7 +38,7 @@ const ADD_BUTTON_LINE_WIDTH = 1.5; // px
 const ADD_PLUS_LENGTH = 7; // px
 const ADD_BUTTON_HIT_RADIUS = 9; // px, slightly above the drawn radius
 const ADD_BUTTON_COLOR = "#d33";
-const DELETE_BUTTON_OFFSET = 14; // px
+const DELETE_BUTTON_OFFSET = 20; // px, screen distance from the path line to the button center
 const DELETE_BUTTON_RADIUS = 7; // px
 const DELETE_BUTTON_LINE_WIDTH = 1.5; // px
 const DELETE_MINUS_LENGTH = 7; // px
@@ -300,6 +304,38 @@ export class Editor {
     ctx.strokeStyle = RINK_COLOR;
     ctx.fillRect(-width / 2, -height / 2, width, height);
     ctx.strokeRect(-width / 2, -height / 2, width, height);
+
+    // White dotted center lines crossing the rink horizontally and vertically.
+    // drawMetres cancels the CANVAS_SCALE factor, so both the width and the dash
+    // pattern divided by zoom stay constant in px on screen at any zoom level.
+    // Each line starts at the rink center and is stroked separately, shifted by
+    // half a dash, so the pattern is mirrored around the rink center rather
+    // than starting with a full dash at the rink border.
+    this.drawMetres(() => {
+      ctx.strokeStyle = RINK_CENTERLINE_COLOR;
+      ctx.lineWidth = RINK_CENTERLINE_WIDTH / this.view.zoom;
+      ctx.lineCap = "butt";
+      if (typeof ctx.setLineDash === "function") {
+        ctx.setLineDash([RINK_CENTERLINE_DASH / this.view.zoom, RINK_CENTERLINE_GAP / this.view.zoom]);
+      }
+      const ends: Array<[number, number]> = [
+        [-WIDTH / 2, 0],
+        [WIDTH / 2, 0],
+        [0, -LENGTH / 2],
+        [0, LENGTH / 2],
+      ];
+      for (const [endX, endY] of ends) {
+        ctx.lineDashOffset = RINK_CENTERLINE_DASH / 2 / this.view.zoom;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+      }
+      ctx.lineDashOffset = 0;
+      if (typeof ctx.setLineDash === "function") {
+        ctx.setLineDash([]);
+      }
+    });
   }
 
   private drawPath(sequence: Sequence = this.sequence) {
