@@ -7,7 +7,11 @@ import { LENGTH, WIDTH, CORNER_RADIUS } from "../rink.js";
 import type { CanvasRenderingContext2DSized } from "../rinkCanvas.js";
 import { createDefaultFootTurn } from "../element/turnTypes.js";
 import { Sequence } from "../sequence.js";
+import { checkSequenceTurnCurvatures } from "./curvatureWarning.js";
 import { Vector } from "../vector.js";
+
+const WARNING_TRIANGLE_COLOR = "#c25205";
+const WARNING_TRIANGLE_SIZE = 30; // px, side length of the filled warning triangle
 
 export type ControlPointKey = "p0" | "p1" | "p2" | "p3";
 
@@ -45,6 +49,7 @@ const SPLIT_BUTTON_OFFSET = 14; // px, from the curve midpoint
 const SELECTION_RECT_FILL = "rgba(100, 149, 237, 0.2)"; // gentle blue fill
 const SELECTION_RECT_STROKE = "rgba(100, 149, 237, 0.9)";
 const ZOOM_FACTOR = 1.005;
+
 const MIN_ZOOM = 2;
 const MAX_ZOOM = 5000;
 const CANVAS_SCALE = 20; // canvas units per metre, editor drawing only
@@ -231,6 +236,9 @@ export class Editor {
       this.drawElements();
     } else {
       this.drawTraces();
+    }
+    if (this.mode === "path" || this.mode === "elements") {
+      this.drawCurvatureWarnings();
     }
     this.drawElementLabels();
     ctx.restore();
@@ -448,6 +456,33 @@ export class Editor {
 
   private ellipseSupport(ux: number, uy: number, a: number, b: number): number {
     return 1 / Math.hypot(ux / a, uy / b);
+  }
+
+  private drawCurvatureWarnings() {
+    const checks = checkSequenceTurnCurvatures(this.sequence, this.provisionalElement ? [this.provisionalElement] : []);
+    for (const [, check] of checks) {
+      if (!check.invalid) continue;
+      this.drawWarningTriangle(check.point, WARNING_TRIANGLE_COLOR);
+    }
+  }
+
+  private drawWarningTriangle(world: Vector<2>, color: string) {
+    const ctx = this.ctx;
+    const cx = world.x * CANVAS_SCALE;
+    const cy = -world.y * CANVAS_SCALE;
+    const radius = (WARNING_TRIANGLE_SIZE / Math.sqrt(3) / 2) * (CANVAS_SCALE / this.view.zoom);
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    for (let i = 0; i < 3; i++) {
+      const angle = -Math.PI / 2 + (i * 2 * Math.PI) / 3; // first vertex points down
+      const x = cx + Math.cos(angle) * radius;
+      const y = cy + Math.sin(angle) * radius;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
   }
 
   private drawElementLabels() {
