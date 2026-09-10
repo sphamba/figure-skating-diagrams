@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import Button from "openvue/button";
 import Card from "openvue/card";
 import Tag from "openvue/tag";
@@ -9,6 +9,10 @@ import Checkbox from "openvue/checkbox";
 import Dialog from "openvue/dialog";
 import InputText from "openvue/inputtext";
 import Listbox from "openvue/listbox";
+import ToggleSwitch from "openvue/toggleswitch";
+import Inplace from "openvue/inplace";
+import ConfirmPopup from "openvue/confirmpopup";
+import { useConfirm } from "openvue/useconfirm";
 import { Editor, type EditMode } from "@/engine/sequenceEditor/editor";
 import type { Sequence, SequenceJSON } from "@/engine/sequence";
 import { changeElementType } from "@/engine/element/turnTypes";
@@ -186,13 +190,59 @@ const diagramName = computed({
   set: (value) => store.setDiagramName(value),
 });
 
-const deleteTarget = shallowRef<Sequence | null>(null);
-const deleteOpen = computed({
-  get: () => deleteTarget.value !== null,
+const confirm = useConfirm();
+
+const sequenceNames = computed(
+  () => new Map(store.getSequences().map((sequence) => [sequence, sequence.name] as const)),
+);
+
+const renameDraft = ref("");
+const renamingTarget = shallowRef<Sequence | null>(null);
+
+function startRename(sequence: Sequence) {
+  renamingTarget.value = sequence;
+  renameDraft.value = sequence.name;
+}
+
+function commitRename() {
+  const sequence = renamingTarget.value;
+  if (!sequence) return;
+  const name = renameDraft.value.trim();
+  if (name && name !== sequence.name) store.renameSequence(sequence, name);
+  renamingTarget.value = null;
+}
+
+function cancelRename() {
+  renamingTarget.value = null;
+}
+
+const selectedSequence = computed({
+  get: () => activeSequence.value,
   set: (value) => {
-    if (!value) deleteTarget.value = null;
+    if (value) store.setActiveSequence(value);
   },
 });
+
+const confirmPopupRef = ref<{ alignOverlay: () => void } | null>(null);
+
+function confirmDelete(sequence: Sequence, event: Event) {
+  confirm.require({
+    group: "editor-delete",
+    target: event.currentTarget as HTMLElement,
+    message: `Delete "${sequence.name}"? This cannot be undone.`,
+    icon: "pi pi-exclamation-triangle",
+    rejectLabel: "Cancel",
+    acceptLabel: "Delete",
+    rejectProps: { severity: "secondary", text: true },
+    acceptProps: { severity: "danger" },
+    accept: () => store.removeSequence(sequence),
+    onShow: () => {
+      nextTick(() => {
+        requestAnimationFrame(() => confirmPopupRef.value?.alignOverlay());
+      });
+    },
+  });
+}
 
 const clearOpen = ref(false);
 
@@ -303,13 +353,6 @@ function closeClear() {
   clearOpen.value = false;
 }
 
-function onDeleteConfirmed() {
-  const target = deleteTarget.value;
-  if (!target) return;
-  store.removeSequence(target);
-  deleteTarget.value = null;
-}
-
 function chooseElementBranch(branch: "glide" | "stroke" | "turn") {
   elementChangeBranch.value = branch;
   glidePath.value = [];
@@ -402,29 +445,32 @@ function closeElementChange() {
 
           <div class="editor-view__actions">
             <label class="editor-view__mode-label">Sequences</label>
-            <div class="editor-view__sequence-list">
-              <div
-                v-for="(sequence, index) in sequences"
-                :key="index"
-                class="editor-view__sequence-row"
-                :class="{ 'editor-view__sequence-row--active': sequence === activeSequence }"
-                @click="store.setActiveSequence(sequence)"
-              >
-                <Button
-                  :icon="store.isVisible(sequence) ? 'pi pi-eye' : 'pi pi-eye-slash'"
-                  :aria-label="store.isVisible(sequence) ? 'Hide sequence' : 'Show sequence'"
-                  severity="secondary"
-                  text
-                  rounded
-                  size="small"
-                  @click.stop="store.toggleVisible(sequence)"
-                />
-                <InputText
-                  :model-value="sequence.name"
-                  class="editor-view__sequence-name"
-                  @update:model-value="(name) => store.renameSequence(sequence, String(name))"
+            <Listbox
+              v-model="selectedSequence"
+              :options="sequences"
+              option-label="name"
+              class="editor-view__sequence-list"
+            >
+              <template #option="{ option }">
+                <ToggleSwitch
+                  :model-value="store.isVisible(option)"
+                  :aria-label="store.isVisible(option) ? 'Hide sequence' : 'Show sequence'"
+                  @update:model-value="store.toggleVisible(option)"
                   @click.stop
                 />
+                <Inplace
+                  class="editor-view__sequence-name"
+                  :active="renamingTarget === option"
+                  @click.stop
+                  @open="startRename(option)"
+                  @keyup.enter="commitRename"
+                  @keyup.esc="cancelRename"
+                >
+                  <template #display>{{ sequenceNames.get(option) }}</template>
+                  <template #content>
+                    <InputText v-model="renameDraft" @keydown.stop />
+                  </template>
+                </Inplace>
                 <Button
                   icon="pi pi-trash"
                   aria-label="Delete sequence"
@@ -432,18 +478,18 @@ function closeElementChange() {
                   text
                   rounded
                   size="small"
-                  @click.stop="deleteTarget = sequence"
+                  @click.stop="confirmDelete(option, $event)"
                 />
-              </div>
-              <Button
-                label="Add sequence"
-                icon="pi pi-plus"
-                severity="secondary"
-                text
-                class="editor-view__add-sequence"
-                @click="store.addSequence()"
-              />
-            </div>
+              </template>
+            </Listbox>
+            <Button
+              label="Add sequence"
+              icon="pi pi-plus"
+              severity="secondary"
+              text
+              class="editor-view__add-sequence"
+              @click="store.addSequence()"
+            />
           </div>
 
           <div class="editor-view__actions">
@@ -555,13 +601,7 @@ function closeElementChange() {
       </template>
     </Dialog>
 
-    <Dialog v-model:visible="deleteOpen" header="Delete sequence" modal class="editor-view__delete-dialog">
-      <p>Delete "{{ deleteTarget?.name }}"? This cannot be undone.</p>
-      <template #footer>
-        <Button label="Cancel" severity="secondary" icon="pi pi-times" @click="deleteTarget = null" />
-        <Button label="Delete" severity="danger" icon="pi pi-trash" @click="onDeleteConfirmed" />
-      </template>
-    </Dialog>
+    <ConfirmPopup ref="confirmPopupRef" group="editor-delete" />
   </div>
 </template>
 
@@ -603,22 +643,12 @@ function closeElementChange() {
 }
 
 .editor-view__sequence-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  width: 100%;
 }
 
-.editor-view__sequence-row {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.25rem;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.editor-view__sequence-row--active {
-  background: var(--p-highlight-bg);
+.editor-view__sequence-list :deep(.p-listbox-option) {
+  width: 100%;
+  padding-block: 0.2rem;
 }
 
 .editor-view__sequence-name {
@@ -689,10 +719,6 @@ function closeElementChange() {
 }
 
 .editor-view__clear-dialog {
-  width: 320px;
-}
-
-.editor-view__delete-dialog {
   width: 320px;
 }
 

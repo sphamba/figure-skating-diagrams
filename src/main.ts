@@ -4,6 +4,7 @@ import "primeicons/primeicons.css";
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 import OpenVue from "openvue/config";
+import ConfirmationService from "openvue/confirmationservice";
 import Ripple from "openvue/ripple";
 import Aura from "@openvue/themes/aura";
 import { definePreset } from "@openuxkit/themes";
@@ -33,6 +34,7 @@ const app = createApp(App);
 
 app.use(createPinia());
 app.use(router);
+app.use(ConfirmationService);
 app.directive("ripple", Ripple);
 app.use(OpenVue, {
   theme: {
