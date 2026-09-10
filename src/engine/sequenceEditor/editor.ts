@@ -3,12 +3,13 @@ import { type AxisRect } from "../curve.js";
 import { bladeLength } from "../constants.js";
 import type { PathCoordinate } from "../coordinates.js";
 import type { Element } from "../element/element.js";
+import type { DynamicGlide } from "../element/stroke.js";
 import type { Path } from "../path.js";
 import { LENGTH, WIDTH, CORNER_RADIUS } from "../rink.js";
 import type { CanvasRenderingContext2DSized } from "../rinkCanvas.js";
 import { createDefaultFootTurn } from "../element/turnTypes.js";
 import { Sequence } from "../sequence.js";
-import { checkSequenceCurvatures } from "./curvatureWarning.js";
+import { checkSequenceCurvatures, isStrokeElement } from "./curvatureWarning.js";
 import { Vector } from "../vector.js";
 
 const WARNING_TRIANGLE_COLOR = "#c25205";
@@ -489,13 +490,33 @@ export class Editor {
   private getElementLabelGeometry(element: Element): { point: Vector<2>; outside: Vector<2> } | null {
     const path = this.sequence.path;
     if (path.curves.length === 0) return null;
-    const lo = Math.min(element.start as number, element.end as number);
-    const hi = Math.max(element.start as number, element.end as number);
-    const midU = ((lo + hi) / 2) as PathCoordinate;
-    const { point, tangent, curvature } = this.getLabelFrame(path, midU);
+    const anchorU = isStrokeElement(element) ? this.getStrokeLabelAnchor(element) : this.getSpanMidpoint(element);
+    const { point, tangent, curvature } = this.getLabelFrame(path, anchorU);
     const sign = curvature > 0 ? -1 : 1;
     const outside = tangent.getOrthogonal().times(sign);
     return { point, outside };
+  }
+
+  private getSpanMidpoint(element: Element): PathCoordinate {
+    const lo = Math.min(element.start as number, element.end as number);
+    const hi = Math.max(element.start as number, element.end as number);
+    return ((lo + hi) / 2) as PathCoordinate;
+  }
+
+  private getStrokeLabelAnchor(element: DynamicGlide): PathCoordinate {
+    const path = this.sequence.path;
+    const strokeEnd = Math.max(element.start as number, element.end as number);
+    const next = this.nextElementAfter(element);
+    const nextStart = next ? Math.min(next.start as number, next.end as number) : path.length;
+    const anchor = Math.max(0, Math.min(path.length, (strokeEnd + nextStart) / 2));
+    return anchor as PathCoordinate;
+  }
+
+  private nextElementAfter(element: Element): Element | null {
+    const sorted = [...this.sequence.elements].sort((a, b) => (a.start as number) - (b.start as number));
+    const index = sorted.indexOf(element);
+    if (index === -1) return null;
+    return sorted[index + 1] ?? null;
   }
 
   private getStartLabelGeometry(sequence: Sequence): { point: Vector<2>; outside: Vector<2> } | null {

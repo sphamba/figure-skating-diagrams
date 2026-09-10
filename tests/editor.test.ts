@@ -7,6 +7,7 @@ import type { PathCoordinate } from "../src/engine/coordinates";
 import { Vector } from "../src/engine/vector";
 import { LeftForwardOutsideThreeTurn } from "../src/engine/element/threeTurn";
 import { LeftForwardOutsideGlide } from "../src/engine/element/glide";
+import { LeftNormalForwardInsideGlide } from "../src/engine/element/stroke";
 
 function makeStraightPath(): Path {
   const path = new Path();
@@ -371,6 +372,69 @@ test("clicking the delete button next to a selected element removes it", () => {
   expect(editorRef(editor).sequence.elements).not.toContain(el);
   expect(editorRef(editor).selectedElements.has(el)).toBe(false);
   expect(editorRef(editor).getElementDeleteButtonPosition()).toBeNull();
+
+  editor.destroy();
+});
+
+test("a stroke label anchors between the stroke end and the following element start", () => {
+  const { editor } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const path = editor.getSequence().path;
+  path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(4 / 3, 0), new Vector(5 / 3, 0), new Vector(2, 0)));
+
+  const stroke = new LeftNormalForwardInsideGlide(0.2 as PathCoordinate, 0.6 as PathCoordinate);
+  const following = new LeftForwardOutsideGlide(1.2 as PathCoordinate, 1.6 as PathCoordinate);
+  editor.getSequence().addElement(stroke);
+  editor.getSequence().addElement(following);
+  editor.draw();
+
+  const geometry = editorRef(editor).getElementLabelGeometry(stroke);
+  const anchorU = ((stroke.end as number) + (following.start as number)) / 2;
+  const expected = path.getPosition(anchorU as PathCoordinate);
+  expect(geometry.point.x).toBeCloseTo(expected.x, 9);
+  expect(geometry.point.y).toBeCloseTo(expected.y, 9);
+
+  const spanMid = path.getPosition((((stroke.start as number) + (stroke.end as number)) / 2) as PathCoordinate);
+  expect(geometry.point.x).not.toBeCloseTo(spanMid.x, 3);
+
+  editor.destroy();
+});
+
+test("a stroke with no following element anchors its label at the path end", () => {
+  const { editor } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const path = editor.getSequence().path;
+  const stroke = new LeftNormalForwardInsideGlide(0.2 as PathCoordinate, 0.6 as PathCoordinate);
+  editor.getSequence().addElement(stroke);
+  editor.draw();
+
+  const geometry = editorRef(editor).getElementLabelGeometry(stroke);
+  // The path end substitutes for the following element start in the midpoint.
+  const anchorU = ((stroke.end as number) + path.length) / 2;
+  const expected = path.getPosition(anchorU as PathCoordinate);
+  expect(geometry.point.x).toBeCloseTo(expected.x, 9);
+  expect(geometry.point.y).toBeCloseTo(expected.y, 9);
+  // The anchor lies past the stroke end, before the path end, and past the
+  // span center, so the fallback anchor is discriminated from other choices.
+  expect(geometry.point.x).toBeGreaterThan(stroke.end as number);
+  expect(geometry.point.x).toBeLessThan(path.length);
+  expect(geometry.point.x).toBeGreaterThan(0.4);
+
+  editor.destroy();
+});
+
+test("a glide label keeps the span midpoint anchor", () => {
+  const { editor } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const path = editor.getSequence().path;
+  const glide = new LeftForwardOutsideGlide(0.2 as PathCoordinate, 0.6 as PathCoordinate);
+  editor.getSequence().addElement(glide);
+  editor.draw();
+
+  const geometry = editorRef(editor).getElementLabelGeometry(glide);
+  const mid = path.getPosition(0.4 as PathCoordinate);
+  expect(geometry.point.x).toBeCloseTo(mid.x, 9);
+  expect(geometry.point.y).toBeCloseTo(mid.y, 9);
 
   editor.destroy();
 });
