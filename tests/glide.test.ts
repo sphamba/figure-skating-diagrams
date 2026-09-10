@@ -1,5 +1,8 @@
 import { expect, test } from "vitest";
-import { DynamicGlide, glideConstructorsByType, glideKindChoices } from "../src/engine/element/glide.js";
+import type { DynamicGlide } from "../src/engine/element/stroke.js";
+// Register the stroke variants into the glide registry (side-effect import).
+import "../src/engine/element/stroke.js";
+import { glideConstructorsByType, glideKindChoices } from "../src/engine/element/glide.js";
 
 /** A straight 2 m span of path coordinates, for known keyframe coordinates. */
 const start = 0;

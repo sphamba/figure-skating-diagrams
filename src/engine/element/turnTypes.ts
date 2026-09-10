@@ -2,6 +2,8 @@
 
 import type { PathCoordinate } from "../coordinates.js";
 import { glideConstructorsByType, glideKindChoices } from "./glide.js";
+// Register the crossing/normal stroke variants into the glide registry.
+import "./stroke.js";
 import { threeTurnConstructorsByType, threeTurnKindChoices, LeftForwardInsideThreeTurn } from "./threeTurn.js";
 import { loopConstructorsByType, loopKindChoices } from "./loop.js";
 import type { Element } from "./element.js";

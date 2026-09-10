@@ -1,5 +1,6 @@
-/* Glide classes: elements that set a static pose or a crossed/normal stroke
- * for both feet and the hips, generated from side, direction and edge flags. */
+/* Glide classes: elements that set a static pose for both feet and the hips,
+ * generated from side, direction and edge flags. The crossed/normal stroke
+ * variants live in stroke.ts. */
 
 import type { PathCoordinate } from "../coordinates.js";
 import { Element } from "./element.js";
@@ -145,7 +146,8 @@ type GlideConfig = {
   edge: "inside" | "outside" | "neither";
 };
 
-/** Map a glide type name to its constructor, for deserialization. */
+/** Map a glide type name to its constructor, for deserialization. The stroke
+ * variants register here too (stroke.ts). */
 export const glideConstructorsByType: Record<string, GlideConstructor> = {};
 
 /** Define one static glide variant class: the config closes over the
@@ -168,141 +170,30 @@ function defineGlide(type: string, shortName: string, config: GlideConfig): Glid
   return Variant;
 }
 
-/**
- * A dynamic glide is a crossed (crossover) or normal stroke: at the start of
- * the stroke both feet rest on the ice, shifted to the sides of the
- * centerline (swapped when the free foot crosses over, or when the stroke
- * goes backwards). One foot keeps skating the center of the element and is
- * centered for the whole stroke. The other foot starts shifted to its side,
- * shifts 0.5 m backwards along the path (forwards for a backwards stroke) to
- * twice that side offset, rests on the ice until 95% of
- * completion, and lifts off at the end of the stroke.
- */
-export abstract class DynamicGlide extends Glide {
-  private readonly strokeConfig: { left: boolean; crossed: boolean };
-
-  constructor(
-    config: { forward: boolean; left: boolean; crossed: boolean; edge: "inside" | "outside" | "neither" },
-    start: PathCoordinate,
-    end: PathCoordinate,
-  ) {
-    super({ forward: config.forward, leftOnIce: config.left, rightOnIce: !config.left, edge: config.edge }, start, end);
-    this.strokeConfig = { left: config.left, crossed: config.crossed };
-  }
-
-  /** True when the center foot of the stroke is the left foot. */
-  get left(): boolean {
-    return this.strokeConfig.left;
-  }
-
-  /** True when the free foot crosses over the other one at the sides. */
-  get crossed(): boolean {
-    return this.strokeConfig.crossed;
-  }
-
-  getLeftFootKeyframes(_spanScale?: number, lateralScale?: number): FootKeyframe[] {
-    return this.dynamicFootKeyframes("footL", lateralScale);
-  }
-
-  getRightFootKeyframes(_spanScale?: number, lateralScale?: number): FootKeyframe[] {
-    return this.dynamicFootKeyframes("footR", lateralScale);
-  }
-
-  /** Foot keyframes of the dynamic stroke: the finishing on-ice foot starts
-   * and stays centered, the other foot starts at its side offset and shifts
-   * 0.5 m backwards along the path to twice that side offset, on the ice at
-   * 95% and off the ice at the end. When a lateral scale is given, the
-   * lateral side offsets are scaled by that factor. Swapped when crossed, or
-   * when the stroke goes backwards. */
-  private dynamicFootKeyframes(footKey: "footL" | "footR", lateralScale?: number): FootKeyframe[] {
-    const [start, t95, end] = this.keyframeCoordinates();
-    const scale = lateralScale ?? 1;
-    const gliding = footKey === (this.left ? "footL" : "footR");
-    let side = (footKey === "footL" ? halfFeetSpacing : -halfFeetSpacing) * scale;
-    const swapped = this.crossed || !this.forward;
-    if (swapped) {
-      side = -side;
-    }
-    const facing = getQuaternionFromAngleAxis(this.forward ? 0 : Math.PI);
-    const onIceData = (position: Vector<3>): FootData => {
-      return { position, orientation: facing, contactPoint: 0.5 };
-    };
-    // Free foot shifted 0.5 m backwards along the path (forwards when the
-    // stroke goes backwards).
-    const offset = this.forward ? -0.5 : 0.5;
-    if (gliding) {
-      const centered = onIceData(new Vector<3>(0, 0, 0));
-      return [
-        new FootKeyframe(start, centered, "linear", "linear"),
-        new FootKeyframe(t95, centered, "linear", "linear"),
-        new FootKeyframe(end, centered, "linear", "linear"),
-      ];
-    }
-    const doubleSide = side * 2;
-    return [
-      new FootKeyframe(start, onIceData(new Vector<3>(0, side, 0)), "linear", "linear"),
-      new FootKeyframe(t95, onIceData(new Vector<3>(offset, doubleSide, 0)), "linear", "linear"),
-      new FootKeyframe(end, onIceData(new Vector<3>(offset, doubleSide, offIceFootHeight)), "linear", "linear"),
-    ];
-  }
-
-  /** Span to place keyframes on, with the 95% coordinate. Glides never scale:
-   * the keyframes always sit on the real span. */
-  private keyframeCoordinates(): [PathCoordinate, PathCoordinate, PathCoordinate] {
-    const t95 = (this.start + 0.95 * (this.end - this.start)) as PathCoordinate;
-    return [this.start, t95, this.end];
-  }
-}
-
-/** Define one dynamic glide variant class: the config closes over the
- * subclass, which registers itself into the type registry. */
-function defineDynamicGlide(
-  type: string,
-  shortName: string,
-  config: { forward: boolean; left: boolean; crossed: boolean; edge: "inside" | "outside" | "neither" },
-): GlideConstructor {
-  const Variant = class extends DynamicGlide {
-    constructor(start: PathCoordinate, end: PathCoordinate) {
-      super(config, start, end);
-    }
-
-    get type(): string {
-      return type;
-    }
-
-    get shortName(): string {
-      return shortName;
-    }
-  };
-  glideConstructorsByType[type] = Variant;
-  return Variant;
-}
-
-/** The side, direction, edge and stroke words of each variant name, with
- * their flags. */
-const glideSides = [
+/** The side, direction and edge words of each variant name, with their
+ * flags. Shared by the static glide variants here and the stroke variants
+ * in stroke.ts. */
+export const glideSides = [
   ["Left", true],
   ["Right", false],
 ] as const;
-const glideDirections = [
+export const glideDirections = [
   ["Forward", true],
   ["Backward", false],
 ] as const;
-const glideEdges = [
+export const glideEdges = [
   ["Inside", "inside"],
   ["Outside", "outside"],
   ["", "neither"],
 ] as const;
-const glideStrokes = [
-  ["Normal", false],
-  ["Crossed", true],
-] as const;
 
-/** The uppercase edge letter of the short name pattern ("I", "O" or ""). */
-const edgeLetter = (edge: "inside" | "outside" | "neither"): string =>
+/** The uppercase edge letter of the short name pattern ("I", "O" or "").
+ * Shared by the short names of both glide files. */
+export const edgeLetter = (edge: "inside" | "outside" | "neither"): string =>
   edge === "inside" ? "I" : edge === "outside" ? "O" : "";
 
-/** Human-readable label for each available glide kind. */
+/** Human-readable label for each available glide kind. The stroke variants
+ * push their choices here too (stroke.ts), after the static ones. */
 export const glideKindChoices: { type: string; label: string }[] = [];
 
 /** Construct the static pose variants: one-foot glides per side, direction
@@ -335,28 +226,6 @@ for (const [direction, forward] of glideDirections) {
     defineGlide(type, shortName, config);
   }
   glideKindChoices.push({ type, label: `Two-foot ${direction.toLowerCase()} glide` });
-}
-
-/** Construct the crossed/normal stroke variants per side, direction, edge
- * and stroke word. */
-for (const [side, left] of glideSides) {
-  for (const [strokeName, crossed] of glideStrokes) {
-    for (const [direction, forward] of glideDirections) {
-      for (const [edgeName, edge] of glideEdges) {
-        const type = `${side}${strokeName}${direction}${edgeName}Glide`;
-        const config = { forward, left, crossed, edge };
-        // Strokes share the short name pattern of the static glides.
-        const shortName = `${side[0]}${direction[0]}${edgeLetter(edge)}`;
-        if (!glideConstructorsByType[type]) {
-          defineDynamicGlide(type, shortName, config);
-        }
-        glideKindChoices.push({
-          type,
-          label: `${side} ${strokeName.toLowerCase()} ${direction.toLowerCase()} ${edge === "neither" ? "" : edge + " "}glide`,
-        });
-      }
-    }
-  }
 }
 
 /** Named glide kind constructors kept for use outside the registry (store,
@@ -392,20 +261,6 @@ export class LeftForwardOutsideGlide extends Glide {
   }
 }
 
-export class LeftNormalForwardInsideGlide extends DynamicGlide {
-  constructor(start: PathCoordinate, end: PathCoordinate) {
-    super({ forward: true, left: true, crossed: false, edge: "inside" }, start, end);
-  }
-
-  get type(): string {
-    return "LeftNormalForwardInsideGlide";
-  }
-
-  get shortName(): string {
-    return "LFI";
-  }
-}
-
 export class BothForwardGlide extends Glide {
   constructor(start: PathCoordinate, end: PathCoordinate) {
     super({ forward: true, leftOnIce: true, rightOnIce: true, edge: "neither" }, start, end);
@@ -425,5 +280,4 @@ export class BothForwardGlide extends Glide {
 // type strings, so the kind choices stay as generated).
 glideConstructorsByType["LeftForwardInsideGlide"] = LeftForwardInsideGlide;
 glideConstructorsByType["LeftForwardOutsideGlide"] = LeftForwardOutsideGlide;
-glideConstructorsByType["LeftNormalForwardInsideGlide"] = LeftNormalForwardInsideGlide;
 glideConstructorsByType["BothForwardGlide"] = BothForwardGlide;
