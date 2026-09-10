@@ -108,7 +108,7 @@ test("a scaled turn stops before neighbouring glides", () => {
   sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0.4 as PathCoordinate, 0.6 as PathCoordinate));
   sequence.addElement(new LeftForwardInsideGlide(0.65 as PathCoordinate, 0.8 as PathCoordinate));
 
-  // The 0.5 m blade length cap holds the target at 2. The scaling still
+  // The 1 m blade length cap holds the target at 4. The scaling still
   // stops at the neighbour gaps at 1.48 rather than at the cap.
   const scales = sequence.getSpanScales(20 * 0.25);
   const turn = sequence.elements[1]!;
@@ -121,36 +121,36 @@ test("a scaled turn stops before neighbouring glides", () => {
   expect(scales.get(sequence.elements[0]!)).toBe(1);
 });
 
-test("an isolated turn stops scaling at the 0.5 m blade length cap", () => {
+test("an isolated turn stops scaling at the 1 m blade length cap", () => {
   const sequence = new Sequence(makePath());
   sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0.4 as PathCoordinate, 0.6 as PathCoordinate));
 
-  expect(sequence.getBladeLengthScale(100)).toBe(2);
+  expect(sequence.getBladeLengthScale(100)).toBe(4);
   const scales = sequence.getSpanScales(100);
   const scale = scales.get(sequence.elements[0]!)!;
-  expect(scale).toBe(2);
+  expect(scale).toBe(4);
   expect(
     sequence
       .getDrawFootKeyframes("footL", sequence.getBladeLengthScale(100))
       .map((keyframe) => keyframe.coordinate)
       .map((coordinate) => Number(coordinate.toFixed(10))),
-  ).toEqual([0.3, 0.5, 0.7]);
+  ).toEqual([0.1, 0.5, 0.9]);
 });
 
 test("a tiny isolated turn still grows up to the path bounds before the cap", () => {
   const sequence = new Sequence(makePath());
   sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0.45 as PathCoordinate, 0.55 as PathCoordinate));
 
-  // The cap allows 2, but the path bounds limit to middle / half span = 5,
-  // so the full cap of 2 is reachable.
-  expect(sequence.getSpanScales(100).get(sequence.elements[0]!)).toBe(2);
+  // The cap allows 4, and the path bounds (middle / half span = 10) do not
+  // limit the turn, so the full cap of 4 is reachable.
+  expect(sequence.getSpanScales(100).get(sequence.elements[0]!)).toBe(4);
 });
 
 test("a turn touching the path start can grow past the cap partway", () => {
   const sequence = new Sequence(makePath());
   sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0.02 as PathCoordinate, 0.08 as PathCoordinate));
 
-  // The path bound would allow 1.6670, so the cap of 2 does not bind inside.
+  // The path bound would allow 1.6670, so the cap of 4 does not bind inside.
   expect(sequence.getSpanScales(100).get(sequence.elements[0]!)).toBeCloseTo(0.05 / 0.03, 6);
 });
 

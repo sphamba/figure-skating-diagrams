@@ -3,6 +3,7 @@ import { type AxisRect } from "../curve.js";
 import { bladeLength } from "../constants.js";
 import type { PathCoordinate } from "../coordinates.js";
 import type { Element } from "../element/element.js";
+import type { Path } from "../path.js";
 import { LENGTH, WIDTH, CORNER_RADIUS } from "../rink.js";
 import type { CanvasRenderingContext2DSized } from "../rinkCanvas.js";
 import { createDefaultFootTurn } from "../element/turnTypes.js";
@@ -245,6 +246,7 @@ export class Editor {
       this.drawCurvatureWarnings();
     }
     this.drawElementLabels();
+    this.drawStartLabels();
     ctx.restore();
     this.drawSelectionRectangle();
   }
@@ -476,18 +478,31 @@ export class Editor {
     this.drawMetres(() => this.sequence.path.drawRange(this.ctx, start, end));
   }
 
+  private getLabelFrame(path: Path, u: PathCoordinate): { point: Vector<2>; tangent: Vector<2>; curvature: number } {
+    const [curve, curvilinear] = path.getCurveAndCurvilinearCoord(u);
+    const point = curve.getPosition(curvilinear);
+    const tangent = curve.getDerivative(curvilinear).normalized();
+    const curvature = curve.getCurvature(curvilinear);
+    return { point, tangent, curvature };
+  }
+
   private getElementLabelGeometry(element: Element): { point: Vector<2>; outside: Vector<2> } | null {
     const path = this.sequence.path;
     if (path.curves.length === 0) return null;
     const lo = Math.min(element.start as number, element.end as number);
     const hi = Math.max(element.start as number, element.end as number);
     const midU = ((lo + hi) / 2) as PathCoordinate;
-    const [curve, curvilinear] = path.getCurveAndCurvilinearCoord(midU);
-    const point = curve.getPosition(curvilinear);
-    const tangent = curve.getDerivative(curvilinear).normalized();
-    const curvature = curve.getCurvature(curvilinear);
+    const { point, tangent, curvature } = this.getLabelFrame(path, midU);
     const sign = curvature > 0 ? -1 : 1;
     const outside = tangent.getOrthogonal().times(sign);
+    return { point, outside };
+  }
+
+  private getStartLabelGeometry(sequence: Sequence): { point: Vector<2>; outside: Vector<2> } | null {
+    const path = sequence.path;
+    if (path.curves.length === 0) return null;
+    const { point, tangent } = this.getLabelFrame(path, 0 as PathCoordinate);
+    const outside = tangent.times(-1); // behind the path beginning, opposite to the travel direction
     return { point, outside };
   }
 
@@ -523,8 +538,17 @@ export class Editor {
   }
 
   private drawElementLabels() {
-    const ctx = this.ctx;
     if (this.sequence.path.curves.length === 0) return;
+
+    for (const element of this.sequence.elements) {
+      const geometry = this.getElementLabelGeometry(element);
+      if (!geometry) continue;
+      this.drawShiftedLabel(element.shortName, geometry.point, geometry.outside);
+    }
+  }
+
+  private drawShiftedLabel(text: string, point: Vector<2>, outside: Vector<2>) {
+    const ctx = this.ctx;
     const offset = (LABEL_OFFSET * CANVAS_SCALE) / this.view.zoom; // px -> canvas units
 
     ctx.font = `${(LABEL_FONT_SIZE * CANVAS_SCALE) / this.view.zoom}px sans-serif`;
@@ -532,22 +556,30 @@ export class Editor {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
-    for (const element of this.sequence.elements) {
-      const geometry = this.getElementLabelGeometry(element);
-      if (!geometry) continue;
+    const metrics = ctx.measureText(text);
+    const a = metrics.width / 2;
+    const b = ((metrics.actualBoundingBoxAscent ?? 0) + (metrics.actualBoundingBoxDescent ?? 0)) / 2;
+    if (a === 0 && b === 0) return;
 
-      const metrics = ctx.measureText(element.shortName);
-      const a = metrics.width / 2;
-      const b = ((metrics.actualBoundingBoxAscent ?? 0) + (metrics.actualBoundingBoxDescent ?? 0)) / 2;
-      if (a === 0 && b === 0) continue;
+    const support = this.ellipseSupport(Math.abs(outside.x), Math.abs(outside.y), a, b);
+    const total = offset + support;
+    const labelX = point.x * CANVAS_SCALE + outside.x * total;
+    const labelY = point.y * CANVAS_SCALE + outside.y * total;
 
-      const support = this.ellipseSupport(Math.abs(geometry.outside.x), Math.abs(geometry.outside.y), a, b);
-      const total = offset + support;
-      const labelX = geometry.point.x * CANVAS_SCALE + geometry.outside.x * total;
-      const labelY = geometry.point.y * CANVAS_SCALE + geometry.outside.y * total;
+    ctx.fillText(text, labelX, -labelY);
+  }
 
-      ctx.fillText(element.shortName, labelX, -labelY);
+  private drawStartLabels() {
+    this.drawStartLabel(this.sequence);
+    for (const sequence of this.overlaySequences) {
+      this.drawStartLabel(sequence);
     }
+  }
+
+  private drawStartLabel(sequence: Sequence) {
+    const geometry = this.getStartLabelGeometry(sequence);
+    if (!geometry) return;
+    this.drawShiftedLabel("start", geometry.point, geometry.outside);
   }
 
   private getElementPoints(element: Element): Vector<2>[] {
