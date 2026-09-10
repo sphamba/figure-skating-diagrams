@@ -64,6 +64,13 @@ const SELECTION_RECT_STROKE = "rgba(100, 149, 237, 0.9)";
 const ZOOM_FACTOR = 1.005;
 const MIN_ZOOM = 2;
 const MAX_ZOOM = 5000;
+/** Canvas units per metre: 1 canvas unit = 1/CANVAS_SCALE m. Only the
+ * editor's canvas drawing uses canvas units: a world point at x metres is
+ * drawn at x * CANVAS_SCALE, and the canvas transform scales by
+ * zoom / CANVAS_SCALE, so the rendered output is unchanged. Engine draw
+ * methods still emit metre coordinates, so they draw inside a nested
+ * CANVAS_SCALE wrap. */
+const CANVAS_SCALE = 20;
 
 type ViewState = {
   center: Vector<2>;
@@ -342,12 +349,14 @@ export class Editor {
   private drawTraces() {
     const minTraceWidth = MIN_TRACE_WIDTH / this.view.zoom;
     const minBladeLength = this.scaleElements ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
-    this.sequence.drawTraces(
-      this.ctx,
-      minTraceWidth,
-      minBladeLength,
-      MIN_DRAW_INCREMENT / this.view.zoom,
-      this.getTraceViewport(minBladeLength),
+    this.drawMetres(() =>
+      this.sequence.drawTraces(
+        this.ctx,
+        minTraceWidth,
+        minBladeLength,
+        MIN_DRAW_INCREMENT / this.view.zoom,
+        this.getTraceViewport(minBladeLength),
+      ),
     );
   }
 
@@ -382,17 +391,34 @@ export class Editor {
     translation = translation.times(1 / this.view.zoom).minus(this.view.center);
 
     ctx.save();
-    ctx.scale(this.view.zoom, this.view.zoom);
-    ctx.translate(translation.x, -translation.y);
+    // Canvas units are drawn at zoom / CANVAS_SCALE px (zoom stays px per
+    // metre): the drawn metre values are multiplied by CANVAS_SCALE, so the
+    // rendered output is unchanged.
+    ctx.scale(this.view.zoom / CANVAS_SCALE, this.view.zoom / CANVAS_SCALE);
+    ctx.translate(translation.x * CANVAS_SCALE, -translation.y * CANVAS_SCALE);
+  }
+
+  /**
+   * Draw with the engine's metre coordinates. Engine draw methods (path,
+   * curves, foot traces) emit world metres, so a nested canvas-unit scale
+   * multiplies them onto the canvas unit (1 canvas unit = 1/CANVAS_SCALE m).
+   * Must only be used inside the transformed context.
+   */
+  private drawMetres(draw: () => void) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.scale(CANVAS_SCALE, CANVAS_SCALE);
+    draw();
+    ctx.restore();
   }
 
   private drawRink() {
     const ctx = this.ctx;
     // Draw inset rectangle with thick border to have corner radius
-    const width = WIDTH - 2 * CORNER_RADIUS;
-    const height = LENGTH - 2 * CORNER_RADIUS;
+    const width = (WIDTH - 2 * CORNER_RADIUS) * CANVAS_SCALE;
+    const height = (LENGTH - 2 * CORNER_RADIUS) * CANVAS_SCALE;
 
-    ctx.lineWidth = 2 * CORNER_RADIUS;
+    ctx.lineWidth = 2 * CORNER_RADIUS * CANVAS_SCALE;
     ctx.lineJoin = "round";
     ctx.fillStyle = RINK_COLOR;
     ctx.strokeStyle = RINK_COLOR;
@@ -418,48 +444,50 @@ export class Editor {
     const minDrawIncrement = MIN_DRAW_INCREMENT / this.view.zoom;
     const viewport = this.getTraceViewport(minBladeLength);
     if (this.mode === "path" && !pathColor) {
-      // In path edit mode the foot traces are drawn at 50% opacity, so the
-      // control points stay easy to read against them.
-      sequence.drawPath(this.ctx, pathWidth, 0 as PathCoordinate, undefined, pathColor);
-      this.ctx.globalAlpha = 0.5;
-      sequence.drawFootTraces(
-        this.ctx,
-        0 as PathCoordinate,
-        undefined,
-        minTraceWidth,
-        minBladeLength,
-        minDrawIncrement,
-        viewport,
+      this.drawMetres(() => sequence.drawPath(this.ctx, pathWidth, 0 as PathCoordinate, undefined, pathColor));
+      this.ctx.globalAlpha = 0.3;
+      this.drawMetres(() =>
+        sequence.drawFootTraces(
+          this.ctx,
+          0 as PathCoordinate,
+          undefined,
+          minTraceWidth,
+          minBladeLength,
+          minDrawIncrement,
+          viewport,
+        ),
       );
       this.ctx.globalAlpha = 1;
     } else if (this.mode === "elements") {
-      // In elements edit mode the path is drawn at 50% opacity, so the element
-      // under it stays easy to read.
       this.ctx.globalAlpha = 0.5;
-      sequence.drawPath(this.ctx, pathWidth, 0 as PathCoordinate, undefined, pathColor);
+      this.drawMetres(() => sequence.drawPath(this.ctx, pathWidth, 0 as PathCoordinate, undefined, pathColor));
       this.ctx.globalAlpha = 1;
-      sequence.drawFootTraces(
-        this.ctx,
-        0 as PathCoordinate,
-        undefined,
-        minTraceWidth,
-        minBladeLength,
-        minDrawIncrement,
-        viewport,
+      this.drawMetres(() =>
+        sequence.drawFootTraces(
+          this.ctx,
+          0 as PathCoordinate,
+          undefined,
+          minTraceWidth,
+          minBladeLength,
+          minDrawIncrement,
+          viewport,
+        ),
       );
     } else {
       // Draw the path and the foot traces (same as the home page) for the
       // overlay sequences and the "view" mode.
-      sequence.draw(
-        this.ctx,
-        pathWidth,
-        0 as PathCoordinate,
-        undefined,
-        pathColor,
-        minTraceWidth,
-        minBladeLength,
-        minDrawIncrement,
-        viewport,
+      this.drawMetres(() =>
+        sequence.draw(
+          this.ctx,
+          pathWidth,
+          0 as PathCoordinate,
+          undefined,
+          pathColor,
+          minTraceWidth,
+          minBladeLength,
+          minDrawIncrement,
+          viewport,
+        ),
       );
     }
   }
@@ -469,12 +497,14 @@ export class Editor {
     if (this.selectedCurves.size == 0) return;
     const ctx = this.ctx;
     ctx.strokeStyle = "#d33";
+    // Metre-space width: the curve is stroked inside the CANVAS_SCALE wrap.
     ctx.lineWidth = (PATH_WIDTH + 2) / this.view.zoom;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     for (const curveIndex of this.selectedCurves) {
       const curve = this.sequence.path.curves[curveIndex];
-      if (curve) curve.draw(ctx);
+      if (!curve) continue;
+      this.drawMetres(() => curve.draw(ctx));
     }
   }
 
@@ -492,7 +522,7 @@ export class Editor {
       return;
     }
     const ctx = this.ctx;
-    const nodeSize = NODE_SIZE / this.view.zoom;
+    const nodeSize = (NODE_SIZE * CANVAS_SCALE) / this.view.zoom;
 
     for (const element of this.sequence.elements) {
       const selected = this.selectedElements.has(element);
@@ -501,6 +531,7 @@ export class Editor {
       // native canvas Bezier sub-curves of the underlying path, never as a
       // sampled polyline.
       ctx.strokeStyle = selected ? "#d33" : "#000";
+      // Metre-space width: the span is traced inside the CANVAS_SCALE wrap.
       ctx.lineWidth = (PATH_WIDTH + 2) / this.view.zoom;
       this.drawElementSpan(element);
 
@@ -509,7 +540,7 @@ export class Editor {
       for (const u of this.getDisplayedSpan(element)) {
         const point = this.sequence.path.getPosition(u as PathCoordinate);
         ctx.beginPath();
-        ctx.arc(point.x, -point.y, nodeSize / 2, 0, 2 * Math.PI);
+        ctx.arc(point.x * CANVAS_SCALE, -point.y * CANVAS_SCALE, nodeSize / 2, 0, 2 * Math.PI);
         ctx.fill();
       }
     }
@@ -520,6 +551,7 @@ export class Editor {
       const element = this.provisionalElement;
 
       ctx.strokeStyle = PROVISIONAL_COLOR;
+      // Metre-space width: the span is traced inside the CANVAS_SCALE wrap.
       ctx.lineWidth = (PATH_WIDTH + 2) / this.view.zoom;
       this.drawElementSpan(element);
 
@@ -527,7 +559,7 @@ export class Editor {
       for (const u of this.getDisplayedSpan(element)) {
         const point = this.sequence.path.getPosition(u as PathCoordinate);
         ctx.beginPath();
-        ctx.arc(point.x, -point.y, nodeSize / 2, 0, 2 * Math.PI);
+        ctx.arc(point.x * CANVAS_SCALE, -point.y * CANVAS_SCALE, nodeSize / 2, 0, 2 * Math.PI);
         ctx.fill();
       }
     }
@@ -563,7 +595,7 @@ export class Editor {
   /** Trace an element's span along the path, as native Bezier sub-curves. */
   private drawElementSpan(element: Element) {
     const [start, end] = this.getDisplayedSpan(element);
-    this.sequence.path.drawRange(this.ctx, start, end);
+    this.drawMetres(() => this.sequence.path.drawRange(this.ctx, start, end));
   }
 
   /**
@@ -615,9 +647,9 @@ export class Editor {
   private drawElementLabels() {
     const ctx = this.ctx;
     if (this.sequence.path.curves.length === 0) return;
-    const offset = LABEL_OFFSET / this.view.zoom; // px -> vector units
+    const offset = (LABEL_OFFSET * CANVAS_SCALE) / this.view.zoom; // px -> canvas units
 
-    ctx.font = `${LABEL_FONT_SIZE / this.view.zoom}px sans-serif`;
+    ctx.font = `${(LABEL_FONT_SIZE * CANVAS_SCALE) / this.view.zoom}px sans-serif`;
     ctx.fillStyle = "#000";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -637,8 +669,11 @@ export class Editor {
       // it keeps the box gap at the target offset.
       const support = this.ellipseSupport(Math.abs(geometry.outside.x), Math.abs(geometry.outside.y), a, b);
       const total = offset + support;
-      const labelX = geometry.point.x + geometry.outside.x * total;
-      const labelY = geometry.point.y + geometry.outside.y * total;
+      // The path point is a metre value from the engine: drawn in canvas
+      // units (x * CANVAS_SCALE), while the offset and support are already
+      // canvas-unit values from the canvas-unit font size.
+      const labelX = geometry.point.x * CANVAS_SCALE + geometry.outside.x * total;
+      const labelY = geometry.point.y * CANVAS_SCALE + geometry.outside.y * total;
 
       ctx.fillText(element.shortName, labelX, -labelY);
     }
@@ -951,7 +986,7 @@ export class Editor {
       // Control polygon guides: p0-p1 and p2-p3 only (no p1-p2 segment), and
       // only for handles that are currently visible.
       ctx.strokeStyle = `rgba(0, 0, 0, ${POLYGON_ALPHA})`;
-      ctx.lineWidth = 1 / this.view.zoom;
+      ctx.lineWidth = (1 * CANVAS_SCALE) / this.view.zoom;
       if (showP1) this.drawGuide(points[0]!, points[1]!);
       if (showP2) this.drawGuide(points[2]!, points[3]!);
 
@@ -963,17 +998,17 @@ export class Editor {
         if ((pointKey === "p1" && !showP1) || (pointKey === "p2" && !showP2)) return;
 
         const isSelected = this.selected.has(this.keyOf(curveIndex, pointKey));
-        const size = (isSelected ? NODE_SIZE * 1.5 : NODE_SIZE) / this.view.zoom;
+        const size = ((isSelected ? NODE_SIZE * 1.5 : NODE_SIZE) * CANVAS_SCALE) / this.view.zoom;
 
         // Endpoints (p0, p3) are anchors; inner points (p1, p2) are guides.
         ctx.fillStyle = index === 0 || index === 3 ? "#444" : "#888";
         ctx.beginPath();
-        ctx.arc(point.x, -point.y, size / 2, 0, 2 * Math.PI);
+        ctx.arc(point.x * CANVAS_SCALE, -point.y * CANVAS_SCALE, size / 2, 0, 2 * Math.PI);
         ctx.fill();
 
         if (isSelected) {
           ctx.strokeStyle = "#d33";
-          ctx.lineWidth = 2 / this.view.zoom;
+          ctx.lineWidth = (2 * CANVAS_SCALE) / this.view.zoom;
           ctx.stroke();
         }
       });
@@ -982,8 +1017,8 @@ export class Editor {
 
   private drawGuide(a: Vector<2>, b: Vector<2>) {
     this.ctx.beginPath();
-    this.ctx.moveTo(a.x, -a.y);
-    this.ctx.lineTo(b.x, -b.y);
+    this.ctx.moveTo(a.x * CANVAS_SCALE, -a.y * CANVAS_SCALE);
+    this.ctx.lineTo(b.x * CANVAS_SCALE, -b.y * CANVAS_SCALE);
     this.ctx.stroke();
   }
 
@@ -1009,17 +1044,20 @@ export class Editor {
     this.drawPlusInCircleWithColor(world, ADD_BUTTON_COLOR);
   }
 
-  /** Draw a "+" inside a circle at the given world point, in the given color. */
+  /** Draw a "+" inside a circle at the given world point (metres), in the
+   * given color. The circle is drawn in canvas units: the metre world point
+   * is multiplied by CANVAS_SCALE, and the pixel sizes are converted to
+   * canvas units (X * CANVAS_SCALE / zoom). */
   private drawPlusInCircleWithColor(world: Vector<2>, color: string) {
     const ctx = this.ctx;
-    const cx = world.x;
-    const cy = -world.y;
+    const cx = world.x * CANVAS_SCALE;
+    const cy = -world.y * CANVAS_SCALE;
 
-    const radius = ADD_BUTTON_RADIUS / this.view.zoom;
-    const halfPlus = ADD_PLUS_LENGTH / 2 / this.view.zoom;
+    const radius = (ADD_BUTTON_RADIUS * CANVAS_SCALE) / this.view.zoom;
+    const halfPlus = ((ADD_PLUS_LENGTH / 2) * CANVAS_SCALE) / this.view.zoom;
 
     ctx.strokeStyle = color;
-    ctx.lineWidth = ADD_BUTTON_LINE_WIDTH / this.view.zoom;
+    ctx.lineWidth = (ADD_BUTTON_LINE_WIDTH * CANVAS_SCALE) / this.view.zoom;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
@@ -1106,16 +1144,19 @@ export class Editor {
   }
 
   /** Draw a "-" inside a circle at the given world point. */
+  /** Draw a "-" inside a circle at the given world point (metres). The
+   * circle is drawn in canvas units: the metre world point is multiplied by
+   * CANVAS_SCALE, and the pixel sizes are converted to canvas units. */
   private drawMinusInCircle(world: Vector<2>) {
     const ctx = this.ctx;
-    const cx = world.x;
-    const cy = -world.y;
+    const cx = world.x * CANVAS_SCALE;
+    const cy = -world.y * CANVAS_SCALE;
 
-    const radius = DELETE_BUTTON_RADIUS / this.view.zoom;
-    const halfMinus = DELETE_MINUS_LENGTH / 2 / this.view.zoom;
+    const radius = (DELETE_BUTTON_RADIUS * CANVAS_SCALE) / this.view.zoom;
+    const halfMinus = ((DELETE_MINUS_LENGTH / 2) * CANVAS_SCALE) / this.view.zoom;
 
     ctx.strokeStyle = DELETE_BUTTON_COLOR;
-    ctx.lineWidth = DELETE_BUTTON_LINE_WIDTH / this.view.zoom;
+    ctx.lineWidth = (DELETE_BUTTON_LINE_WIDTH * CANVAS_SCALE) / this.view.zoom;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
@@ -1197,21 +1238,23 @@ export class Editor {
     return geometry.point.plus(geometry.perp.times(-offset));
   }
 
-  /** Draw a cog (gear): a single thick circle with 8 thick teeth sticking out. */
+  /** Draw a cog (gear): a single thick circle with 8 thick teeth sticking
+   * out. Drawn in canvas units: the metre world point is multiplied by
+   * CANVAS_SCALE, and the pixel sizes are converted to canvas units. */
   private drawCogInCircle(world: Vector<2>) {
     const ctx = this.ctx;
-    const cx = world.x;
-    const cy = -world.y;
+    const cx = world.x * CANVAS_SCALE;
+    const cy = -world.y * CANVAS_SCALE;
 
     // The teeth reach the same outer radius as the "-" delete button, so both
     // buttons look the same size.
-    const outerRadius = DELETE_BUTTON_RADIUS / this.view.zoom;
+    const outerRadius = (DELETE_BUTTON_RADIUS * CANVAS_SCALE) / this.view.zoom;
     // The inner circle is smaller, so the teeth stick out from its edge. They
     // do not traverse the circle (their inner end is exactly on its edge).
     const circleRadius = outerRadius * 0.62;
 
     ctx.strokeStyle = COG_BUTTON_COLOR;
-    ctx.lineWidth = COG_LINE_WIDTH / this.view.zoom;
+    ctx.lineWidth = (COG_LINE_WIDTH * CANVAS_SCALE) / this.view.zoom;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
