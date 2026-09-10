@@ -12,6 +12,8 @@ export interface FootTurnJSON {
   end: PathCoordinate;
 }
 
+export type FootTurnFlags = { left: boolean; forward: boolean; inside: boolean };
+
 export abstract class FootTurn extends Element {
   footKey: FootKey;
   readonly left: boolean;
@@ -23,12 +25,7 @@ export abstract class FootTurn extends Element {
     return true;
   }
 
-  constructor(
-    footKey: FootKey,
-    flags: { left: boolean; forward: boolean; inside: boolean },
-    start: PathCoordinate,
-    end: PathCoordinate,
-  ) {
+  constructor(footKey: FootKey, flags: FootTurnFlags, start: PathCoordinate, end: PathCoordinate) {
     super(start, end);
     this.footKey = footKey;
     this.left = flags.left;

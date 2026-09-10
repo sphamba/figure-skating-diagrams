@@ -6,6 +6,16 @@ import { getQuaternionFromAngleAxis } from "../../quaternion.js";
 import { getOppositeFootKey, Sequence } from "../../sequence.js";
 import type { FootKey } from "../../sequence.js";
 import {
+  LeftBackwardInsideBracket,
+  LeftBackwardOutsideBracket,
+  LeftForwardInsideBracket,
+  LeftForwardOutsideBracket,
+  RightBackwardInsideBracket,
+  RightBackwardOutsideBracket,
+  RightForwardInsideBracket,
+  RightForwardOutsideBracket,
+} from "../../element/bracket.js";
+import {
   LeftBackwardInsideThreeTurn,
   LeftBackwardOutsideThreeTurn,
   LeftForwardInsideThreeTurn,
@@ -109,14 +119,14 @@ export const RFO_3 = createTurn("footR", clockwiseCPath, LeftForwardInsideThreeT
 export const RBI_3 = createTurn("footR", counterClockwiseCPath, LeftBackwardOutsideThreeTurn);
 export const RBO_3 = createTurn("footR", clockwiseCPath, LeftBackwardInsideThreeTurn);
 
-export const LFI_B = createTurn("footL", clockwiseCPath, LeftForwardOutsideThreeTurn);
-export const LFO_B = createTurn("footL", counterClockwiseCPath, LeftForwardInsideThreeTurn);
-export const LBI_B = createTurn("footL", clockwiseCPath, LeftBackwardOutsideThreeTurn);
-export const LBO_B = createTurn("footL", counterClockwiseCPath, LeftBackwardInsideThreeTurn);
-export const RFI_B = createTurn("footR", counterClockwiseCPath, LeftForwardInsideThreeTurn);
-export const RFO_B = createTurn("footR", clockwiseCPath, LeftForwardOutsideThreeTurn);
-export const RBI_B = createTurn("footR", counterClockwiseCPath, LeftBackwardInsideThreeTurn);
-export const RBO_B = createTurn("footR", clockwiseCPath, LeftBackwardOutsideThreeTurn);
+export const LFI_B = createTurn("footL", clockwiseCPath, LeftForwardInsideBracket);
+export const LFO_B = createTurn("footL", counterClockwiseCPath, LeftForwardOutsideBracket);
+export const LBI_B = createTurn("footL", clockwiseCPath, LeftBackwardInsideBracket);
+export const LBO_B = createTurn("footL", counterClockwiseCPath, LeftBackwardOutsideBracket);
+export const RFI_B = createTurn("footR", counterClockwiseCPath, RightForwardInsideBracket);
+export const RFO_B = createTurn("footR", clockwiseCPath, RightForwardOutsideBracket);
+export const RBI_B = createTurn("footR", counterClockwiseCPath, RightBackwardInsideBracket);
+export const RBO_B = createTurn("footR", clockwiseCPath, RightBackwardOutsideBracket);
 
 export const LFI_RK = createTurn("footL", clockwiseSPath, LeftForwardInsideThreeTurn, SPathDuration);
 export const LFO_RK = createTurn("footL", counterClockwiseSPath, LeftForwardOutsideThreeTurn, SPathDuration);

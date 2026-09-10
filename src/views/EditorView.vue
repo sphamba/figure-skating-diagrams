@@ -80,6 +80,7 @@ const strokeLevelOptions: { label: string; value: string }[][] = [
 const turnLevelOptions: { label: string; value: string }[][] = [
   [
     { label: "Three-turn", value: "ThreeTurn" },
+    { label: "Bracket", value: "Bracket" },
     { label: "Loop", value: "Loop" },
   ],
   [

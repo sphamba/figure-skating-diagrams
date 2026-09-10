@@ -7,6 +7,7 @@ import { LeftBackwardOutsideThreeTurn,
 	LeftForwardInsideThreeTurn,
 	LeftForwardOutsideThreeTurn,
 } from "../src/engine/element/threeTurn.js";
+import { LeftForwardInsideBracket } from "../src/engine/element/bracket.js";
 import { LeftForwardInsideGlide } from "../src/engine/element/glide.js";
 import { LeftBackwardInsideLoop, LeftForwardInsideLoop } from "../src/engine/element/loop.js";
 import { changeElementType } from "../src/engine/element/turnTypes.js";
@@ -101,13 +102,37 @@ test("changeFootTurnType converts an element's kind and derives the foot from th
 	expect(loop.end).toBe(end);
 });
 
-test("footTurnKindChoices lists all sixteen turn kinds and all glide kinds", () => {
-	expect(footTurnKindChoices).toHaveLength(54);
+test("footTurnKindChoices lists all twenty-four turn kinds and all glide kinds", () => {
+	expect(footTurnKindChoices).toHaveLength(62);
 	const types = footTurnKindChoices.map((choice) => choice.type);
 	expect(types).toContain("LeftForwardInsideThreeTurn");
 	expect(types).toContain("LeftBackwardOutsideLoop");
+	expect(types).toContain("LeftForwardInsideBracket");
+	expect(types).toContain("RightBackwardOutsideBracket");
 	expect(types).toContain("LeftForwardInsideGlide");
 	expect(types).toContain("BothForwardGlide");
+});
+
+test("A bracket instantiates with the right type and short name", () => {
+	const bracket = new LeftForwardInsideBracket("footL", 0.25 as PathCoordinate, 0.75 as PathCoordinate);
+
+	expect(bracket.type).toBe("LeftForwardInsideBracket");
+	expect(bracket.shortName).toBe("LFIB");
+});
+
+test("A bracket rotates opposite to a three-turn on the same entry edge", () => {
+	const threeTurn = new LeftForwardInsideThreeTurn("footL", 0.25 as PathCoordinate, 0.75 as PathCoordinate);
+	const bracket = new LeftForwardInsideBracket("footL", 0.25 as PathCoordinate, 0.75 as PathCoordinate);
+
+	const threeTurnKeyframes = threeTurn.getLeftFootKeyframes();
+	const bracketKeyframes = bracket.getLeftFootKeyframes();
+
+	expect(threeTurnKeyframes).toHaveLength(3);
+	expect(bracketKeyframes).toHaveLength(3);
+	expect(threeTurnKeyframes[1]!.data.orientation!.angle).toBeCloseTo(Math.PI / 2, 10);
+	expect(bracketKeyframes[1]!.data.orientation!.angle).toBeCloseTo(Math.PI / 2, 10);
+	expect(threeTurnKeyframes[1]!.data.orientation!.vector.z).toBeLessThan(0);
+	expect(bracketKeyframes[1]!.data.orientation!.vector.z).toBeGreaterThan(0);
 });
 
 test("A glide round-trips and keeps its pose keyframes", () => {

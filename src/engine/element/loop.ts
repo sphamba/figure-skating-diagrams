@@ -3,7 +3,8 @@ import type { PathCoordinate } from "../coordinates.js";
 import { FootKeyframe, type FootData, HipsKeyframe } from "../keyframe.js";
 import { getQuaternionFromAngleAxis } from "../quaternion.js";
 import { Vector } from "../vector.js";
-import { OneFootTurn } from "./oneFootTurn.js";
+import { defineOneFootTurnKinds, OneFootTurn } from "./oneFootTurn.js";
+import type { FootTurnFlags } from "./turn.js";
 import type { FootKey } from "../sequence.js";
 
 export type LoopConstructor = new (footKey: FootKey, start: PathCoordinate, end: PathCoordinate) => Loop;
@@ -90,53 +91,25 @@ export abstract class Loop extends OneFootTurn {
 
 export const loopConstructorsByType: Record<string, LoopConstructor> = {};
 
-function defineLoop(
-  type: string,
-  shortName: string,
-  flags: { left: boolean; forward: boolean; inside: boolean },
-): LoopConstructor {
-  const Variant = class extends Loop {
-    constructor(footKey: FootKey, start: PathCoordinate, end: PathCoordinate) {
-      super(footKey, flags, start, end);
-    }
+export const loopKindChoices: { type: string; label: string }[] = defineOneFootTurnKinds(
+  { suffix: "Loop", shortSuffix: " Loop", label: "loop" },
+  (type, shortName, flags: FootTurnFlags) => {
+    const Variant = class extends Loop {
+      constructor(footKey: FootKey, start: PathCoordinate, end: PathCoordinate) {
+        super(footKey, flags, start, end);
+      }
 
-    get type(): string {
-      return type;
-    }
+      get type(): string {
+        return type;
+      }
 
-    get shortName(): string {
-      return shortName;
-    }
-  };
-  loopConstructorsByType[type] = Variant;
-  return Variant;
-}
-
-const turnSides = [
-  ["Left", true],
-  ["Right", false],
-] as const;
-const turnDirections = [
-  ["Forward", true],
-  ["Backward", false],
-] as const;
-const turnEdges = [
-  ["Inside", true],
-  ["Outside", false],
-] as const;
-
-export const loopKindChoices: { type: string; label: string }[] = [];
-
-for (const [side, left] of turnSides) {
-  for (const [direction, forward] of turnDirections) {
-    for (const [edge, inside] of turnEdges) {
-      const type = `${side}${direction}${edge}Loop`;
-      const shortName = `${side[0]}${direction[0]}${edge[0]} Loop`;
-      defineLoop(type, shortName, { left, forward, inside });
-      loopKindChoices.push({ type, label: `${side} ${direction.toLowerCase()} ${edge.toLowerCase()} loop` });
-    }
-  }
-}
+      get shortName(): string {
+        return shortName;
+      }
+    };
+    loopConstructorsByType[type] = Variant;
+  },
+);
 
 export const LeftForwardInsideLoop = loopConstructorsByType["LeftForwardInsideLoop"]!;
 export const LeftForwardOutsideLoop = loopConstructorsByType["LeftForwardOutsideLoop"]!;
