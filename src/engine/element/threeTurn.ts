@@ -1,11 +1,12 @@
-/* Three-turns: a half turn on one foot, with 8 left/forward/inside variants. */
+/* Three-turns: a half turn on one foot, with 8 left/forward/inside variants
+ * generated from side, direction and edge flags. */
 
 import type { PathCoordinate } from "../coordinates.js";
 import { FootKeyframe } from "../keyframe.js";
 import { getQuaternionFromAngleAxis } from "../quaternion.js";
 import { Vector } from "../vector.js";
+import type { FootKey } from "../sequence.js";
 import { OneFootTurn } from "./oneFootTurn.js";
-import type { FootTurnClass } from "./turn.js";
 
 /**
  * A ThreeTurn is a half turn on one foot: the on-ice foot rotates by a
@@ -62,158 +63,68 @@ export abstract class ThreeTurn extends OneFootTurn {
   }
 }
 
-export class LeftForwardInsideThreeTurn extends ThreeTurn {
-  get left(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get inside(): boolean {
-    return true;
-  }
-
-  get type(): string {
-    return "LeftForwardInsideThreeTurn";
-  }
-}
-
-export class LeftForwardOutsideThreeTurn extends ThreeTurn {
-  get left(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get inside(): boolean {
-    return false;
-  }
-
-  get type(): string {
-    return "LeftForwardOutsideThreeTurn";
-  }
-}
-
-export class LeftBackwardInsideThreeTurn extends ThreeTurn {
-  get left(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get inside(): boolean {
-    return true;
-  }
-
-  get type(): string {
-    return "LeftBackwardInsideThreeTurn";
-  }
-}
-
-export class LeftBackwardOutsideThreeTurn extends ThreeTurn {
-  get left(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get inside(): boolean {
-    return false;
-  }
-
-  get type(): string {
-    return "LeftBackwardOutsideThreeTurn";
-  }
-}
-
-export class RightForwardInsideThreeTurn extends ThreeTurn {
-  get left(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get inside(): boolean {
-    return true;
-  }
-
-  get type(): string {
-    return "RightForwardInsideThreeTurn";
-  }
-}
-
-export class RightForwardOutsideThreeTurn extends ThreeTurn {
-  get left(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get inside(): boolean {
-    return false;
-  }
-
-  get type(): string {
-    return "RightForwardOutsideThreeTurn";
-  }
-}
-
-export class RightBackwardInsideThreeTurn extends ThreeTurn {
-  get left(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get inside(): boolean {
-    return true;
-  }
-
-  get type(): string {
-    return "RightBackwardInsideThreeTurn";
-  }
-}
-
-export class RightBackwardOutsideThreeTurn extends ThreeTurn {
-  get left(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get inside(): boolean {
-    return false;
-  }
-
-  get type(): string {
-    return "RightBackwardOutsideThreeTurn";
-  }
-}
+/** Constructor type of a generated three-turn variant. */
+export type ThreeTurnConstructor = new (footKey: FootKey, start: PathCoordinate, end: PathCoordinate) => ThreeTurn;
 
 /** Map a three-turn type name to its constructor, for the turn registry. */
-export const threeTurnConstructorsByType: Record<string, FootTurnClass> = {
-  LeftForwardInsideThreeTurn,
-  LeftForwardOutsideThreeTurn,
-  LeftBackwardInsideThreeTurn,
-  LeftBackwardOutsideThreeTurn,
-  RightForwardInsideThreeTurn,
-  RightForwardOutsideThreeTurn,
-  RightBackwardInsideThreeTurn,
-  RightBackwardOutsideThreeTurn,
-};
+export const threeTurnConstructorsByType: Record<string, ThreeTurnConstructor> = {};
+
+/** Define one three-turn variant class: the flags close over the subclass,
+ * which registers itself into the type registry. */
+function defineThreeTurn(
+  type: string,
+  flags: { left: boolean; forward: boolean; inside: boolean },
+): ThreeTurnConstructor {
+  const Variant = class extends ThreeTurn {
+    constructor(footKey: FootKey, start: PathCoordinate, end: PathCoordinate) {
+      super(footKey, flags, start, end);
+    }
+
+    get type(): string {
+      return type;
+    }
+  };
+  threeTurnConstructorsByType[type] = Variant;
+  return Variant;
+}
+
+/** The side, direction and edge words of each variant name, with their flag. */
+const turnSides = [
+  ["Left", true],
+  ["Right", false],
+] as const;
+const turnDirections = [
+  ["Forward", true],
+  ["Backward", false],
+] as const;
+const turnEdges = [
+  ["Inside", true],
+  ["Outside", false],
+] as const;
+
+/** Human-readable label for each available three-turn kind. */
+export const threeTurnKindChoices: { type: string; label: string }[] = [];
+
+/** Construct the left/forward/inside variants from the name flags. */
+for (const [side, left] of turnSides) {
+  for (const [direction, forward] of turnDirections) {
+    for (const [edge, inside] of turnEdges) {
+      const type = `${side}${direction}${edge}ThreeTurn`;
+      defineThreeTurn(type, { left, forward, inside });
+      threeTurnKindChoices.push({
+        type,
+        label: `${side} ${direction.toLowerCase()} ${edge.toLowerCase()} three-turn`,
+      });
+    }
+  }
+}
+
+/** Named constructors kept for use outside the registry (sequences, tests). */
+export const LeftForwardInsideThreeTurn = threeTurnConstructorsByType["LeftForwardInsideThreeTurn"]!;
+export const LeftForwardOutsideThreeTurn = threeTurnConstructorsByType["LeftForwardOutsideThreeTurn"]!;
+export const LeftBackwardInsideThreeTurn = threeTurnConstructorsByType["LeftBackwardInsideThreeTurn"]!;
+export const LeftBackwardOutsideThreeTurn = threeTurnConstructorsByType["LeftBackwardOutsideThreeTurn"]!;
+export const RightForwardInsideThreeTurn = threeTurnConstructorsByType["RightForwardInsideThreeTurn"]!;
+export const RightForwardOutsideThreeTurn = threeTurnConstructorsByType["RightForwardOutsideThreeTurn"]!;
+export const RightBackwardInsideThreeTurn = threeTurnConstructorsByType["RightBackwardInsideThreeTurn"]!;
+export const RightBackwardOutsideThreeTurn = threeTurnConstructorsByType["RightBackwardOutsideThreeTurn"]!;

@@ -1,4 +1,5 @@
-/* Loops: a full turn on one foot, with 8 left/forward/inside variants. */
+/* Loops: a full turn on one foot, with 8 left/forward/inside variants
+ * generated from side, direction and edge flags. */
 
 import { bladeLength } from "../constants.js";
 import type { PathCoordinate } from "../coordinates.js";
@@ -6,8 +7,10 @@ import { FootKeyframe, type FootData, HipsKeyframe } from "../keyframe.js";
 import { getQuaternionFromAngleAxis } from "../quaternion.js";
 import { Vector } from "../vector.js";
 import { OneFootTurn } from "./oneFootTurn.js";
-import type { FootTurnClass, FootTurnJSON } from "./turn.js";
 import type { FootKey } from "../sequence.js";
+
+/** Constructor type of a generated loop variant. */
+export type LoopConstructor = new (footKey: FootKey, start: PathCoordinate, end: PathCoordinate) => Loop;
 
 // Hardcoded loop shift: to have the loop length equal 1.5 * bladeLength
 const defaultLoopShift = (bladeLength * 1.5) as PathCoordinate;
@@ -19,10 +22,6 @@ const defaultLoopShift = (bladeLength * 1.5) as PathCoordinate;
  * at both ends of the element.
  */
 export abstract class Loop extends OneFootTurn {
-  constructor(footKey: FootKey, start: PathCoordinate, end: PathCoordinate) {
-    super(footKey, start, end);
-  }
-
   protected get initialAngle(): number {
     return this.forward ? 0 : Math.PI;
   }
@@ -33,10 +32,6 @@ export abstract class Loop extends OneFootTurn {
 
   protected get contactPointTurn(): number {
     return this.forward ? 0 : 1;
-  }
-
-  toJSON(): FootTurnJSON {
-    return super.toJSON();
   }
 
   /** Hips keyframes: the hips rotate the whole turn of the loop, like the
@@ -110,158 +105,59 @@ export abstract class Loop extends OneFootTurn {
   }
 }
 
-export class LeftForwardInsideLoop extends Loop {
-  get left(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get inside(): boolean {
-    return true;
-  }
-
-  get type(): string {
-    return "LeftForwardInsideLoop";
-  }
-}
-
-export class LeftForwardOutsideLoop extends Loop {
-  get left(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get inside(): boolean {
-    return false;
-  }
-
-  get type(): string {
-    return "LeftForwardOutsideLoop";
-  }
-}
-
-export class LeftBackwardInsideLoop extends Loop {
-  get left(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get inside(): boolean {
-    return true;
-  }
-
-  get type(): string {
-    return "LeftBackwardInsideLoop";
-  }
-}
-
-export class LeftBackwardOutsideLoop extends Loop {
-  get left(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get inside(): boolean {
-    return false;
-  }
-
-  get type(): string {
-    return "LeftBackwardOutsideLoop";
-  }
-}
-
-export class RightForwardInsideLoop extends Loop {
-  get left(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get inside(): boolean {
-    return true;
-  }
-
-  get type(): string {
-    return "RightForwardInsideLoop";
-  }
-}
-
-export class RightForwardOutsideLoop extends Loop {
-  get left(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get inside(): boolean {
-    return false;
-  }
-
-  get type(): string {
-    return "RightForwardOutsideLoop";
-  }
-}
-
-export class RightBackwardInsideLoop extends Loop {
-  get left(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get inside(): boolean {
-    return true;
-  }
-
-  get type(): string {
-    return "RightBackwardInsideLoop";
-  }
-}
-
-export class RightBackwardOutsideLoop extends Loop {
-  get left(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get inside(): boolean {
-    return false;
-  }
-
-  get type(): string {
-    return "RightBackwardOutsideLoop";
-  }
-}
-
 /** Map a loop type name to its constructor, for the turn registry. */
-export const loopConstructorsByType: Record<string, FootTurnClass> = {
-  LeftForwardInsideLoop,
-  LeftForwardOutsideLoop,
-  LeftBackwardInsideLoop,
-  LeftBackwardOutsideLoop,
-  RightForwardInsideLoop,
-  RightForwardOutsideLoop,
-  RightBackwardInsideLoop,
-  RightBackwardOutsideLoop,
-};
+export const loopConstructorsByType: Record<string, LoopConstructor> = {};
+
+/** Define one loop variant class: the flags close over the subclass, which
+ * registers itself into the type registry. */
+function defineLoop(type: string, flags: { left: boolean; forward: boolean; inside: boolean }): LoopConstructor {
+  const Variant = class extends Loop {
+    constructor(footKey: FootKey, start: PathCoordinate, end: PathCoordinate) {
+      super(footKey, flags, start, end);
+    }
+
+    get type(): string {
+      return type;
+    }
+  };
+  loopConstructorsByType[type] = Variant;
+  return Variant;
+}
+
+/** The side, direction and edge words of each variant name, with their flag. */
+const turnSides = [
+  ["Left", true],
+  ["Right", false],
+] as const;
+const turnDirections = [
+  ["Forward", true],
+  ["Backward", false],
+] as const;
+const turnEdges = [
+  ["Inside", true],
+  ["Outside", false],
+] as const;
+
+/** Human-readable label for each available loop kind. */
+export const loopKindChoices: { type: string; label: string }[] = [];
+
+/** Construct the left/forward/inside variants from the name flags. */
+for (const [side, left] of turnSides) {
+  for (const [direction, forward] of turnDirections) {
+    for (const [edge, inside] of turnEdges) {
+      const type = `${side}${direction}${edge}Loop`;
+      defineLoop(type, { left, forward, inside });
+      loopKindChoices.push({ type, label: `${side} ${direction.toLowerCase()} ${edge.toLowerCase()} loop` });
+    }
+  }
+}
+
+/** Named constructors kept for use outside the registry (sequences, tests). */
+export const LeftForwardInsideLoop = loopConstructorsByType["LeftForwardInsideLoop"]!;
+export const LeftForwardOutsideLoop = loopConstructorsByType["LeftForwardOutsideLoop"]!;
+export const LeftBackwardInsideLoop = loopConstructorsByType["LeftBackwardInsideLoop"]!;
+export const LeftBackwardOutsideLoop = loopConstructorsByType["LeftBackwardOutsideLoop"]!;
+export const RightForwardInsideLoop = loopConstructorsByType["RightForwardInsideLoop"]!;
+export const RightForwardOutsideLoop = loopConstructorsByType["RightForwardOutsideLoop"]!;
+export const RightBackwardInsideLoop = loopConstructorsByType["RightBackwardInsideLoop"]!;
+export const RightBackwardOutsideLoop = loopConstructorsByType["RightBackwardOutsideLoop"]!;

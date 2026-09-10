@@ -1,4 +1,5 @@
-/* Glide classes: elements that set a static pose or a crossed/normal stroke for both feet and the hips. */
+/* Glide classes: elements that set a static pose or a crossed/normal stroke
+ * for both feet and the hips, generated from side, direction and edge flags. */
 
 import type { PathCoordinate } from "../coordinates.js";
 import { Element } from "./element.js";
@@ -20,6 +21,9 @@ export interface GlideJSON {
   end: PathCoordinate;
 }
 
+/** Constructor type of a generated glide variant. */
+export type GlideConstructor = new (start: PathCoordinate, end: PathCoordinate) => Glide;
+
 /**
  * A Glide element sets the pose for the span it covers: the feet marked as
  * on the ice rest on the ice (height 0), the other feet are lifted off the
@@ -29,19 +33,50 @@ export interface GlideJSON {
  * skated on an inside edge, an outside edge, or with no edge; a two-foot
  * glide has no edge. Keyframes are placed at the start and the end of the
  * span and blend smoothly into the neighboring elements.
+ *
+ * A variant is described by a config object: the direction of travel, the
+ * feet on the ice, and the skated edge of the on-ice foot ("neither" for a
+ * two-foot glide).
  */
 export abstract class Glide extends Element {
-  /** True when the pose faces forward along the path, false for backward. */
-  abstract readonly forward: boolean;
-  /** True when the left foot is on the ice in this glide. */
-  abstract readonly leftOnIce: boolean;
-  /** True when the right foot is on the ice in this glide. */
-  abstract readonly rightOnIce: boolean;
-  /** Skated edge of the on-ice foot. A two-foot glide is "neither". */
-  abstract readonly edge: "inside" | "outside" | "neither";
+  private readonly config: {
+    forward: boolean;
+    leftOnIce: boolean;
+    rightOnIce: boolean;
+    edge: "inside" | "outside" | "neither";
+  };
 
   /** Name used to identify this glide type when (de)serializing. */
   abstract readonly type: string;
+
+  constructor(
+    config: { forward: boolean; leftOnIce: boolean; rightOnIce: boolean; edge: "inside" | "outside" | "neither" },
+    start: PathCoordinate,
+    end: PathCoordinate,
+  ) {
+    super(start, end);
+    this.config = config;
+  }
+
+  /** True when the pose faces forward along the path, false for backward. */
+  get forward(): boolean {
+    return this.config.forward;
+  }
+
+  /** True when the left foot is on the ice in this glide. */
+  get leftOnIce(): boolean {
+    return this.config.leftOnIce;
+  }
+
+  /** True when the right foot is on the ice in this glide. */
+  get rightOnIce(): boolean {
+    return this.config.rightOnIce;
+  }
+
+  /** Skated edge of the on-ice foot. A two-foot glide is "neither". */
+  get edge(): "inside" | "outside" | "neither" {
+    return this.config.edge;
+  }
 
   getLeftFootKeyframes(_spanScale?: number, lateralScale?: number): FootKeyframe[] {
     return this.createFootKeyframes("footL", this.leftOnIce, lateralScale);
@@ -102,312 +137,31 @@ export abstract class Glide extends Element {
   }
 }
 
-export class LeftForwardInsideGlide extends Glide {
-  get forward(): boolean {
-    return true;
-  }
-
-  get leftOnIce(): boolean {
-    return true;
-  }
-
-  get rightOnIce(): boolean {
-    return false;
-  }
-
-  get edge(): "inside" {
-    return "inside";
-  }
-
-  get type(): string {
-    return "LeftForwardInsideGlide";
-  }
-}
-
-export class LeftForwardOutsideGlide extends Glide {
-  get forward(): boolean {
-    return true;
-  }
-
-  get leftOnIce(): boolean {
-    return true;
-  }
-
-  get rightOnIce(): boolean {
-    return false;
-  }
-
-  get edge(): "outside" {
-    return "outside";
-  }
-
-  get type(): string {
-    return "LeftForwardOutsideGlide";
-  }
-}
-
-export class LeftForwardGlide extends Glide {
-  get forward(): boolean {
-    return true;
-  }
-
-  get leftOnIce(): boolean {
-    return true;
-  }
-
-  get rightOnIce(): boolean {
-    return false;
-  }
-
-  get edge(): "neither" {
-    return "neither";
-  }
-
-  get type(): string {
-    return "LeftForwardGlide";
-  }
-}
-
-export class LeftBackwardInsideGlide extends Glide {
-  get forward(): boolean {
-    return false;
-  }
-
-  get leftOnIce(): boolean {
-    return true;
-  }
-
-  get rightOnIce(): boolean {
-    return false;
-  }
-
-  get edge(): "inside" {
-    return "inside";
-  }
-
-  get type(): string {
-    return "LeftBackwardInsideGlide";
-  }
-}
-
-export class LeftBackwardOutsideGlide extends Glide {
-  get forward(): boolean {
-    return false;
-  }
-
-  get leftOnIce(): boolean {
-    return true;
-  }
-
-  get rightOnIce(): boolean {
-    return false;
-  }
-
-  get edge(): "outside" {
-    return "outside";
-  }
-
-  get type(): string {
-    return "LeftBackwardOutsideGlide";
-  }
-}
-
-export class LeftBackwardGlide extends Glide {
-  get forward(): boolean {
-    return false;
-  }
-
-  get leftOnIce(): boolean {
-    return true;
-  }
-
-  get rightOnIce(): boolean {
-    return false;
-  }
-
-  get edge(): "neither" {
-    return "neither";
-  }
-
-  get type(): string {
-    return "LeftBackwardGlide";
-  }
-}
-
-export class RightForwardInsideGlide extends Glide {
-  get forward(): boolean {
-    return true;
-  }
-
-  get leftOnIce(): boolean {
-    return false;
-  }
-
-  get rightOnIce(): boolean {
-    return true;
-  }
-
-  get edge(): "inside" {
-    return "inside";
-  }
-
-  get type(): string {
-    return "RightForwardInsideGlide";
-  }
-}
-
-export class RightForwardOutsideGlide extends Glide {
-  get forward(): boolean {
-    return true;
-  }
-
-  get leftOnIce(): boolean {
-    return false;
-  }
-
-  get rightOnIce(): boolean {
-    return true;
-  }
-
-  get edge(): "outside" {
-    return "outside";
-  }
-
-  get type(): string {
-    return "RightForwardOutsideGlide";
-  }
-}
-
-export class RightForwardGlide extends Glide {
-  get forward(): boolean {
-    return true;
-  }
-
-  get leftOnIce(): boolean {
-    return false;
-  }
-
-  get rightOnIce(): boolean {
-    return true;
-  }
-
-  get edge(): "neither" {
-    return "neither";
-  }
-
-  get type(): string {
-    return "RightForwardGlide";
-  }
-}
-
-export class RightBackwardInsideGlide extends Glide {
-  get forward(): boolean {
-    return false;
-  }
-
-  get leftOnIce(): boolean {
-    return false;
-  }
-
-  get rightOnIce(): boolean {
-    return true;
-  }
-
-  get edge(): "inside" {
-    return "inside";
-  }
-
-  get type(): string {
-    return "RightBackwardInsideGlide";
-  }
-}
-
-export class RightBackwardOutsideGlide extends Glide {
-  get forward(): boolean {
-    return false;
-  }
-
-  get leftOnIce(): boolean {
-    return false;
-  }
-
-  get rightOnIce(): boolean {
-    return true;
-  }
-
-  get edge(): "outside" {
-    return "outside";
-  }
-
-  get type(): string {
-    return "RightBackwardOutsideGlide";
-  }
-}
-
-export class RightBackwardGlide extends Glide {
-  get forward(): boolean {
-    return false;
-  }
-
-  get leftOnIce(): boolean {
-    return false;
-  }
-
-  get rightOnIce(): boolean {
-    return true;
-  }
-
-  get edge(): "neither" {
-    return "neither";
-  }
-
-  get type(): string {
-    return "RightBackwardGlide";
-  }
-}
-
-export class BothForwardGlide extends Glide {
-  get forward(): boolean {
-    return true;
-  }
-
-  get leftOnIce(): boolean {
-    return true;
-  }
-
-  get rightOnIce(): boolean {
-    return true;
-  }
-
-  get edge(): "neither" {
-    return "neither";
-  }
-
-  get type(): string {
-    return "BothForwardGlide";
-  }
-}
-
-export class BothBackwardGlide extends Glide {
-  get forward(): boolean {
-    return false;
-  }
-
-  get leftOnIce(): boolean {
-    return true;
-  }
-
-  get rightOnIce(): boolean {
-    return true;
-  }
-
-  get edge(): "neither" {
-    return "neither";
-  }
-
-  get type(): string {
-    return "BothBackwardGlide";
-  }
+/** Static pose config of a glide variant. */
+type GlideConfig = {
+  forward: boolean;
+  leftOnIce: boolean;
+  rightOnIce: boolean;
+  edge: "inside" | "outside" | "neither";
+};
+
+/** Map a glide type name to its constructor, for deserialization. */
+export const glideConstructorsByType: Record<string, GlideConstructor> = {};
+
+/** Define one static glide variant class: the config closes over the
+ * subclass, which registers itself into the type registry. */
+function defineGlide(type: string, config: GlideConfig): GlideConstructor {
+  const Variant = class extends Glide {
+    constructor(start: PathCoordinate, end: PathCoordinate) {
+      super(config, start, end);
+    }
+
+    get type(): string {
+      return type;
+    }
+  };
+  glideConstructorsByType[type] = Variant;
+  return Variant;
 }
 
 /**
@@ -421,17 +175,25 @@ export class BothBackwardGlide extends Glide {
  * completion, and lifts off at the end of the stroke.
  */
 export abstract class DynamicGlide extends Glide {
-  /** True when the center foot of the stroke is the left foot. */
-  abstract readonly left: boolean;
-  /** True when the free foot crosses over the other one at the sides. */
-  abstract readonly crossed: boolean;
+  private readonly strokeConfig: { left: boolean; crossed: boolean };
 
-  get leftOnIce(): boolean {
-    return this.left;
+  constructor(
+    config: { forward: boolean; left: boolean; crossed: boolean; edge: "inside" | "outside" | "neither" },
+    start: PathCoordinate,
+    end: PathCoordinate,
+  ) {
+    super({ forward: config.forward, leftOnIce: config.left, rightOnIce: !config.left, edge: config.edge }, start, end);
+    this.strokeConfig = { left: config.left, crossed: config.crossed };
   }
 
-  get rightOnIce(): boolean {
-    return !this.left;
+  /** True when the center foot of the stroke is the left foot. */
+  get left(): boolean {
+    return this.strokeConfig.left;
+  }
+
+  /** True when the free foot crosses over the other one at the sides. */
+  get crossed(): boolean {
+    return this.strokeConfig.crossed;
   }
 
   getLeftFootKeyframes(_spanScale?: number, lateralScale?: number): FootKeyframe[] {
@@ -488,21 +250,126 @@ export abstract class DynamicGlide extends Glide {
   }
 }
 
+/** Define one dynamic glide variant class: the config closes over the
+ * subclass, which registers itself into the type registry. */
+function defineDynamicGlide(
+  type: string,
+  config: { forward: boolean; left: boolean; crossed: boolean; edge: "inside" | "outside" | "neither" },
+): GlideConstructor {
+  const Variant = class extends DynamicGlide {
+    constructor(start: PathCoordinate, end: PathCoordinate) {
+      super(config, start, end);
+    }
+
+    get type(): string {
+      return type;
+    }
+  };
+  glideConstructorsByType[type] = Variant;
+  return Variant;
+}
+
+/** The side, direction, edge and stroke words of each variant name, with
+ * their flags. */
+const glideSides = [
+  ["Left", true],
+  ["Right", false],
+] as const;
+const glideDirections = [
+  ["Forward", true],
+  ["Backward", false],
+] as const;
+const glideEdges = [
+  ["Inside", "inside"],
+  ["Outside", "outside"],
+  ["", "neither"],
+] as const;
+const glideStrokes = [
+  ["Normal", false],
+  ["Crossed", true],
+] as const;
+
+/** Human-readable label for each available glide kind. */
+export const glideKindChoices: { type: string; label: string }[] = [];
+
+/** Construct the static pose variants: one-foot glides per side, direction
+ * and edge, then the two-foot glides (no edge). A declared class of the same
+ * name (kept as a type for the tests) takes precedence over the generated
+ * variant, so round-trips return that class. */
+for (const [side, left] of glideSides) {
+  for (const [direction, forward] of glideDirections) {
+    for (const [edgeName, edge] of glideEdges) {
+      const type = `${side}${direction}${edgeName}Glide`;
+      const config: GlideConfig = { forward, leftOnIce: left, rightOnIce: !left, edge };
+      if (!glideConstructorsByType[type]) {
+        defineGlide(type, config);
+      }
+      glideKindChoices.push({
+        type,
+        label: `${side} ${direction.toLowerCase()} ${edge === "neither" ? "" : edge + " "}glide`,
+      });
+    }
+  }
+}
+
+// Two-foot glide: both feet on the ice, no edge.
+for (const [direction, forward] of glideDirections) {
+  const type = `Both${direction}Glide`;
+  const config: GlideConfig = { forward, leftOnIce: true, rightOnIce: true, edge: "neither" };
+  if (!glideConstructorsByType[type]) {
+    defineGlide(type, config);
+  }
+  glideKindChoices.push({ type, label: `Two-foot ${direction.toLowerCase()} glide` });
+}
+
+/** Construct the crossed/normal stroke variants per side, direction, edge
+ * and stroke word. */
+for (const [side, left] of glideSides) {
+  for (const [strokeName, crossed] of glideStrokes) {
+    for (const [direction, forward] of glideDirections) {
+      for (const [edgeName, edge] of glideEdges) {
+        const type = `${side}${strokeName}${direction}${edgeName}Glide`;
+        const config = { forward, left, crossed, edge };
+        if (!glideConstructorsByType[type]) {
+          defineDynamicGlide(type, config);
+        }
+        glideKindChoices.push({
+          type,
+          label: `${side} ${strokeName.toLowerCase()} ${direction.toLowerCase()} ${edge === "neither" ? "" : edge + " "}glide`,
+        });
+      }
+    }
+  }
+}
+
+/** Named glide kind constructors kept for use outside the registry (store,
+ * tests), declared as classes so they are usable as instance types.
+ * Registering them replaces the generated variants of the same names, so a
+ * round-trip through the registry returns these exact classes. */
+
+export class LeftForwardInsideGlide extends Glide {
+  constructor(start: PathCoordinate, end: PathCoordinate) {
+    super({ forward: true, leftOnIce: true, rightOnIce: false, edge: "inside" }, start, end);
+  }
+
+  get type(): string {
+    return "LeftForwardInsideGlide";
+  }
+}
+
+export class LeftForwardOutsideGlide extends Glide {
+  constructor(start: PathCoordinate, end: PathCoordinate) {
+    super({ forward: true, leftOnIce: true, rightOnIce: false, edge: "outside" }, start, end);
+  }
+
+  get type(): string {
+    return "LeftForwardOutsideGlide";
+  }
+}
+
 export class LeftNormalForwardInsideGlide extends DynamicGlide {
-  get left(): boolean {
-    return true;
-  }
-
-  get crossed(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get edge(): "inside" {
-    return "inside";
+  constructor(start: PathCoordinate, end: PathCoordinate) {
+    super({ forward: true, left: true, crossed: false, edge: "inside" }, start, end);
   }
 
   get type(): string {
@@ -510,594 +377,20 @@ export class LeftNormalForwardInsideGlide extends DynamicGlide {
   }
 }
 
-export class LeftCrossedForwardInsideGlide extends DynamicGlide {
-  get left(): boolean {
-    return true;
-  }
-
-  get crossed(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get edge(): "inside" {
-    return "inside";
+export class BothForwardGlide extends Glide {
+  constructor(start: PathCoordinate, end: PathCoordinate) {
+    super({ forward: true, leftOnIce: true, rightOnIce: true, edge: "neither" }, start, end);
   }
 
   get type(): string {
-    return "LeftCrossedForwardInsideGlide";
+    return "BothForwardGlide";
   }
 }
 
-export class LeftNormalForwardOutsideGlide extends DynamicGlide {
-  get left(): boolean {
-    return true;
-  }
-
-  get crossed(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get edge(): "outside" {
-    return "outside";
-  }
-
-  get type(): string {
-    return "LeftNormalForwardOutsideGlide";
-  }
-}
-
-export class LeftCrossedForwardOutsideGlide extends DynamicGlide {
-  get left(): boolean {
-    return true;
-  }
-
-  get crossed(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get edge(): "outside" {
-    return "outside";
-  }
-
-  get type(): string {
-    return "LeftCrossedForwardOutsideGlide";
-  }
-}
-
-export class LeftNormalForwardGlide extends DynamicGlide {
-  get left(): boolean {
-    return true;
-  }
-
-  get crossed(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get edge(): "neither" {
-    return "neither";
-  }
-
-  get type(): string {
-    return "LeftNormalForwardGlide";
-  }
-}
-
-export class LeftCrossedForwardGlide extends DynamicGlide {
-  get left(): boolean {
-    return true;
-  }
-
-  get crossed(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get edge(): "neither" {
-    return "neither";
-  }
-
-  get type(): string {
-    return "LeftCrossedForwardGlide";
-  }
-}
-
-export class LeftNormalBackwardInsideGlide extends DynamicGlide {
-  get left(): boolean {
-    return true;
-  }
-
-  get crossed(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get edge(): "inside" {
-    return "inside";
-  }
-
-  get type(): string {
-    return "LeftNormalBackwardInsideGlide";
-  }
-}
-
-export class LeftCrossedBackwardInsideGlide extends DynamicGlide {
-  get left(): boolean {
-    return true;
-  }
-
-  get crossed(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get edge(): "inside" {
-    return "inside";
-  }
-
-  get type(): string {
-    return "LeftCrossedBackwardInsideGlide";
-  }
-}
-
-export class LeftNormalBackwardOutsideGlide extends DynamicGlide {
-  get left(): boolean {
-    return true;
-  }
-
-  get crossed(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get edge(): "outside" {
-    return "outside";
-  }
-
-  get type(): string {
-    return "LeftNormalBackwardOutsideGlide";
-  }
-}
-
-export class LeftCrossedBackwardOutsideGlide extends DynamicGlide {
-  get left(): boolean {
-    return true;
-  }
-
-  get crossed(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get edge(): "outside" {
-    return "outside";
-  }
-
-  get type(): string {
-    return "LeftCrossedBackwardOutsideGlide";
-  }
-}
-
-export class LeftNormalBackwardGlide extends DynamicGlide {
-  get left(): boolean {
-    return true;
-  }
-
-  get crossed(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get edge(): "neither" {
-    return "neither";
-  }
-
-  get type(): string {
-    return "LeftNormalBackwardGlide";
-  }
-}
-
-export class LeftCrossedBackwardGlide extends DynamicGlide {
-  get left(): boolean {
-    return true;
-  }
-
-  get crossed(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get edge(): "neither" {
-    return "neither";
-  }
-
-  get type(): string {
-    return "LeftCrossedBackwardGlide";
-  }
-}
-
-export class RightNormalForwardInsideGlide extends DynamicGlide {
-  get left(): boolean {
-    return false;
-  }
-
-  get crossed(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get edge(): "inside" {
-    return "inside";
-  }
-
-  get type(): string {
-    return "RightNormalForwardInsideGlide";
-  }
-}
-
-export class RightCrossedForwardInsideGlide extends DynamicGlide {
-  get left(): boolean {
-    return false;
-  }
-
-  get crossed(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get edge(): "inside" {
-    return "inside";
-  }
-
-  get type(): string {
-    return "RightCrossedForwardInsideGlide";
-  }
-}
-
-export class RightNormalForwardOutsideGlide extends DynamicGlide {
-  get left(): boolean {
-    return false;
-  }
-
-  get crossed(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get edge(): "outside" {
-    return "outside";
-  }
-
-  get type(): string {
-    return "RightNormalForwardOutsideGlide";
-  }
-}
-
-export class RightCrossedForwardOutsideGlide extends DynamicGlide {
-  get left(): boolean {
-    return false;
-  }
-
-  get crossed(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get edge(): "outside" {
-    return "outside";
-  }
-
-  get type(): string {
-    return "RightCrossedForwardOutsideGlide";
-  }
-}
-
-export class RightNormalForwardGlide extends DynamicGlide {
-  get left(): boolean {
-    return false;
-  }
-
-  get crossed(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get edge(): "neither" {
-    return "neither";
-  }
-
-  get type(): string {
-    return "RightNormalForwardGlide";
-  }
-}
-
-export class RightCrossedForwardGlide extends DynamicGlide {
-  get left(): boolean {
-    return false;
-  }
-
-  get crossed(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return true;
-  }
-
-  get edge(): "neither" {
-    return "neither";
-  }
-
-  get type(): string {
-    return "RightCrossedForwardGlide";
-  }
-}
-
-export class RightNormalBackwardInsideGlide extends DynamicGlide {
-  get left(): boolean {
-    return false;
-  }
-
-  get crossed(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get edge(): "inside" {
-    return "inside";
-  }
-
-  get type(): string {
-    return "RightNormalBackwardInsideGlide";
-  }
-}
-
-export class RightCrossedBackwardInsideGlide extends DynamicGlide {
-  get left(): boolean {
-    return false;
-  }
-
-  get crossed(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get edge(): "inside" {
-    return "inside";
-  }
-
-  get type(): string {
-    return "RightCrossedBackwardInsideGlide";
-  }
-}
-
-export class RightNormalBackwardOutsideGlide extends DynamicGlide {
-  get left(): boolean {
-    return false;
-  }
-
-  get crossed(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get edge(): "outside" {
-    return "outside";
-  }
-
-  get type(): string {
-    return "RightNormalBackwardOutsideGlide";
-  }
-}
-
-export class RightCrossedBackwardOutsideGlide extends DynamicGlide {
-  get left(): boolean {
-    return false;
-  }
-
-  get crossed(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get edge(): "outside" {
-    return "outside";
-  }
-
-  get type(): string {
-    return "RightCrossedBackwardOutsideGlide";
-  }
-}
-
-export class RightNormalBackwardGlide extends DynamicGlide {
-  get left(): boolean {
-    return false;
-  }
-
-  get crossed(): boolean {
-    return false;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get edge(): "neither" {
-    return "neither";
-  }
-
-  get type(): string {
-    return "RightNormalBackwardGlide";
-  }
-}
-
-export class RightCrossedBackwardGlide extends DynamicGlide {
-  get left(): boolean {
-    return false;
-  }
-
-  get crossed(): boolean {
-    return true;
-  }
-
-  get forward(): boolean {
-    return false;
-  }
-
-  get edge(): "neither" {
-    return "neither";
-  }
-
-  get type(): string {
-    return "RightCrossedBackwardGlide";
-  }
-}
-
-/** Map a glide type name to its constructor, for deserialization. */
-export type GlideConstructor = new (start: PathCoordinate, end: PathCoordinate) => Glide;
-
-export const glideConstructorsByType: Record<string, GlideConstructor> = {
-  LeftForwardInsideGlide,
-  LeftForwardOutsideGlide,
-  LeftForwardGlide,
-  LeftBackwardInsideGlide,
-  LeftBackwardOutsideGlide,
-  LeftBackwardGlide,
-  RightForwardInsideGlide,
-  RightForwardOutsideGlide,
-  RightForwardGlide,
-  RightBackwardInsideGlide,
-  RightBackwardOutsideGlide,
-  RightBackwardGlide,
-  BothForwardGlide,
-  BothBackwardGlide,
-  LeftNormalForwardInsideGlide,
-  LeftCrossedForwardInsideGlide,
-  LeftNormalForwardOutsideGlide,
-  LeftCrossedForwardOutsideGlide,
-  LeftNormalForwardGlide,
-  LeftCrossedForwardGlide,
-  LeftNormalBackwardInsideGlide,
-  LeftCrossedBackwardInsideGlide,
-  LeftNormalBackwardOutsideGlide,
-  LeftCrossedBackwardOutsideGlide,
-  LeftNormalBackwardGlide,
-  LeftCrossedBackwardGlide,
-  RightNormalForwardInsideGlide,
-  RightCrossedForwardInsideGlide,
-  RightNormalForwardOutsideGlide,
-  RightCrossedForwardOutsideGlide,
-  RightNormalForwardGlide,
-  RightCrossedForwardGlide,
-  RightNormalBackwardInsideGlide,
-  RightCrossedBackwardInsideGlide,
-  RightNormalBackwardOutsideGlide,
-  RightCrossedBackwardOutsideGlide,
-  RightNormalBackwardGlide,
-  RightCrossedBackwardGlide,
-};
-
-/** Human-readable label for each available glide kind. */
-export const glideKindChoices: { type: string; label: string }[] = [
-  { type: "LeftForwardInsideGlide", label: "Left forward inside glide" },
-  { type: "LeftForwardOutsideGlide", label: "Left forward outside glide" },
-  { type: "LeftForwardGlide", label: "Left forward glide" },
-  { type: "LeftBackwardInsideGlide", label: "Left backward inside glide" },
-  { type: "LeftBackwardOutsideGlide", label: "Left backward outside glide" },
-  { type: "LeftBackwardGlide", label: "Left backward glide" },
-  { type: "RightForwardInsideGlide", label: "Right forward inside glide" },
-  { type: "RightForwardOutsideGlide", label: "Right forward outside glide" },
-  { type: "RightForwardGlide", label: "Right forward glide" },
-  { type: "RightBackwardInsideGlide", label: "Right backward inside glide" },
-  { type: "RightBackwardOutsideGlide", label: "Right backward outside glide" },
-  { type: "RightBackwardGlide", label: "Right backward glide" },
-  { type: "LeftNormalForwardInsideGlide", label: "Left normal forward inside glide" },
-  { type: "LeftCrossedForwardInsideGlide", label: "Left crossed forward inside glide" },
-  { type: "LeftNormalForwardOutsideGlide", label: "Left normal forward outside glide" },
-  { type: "LeftCrossedForwardOutsideGlide", label: "Left crossed forward outside glide" },
-  { type: "LeftNormalForwardGlide", label: "Left normal forward glide" },
-  { type: "LeftCrossedForwardGlide", label: "Left crossed forward glide" },
-  { type: "LeftNormalBackwardInsideGlide", label: "Left normal backward inside glide" },
-  { type: "LeftCrossedBackwardInsideGlide", label: "Left crossed backward inside glide" },
-  { type: "LeftNormalBackwardOutsideGlide", label: "Left normal backward outside glide" },
-  { type: "LeftCrossedBackwardOutsideGlide", label: "Left crossed backward outside glide" },
-  { type: "LeftNormalBackwardGlide", label: "Left normal backward glide" },
-  { type: "LeftCrossedBackwardGlide", label: "Left crossed backward glide" },
-  { type: "RightNormalForwardInsideGlide", label: "Right normal forward inside glide" },
-  { type: "RightCrossedForwardInsideGlide", label: "Right crossed forward inside glide" },
-  { type: "RightNormalForwardOutsideGlide", label: "Right normal forward outside glide" },
-  { type: "RightCrossedForwardOutsideGlide", label: "Right crossed forward outside glide" },
-  { type: "RightNormalForwardGlide", label: "Right normal forward glide" },
-  { type: "RightCrossedForwardGlide", label: "Right crossed forward glide" },
-  { type: "RightNormalBackwardInsideGlide", label: "Right normal backward inside glide" },
-  { type: "RightCrossedBackwardInsideGlide", label: "Right crossed backward inside glide" },
-  { type: "RightNormalBackwardOutsideGlide", label: "Right normal backward outside glide" },
-  { type: "RightCrossedBackwardOutsideGlide", label: "Right crossed backward outside glide" },
-  { type: "RightNormalBackwardGlide", label: "Right normal backward glide" },
-  { type: "RightCrossedBackwardGlide", label: "Right crossed backward glide" },
-  { type: "BothForwardGlide", label: "Two-foot forward glide" },
-  { type: "BothBackwardGlide", label: "Two-foot backward glide" },
-];
+// Replace the generated variants by the declared classes of the same names,
+// and drop the generated choices in favor of the declared class names (same
+// type strings, so the kind choices stay as generated).
+glideConstructorsByType["LeftForwardInsideGlide"] = LeftForwardInsideGlide;
+glideConstructorsByType["LeftForwardOutsideGlide"] = LeftForwardOutsideGlide;
+glideConstructorsByType["LeftNormalForwardInsideGlide"] = LeftNormalForwardInsideGlide;
+glideConstructorsByType["BothForwardGlide"] = BothForwardGlide;

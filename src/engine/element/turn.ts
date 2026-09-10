@@ -25,11 +25,11 @@ export interface FootTurnJSON {
 export abstract class FootTurn extends Element {
   footKey: FootKey;
   /** True when the turn rotates to the left. */
-  abstract readonly left: boolean;
+  readonly left: boolean;
   /** True when the entry edge travels forward along the path. */
-  abstract readonly forward: boolean;
+  readonly forward: boolean;
   /** True when the skated edge is an inside edge, false for outside. */
-  abstract readonly inside: boolean;
+  readonly inside: boolean;
   /** Name used to identify this turn type when (de)serializing. */
   abstract readonly type: string;
 
@@ -39,9 +39,17 @@ export abstract class FootTurn extends Element {
     return true;
   }
 
-  constructor(footKey: FootKey, start: PathCoordinate, end: PathCoordinate) {
+  constructor(
+    footKey: FootKey,
+    flags: { left: boolean; forward: boolean; inside: boolean },
+    start: PathCoordinate,
+    end: PathCoordinate,
+  ) {
     super(start, end);
     this.footKey = footKey;
+    this.left = flags.left;
+    this.forward = flags.forward;
+    this.inside = flags.inside;
   }
 
   /** True when the turn rotates clockwise: a left turn on an inside edge

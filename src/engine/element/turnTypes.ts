@@ -2,34 +2,21 @@
 
 import type { PathCoordinate } from "../coordinates.js";
 import { glideConstructorsByType, glideKindChoices } from "./glide.js";
-import { threeTurnConstructorsByType, LeftForwardInsideThreeTurn } from "./threeTurn.js";
-import { loopConstructorsByType } from "./loop.js";
+import { threeTurnConstructorsByType, threeTurnKindChoices, LeftForwardInsideThreeTurn } from "./threeTurn.js";
+import { loopConstructorsByType, loopKindChoices } from "./loop.js";
 import type { Element } from "./element.js";
 import { footTurnConstructorsByType, changeFootTurnType } from "./turn.js";
 import type { FootTurnJSON } from "./turn.js";
 import type { FootKey } from "../sequence.js";
 
-/* Fill the FootTurn deserialization registry with the concrete turn types. */
+/* Fill the FootTurn deserialization registry with the generated turn types. */
 Object.assign(footTurnConstructorsByType, threeTurnConstructorsByType, loopConstructorsByType);
 
-/** Human-readable label for each available element (foot turn) kind. */
+/** Human-readable label for each available element (foot turn) kind,
+ * generated from the three-turn, loop and glide kind choices. */
 export const footTurnKindChoices: { type: string; label: string }[] = [
-  { type: "LeftForwardInsideThreeTurn", label: "Left forward inside three-turn" },
-  { type: "LeftForwardOutsideThreeTurn", label: "Left forward outside three-turn" },
-  { type: "LeftBackwardInsideThreeTurn", label: "Left backward inside three-turn" },
-  { type: "LeftBackwardOutsideThreeTurn", label: "Left backward outside three-turn" },
-  { type: "RightForwardInsideThreeTurn", label: "Right forward inside three-turn" },
-  { type: "RightForwardOutsideThreeTurn", label: "Right forward outside three-turn" },
-  { type: "RightBackwardInsideThreeTurn", label: "Right backward inside three-turn" },
-  { type: "RightBackwardOutsideThreeTurn", label: "Right backward outside three-turn" },
-  { type: "LeftForwardInsideLoop", label: "Left forward inside loop" },
-  { type: "LeftForwardOutsideLoop", label: "Left forward outside loop" },
-  { type: "LeftBackwardInsideLoop", label: "Left backward inside loop" },
-  { type: "LeftBackwardOutsideLoop", label: "Left backward outside loop" },
-  { type: "RightForwardInsideLoop", label: "Right forward inside loop" },
-  { type: "RightForwardOutsideLoop", label: "Right forward outside loop" },
-  { type: "RightBackwardInsideLoop", label: "Right backward inside loop" },
-  { type: "RightBackwardOutsideLoop", label: "Right backward outside loop" },
+  ...threeTurnKindChoices,
+  ...loopKindChoices,
   ...glideKindChoices,
 ];
 
