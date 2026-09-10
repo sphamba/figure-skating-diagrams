@@ -101,7 +101,7 @@ function makeEditor() {
   });
   const path = new Path();
   path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
-  const editor = new Editor(canvas, new Sequence(path));
+  const editor = new Editor(canvas, [new Sequence(path)]);
   editor.mode = "path";
   return { editor, canvas };
 }
@@ -112,7 +112,7 @@ function mouse(eventName: string, target: EventTarget, init: MouseEventInit) {
 
 test("dragging multiple selected points keeps them under the cursor", () => {
   const { editor, canvas } = makeEditor();
-  const curve = editor.getSequence().path.curves[0]!;
+  const curve = editor.getSequences()[0].path.curves[0]!;
   const zoom = editorRef(editor).view.zoom;
   const sx = (wx: number) => 512 + wx * zoom;
   const sy = (wy: number) => 512 - wy * zoom;
@@ -121,7 +121,7 @@ test("dragging multiple selected points keeps them under the cursor", () => {
   mouse("mouseup", window, {});
   mouse("mousedown", canvas, { clientX: sx(1), clientY: sy(0), button: 0, ctrlKey: true });
   mouse("mouseup", window, {});
-  expect(editorRef(editor).selected.size).toBe(2);
+  expect(editorRef(editor).getSelectedPointsFor(editorRef(editor).getSequences()[0]).size).toBe(2);
 
   const p0 = curve.p0;
   const startX = sx(p0.x);
@@ -139,15 +139,65 @@ test("dragging multiple selected points keeps them under the cursor", () => {
   editor.destroy();
 });
 
+test("dragging a path point directly moves it without selecting it first", () => {
+  const { editor, canvas } = makeEditor();
+  const curve = editor.getSequences()[0].path.curves[0]!;
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(0), button: 0, ctrlKey: false });
+  for (let i = 1; i <= 10; i++) {
+    mouse("mousemove", window, { clientX: sx(i * 0.05), clientY: sy(0) });
+    expect(curve.p0.x).toBeCloseTo(i * 0.05, 6);
+  }
+  mouse("mouseup", window, {});
+
+  expect(editorRef(editor).getSelectedPointsFor(editor.getSequences()[0]).size).toBe(1);
+  editor.destroy();
+});
+
+test("dragging one point moves the points selected on other sequences together", () => {
+  const { editor, canvas } = makeEditor();
+  const first = editor.getSequences()[0];
+  const path2 = new Path();
+  path2.addCurveEnd(new Curve(new Vector(0, 4), new Vector(1 / 3, 4), new Vector(2 / 3, 4), new Vector(1, 4)));
+  const second = new Sequence(path2);
+  editor.setSequences([first, second]);
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+  const firstCurve = first.path.curves[0]!;
+  const secondCurve = second.path.curves[0]!;
+
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(0), button: 0, ctrlKey: true });
+  mouse("mouseup", window, {});
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(4), button: 0, ctrlKey: true });
+  mouse("mouseup", window, {});
+  expect(editor.getSelectedPointsFor(first).size).toBe(1);
+  expect(editor.getSelectedPointsFor(second).size).toBe(1);
+
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(0), button: 0, ctrlKey: false });
+  for (let i = 1; i <= 8; i++) {
+    mouse("mousemove", window, { clientX: sx(i * 0.1), clientY: sy(i * 0.05) });
+    expect(firstCurve.p0.x).toBeCloseTo(i * 0.1, 6);
+    expect(secondCurve.p0.x).toBeCloseTo(i * 0.1, 6);
+    expect(secondCurve.p0.y).toBeCloseTo(4 + i * 0.05, 6);
+  }
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
 test("dragging an edge also drags the neighbour's supplementary control points to keep the derivative continuous", () => {
   const { editor } = makeEditor();
-  const path = editor.getSequence().path;
+  const path = editor.getSequences()[0].path;
   path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(4 / 3, 0), new Vector(5 / 3, 0), new Vector(2, 0)));
   const c0 = path.curves[0]!;
   const c1 = path.curves[1]!;
   expect(c0.p3).toBe(c1.p0);
 
-  const sel = editorRef(editor).selectedCurves;
+  const sel = editor.getSelectedCurvesFor(editor.getSequences()[0]);
   sel.clear();
   sel.add(1);
   const delta = new Vector(0.5, 0.2);
@@ -175,12 +225,12 @@ test("dragging an edge also drags the neighbour's supplementary control points t
 
 test("dragging the first edge drags the next curve's supplementary p1 for continuity", () => {
   const { editor } = makeEditor();
-  const path = editor.getSequence().path;
+  const path = editor.getSequences()[0].path;
   path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(4 / 3, 0), new Vector(5 / 3, 0), new Vector(2, 0)));
   const c0 = path.curves[0]!;
   const c1 = path.curves[1]!;
 
-  const sel = editorRef(editor).selectedCurves;
+  const sel = editor.getSelectedCurvesFor(editor.getSequences()[0]);
   sel.clear();
   sel.add(0);
   const delta = new Vector(0.4, -0.3);
@@ -204,7 +254,7 @@ test("dragging the first edge drags the next curve's supplementary p1 for contin
 
 test("dragging one of several selected curves moves them all", () => {
   const { editor, canvas } = makeEditor();
-  const path = editor.getSequence().path;
+  const path = editor.getSequences()[0].path;
   path.addCurveEnd(new Curve(new Vector(4, 0), new Vector(16 / 3, 0), new Vector(20 / 3, 0), new Vector(8, 0)));
   const c0 = path.curves[0]!;
   const c1 = path.curves[1]!;
@@ -212,7 +262,7 @@ test("dragging one of several selected curves moves them all", () => {
   const sx = (wx: number) => 512 + wx * zoom;
   const sy = (wy: number) => 512 - wy * zoom;
 
-  const sel = editorRef(editor).selectedCurves;
+  const sel = editor.getSelectedCurvesFor(editor.getSequences()[0]);
   sel.clear();
   sel.add(0);
   sel.add(1);
@@ -240,7 +290,7 @@ test("dragging one of several selected curves moves them all", () => {
 
 test("points and curves cannot be in the same multiple selection", () => {
   const { editor, canvas } = makeEditor();
-  const path = editor.getSequence().path;
+  const path = editor.getSequences()[0].path;
   path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(4 / 3, 0), new Vector(5 / 3, 0), new Vector(2, 0)));
   const state = editorRef(editor);
   const zoom = state.view.zoom;
@@ -249,18 +299,45 @@ test("points and curves cannot be in the same multiple selection", () => {
 
   mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(0), button: 0, ctrlKey: false });
   mouse("mouseup", window, {});
-  expect(state.selected.size).toBe(1);
-  expect(state.selectedCurves.size).toBe(0);
+  const seq = state.getSequences()[0];
+  expect(state.getSelectedPointsFor(seq).size).toBe(1);
+  expect(state.getSelectedCurvesFor(seq).size).toBe(0);
 
   mouse("mousedown", canvas, { clientX: sx(1.5), clientY: sy(0), button: 0, ctrlKey: true });
   mouse("mouseup", window, {});
-  expect(state.selectedCurves.size).toBe(1);
-  expect(state.selected.size).toBe(0);
+  expect(state.getSelectedCurvesFor(seq).size).toBe(1);
+  expect(state.getSelectedPointsFor(seq).size).toBe(0);
 
   mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(0), button: 0, ctrlKey: true });
   mouse("mouseup", window, {});
-  expect(state.selected.size).toBe(1);
-  expect(state.selectedCurves.size).toBe(0);
+  expect(state.getSelectedPointsFor(seq).size).toBe(1);
+  expect(state.getSelectedCurvesFor(seq).size).toBe(0);
+
+  editor.destroy();
+});
+
+test("interaction works on every visible sequence and setSequences drops the hidden one's edit state", () => {
+  const { editor, canvas } = makeEditor();
+
+  const first = editor.getSequences()[0];
+  const path2 = new Path();
+  path2.addCurveEnd(new Curve(new Vector(0, 4), new Vector(1 / 3, 4), new Vector(2 / 3, 4), new Vector(1, 4)));
+  const second = new Sequence(path2);
+  editor.setSequences([first, second]);
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(4), button: 0, ctrlKey: false });
+  mouse("mouseup", window, {});
+  expect(editor.getSelectedPointsFor(second).size).toBe(1);
+  expect(editor.getSelectedPointsFor(first).size).toBe(0);
+
+  editor.setSequences([first]);
+  expect(editor.getSelectedPointsFor(second).size).toBe(0);
+  expect(editor.getSelectedPointsFor(first).size).toBe(0);
+  expect(editor.getSequences()).toHaveLength(1);
 
   editor.destroy();
 });
@@ -272,7 +349,7 @@ function editorRef(editor: Editor): any {
 
 test("a joint shared by two curves moves once, not twice, during a group drag", () => {
   const { editor, canvas } = makeEditor();
-  const path = editor.getSequence().path;
+  const path = editor.getSequences()[0].path;
   path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(4 / 3, 0), new Vector(5 / 3, 0), new Vector(2, 0)));
   const c0 = path.curves[0]!;
   const c1 = path.curves[1]!;
@@ -281,7 +358,7 @@ test("a joint shared by two curves moves once, not twice, during a group drag", 
   const sx = (wx: number) => 512 + wx * zoom;
   const sy = (wy: number) => 512 - wy * zoom;
 
-  const sel = editorRef(editor).selected;
+  const sel = editor.getSelectedPointsFor(editor.getSequences()[0]);
   sel.clear();
   sel.add("0:p3");
   sel.add("1:p0");
@@ -307,7 +384,7 @@ test("a joint shared by two curves moves once, not twice, during a group drag", 
 
 test("dragging an element by its segment keeps its real length constant", () => {
   const { editor, canvas } = makeEditor();
-  const path = editor.getSequence().path;
+  const path = editor.getSequences()[0].path;
   path.curves = [new Curve(new Vector(0, 0), new Vector(0.5, 0), new Vector(5, 4), new Vector(50, 0))];
   path.updateLength();
   editorRef(editor).mode = "elements";
@@ -315,7 +392,7 @@ test("dragging an element by its segment keeps its real length constant", () => 
   const startU = (path.length * 0.2) as PathCoordinate;
   const endU = (path.length * 0.4) as PathCoordinate;
   const el = new LeftForwardOutsideThreeTurn("footL", startU, endU);
-  editorRef(editor).sequence.elements.push(el);
+  editorRef(editor).getSequences()[0].elements.push(el);
 
   const zoom = editorRef(editor).view.zoom;
   const sx = (wx: number) => 512 + wx * zoom;
@@ -340,9 +417,45 @@ test("dragging an element by its segment keeps its real length constant", () => 
   editor.destroy();
 });
 
+test("dragging an element by its segment moves it toward the start of the path", () => {
+  const { editor, canvas } = makeEditor();
+  const path = editor.getSequences()[0].path;
+  path.curves = [new Curve(new Vector(0, 0), new Vector(0.5, 0), new Vector(5, 4), new Vector(50, 0))];
+  path.updateLength();
+  editorRef(editor).mode = "elements";
+
+  const startU = (path.length * 0.5) as PathCoordinate;
+  const endU = (path.length * 0.7) as PathCoordinate;
+  const el = new LeftForwardOutsideThreeTurn("footL", startU, endU);
+  editorRef(editor).getSequences()[0].elements.push(el);
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  const midU = (startU + endU) / 2;
+  const mid = path.getPosition(midU as PathCoordinate);
+  mouse("mousedown", canvas, { clientX: sx(mid.x), clientY: sy(mid.y), button: 0, ctrlKey: false });
+  expect(editorRef(editor).isDraggingElementSegment).toBe(true);
+
+  const initial = path.arcLengthBetween(el.start, el.end);
+
+  for (let i = 1; i <= 40; i++) {
+    const u = path.length * (0.5 - (i / 40) * 0.4);
+    const p = path.getPosition(u as PathCoordinate);
+    mouse("mousemove", window, { clientX: sx(p.x), clientY: sy(p.y), button: 0 });
+  }
+  mouse("mouseup", window, {});
+
+  expect(el.start as number).toBeLessThan(startU as number);
+  expect(el.end as number).toBeLessThan(endU as number);
+  expect(path.arcLengthBetween(el.start, el.end)).toBeCloseTo(initial, 6);
+  editor.destroy();
+});
+
 test("clicking the delete button next to a selected element removes it", () => {
   const { editor, canvas } = makeEditor();
-  const path = editor.getSequence().path;
+  const path = editor.getSequences()[0].path;
   path.curves = [new Curve(new Vector(0, 0), new Vector(4 / 3, 0), new Vector(8 / 3, 0), new Vector(4, 0))];
   path.updateLength();
   editorRef(editor).mode = "elements";
@@ -350,7 +463,7 @@ test("clicking the delete button next to a selected element removes it", () => {
   const startU = (path.length * 0.2) as PathCoordinate;
   const endU = (path.length * 0.6) as PathCoordinate;
   const el = new LeftForwardOutsideThreeTurn("footL", startU, endU);
-  editorRef(editor).sequence.elements.push(el);
+  editorRef(editor).getSequences()[0].elements.push(el);
 
   const zoom = editorRef(editor).view.zoom;
   const sx = (wx: number) => 512 + wx * zoom;
@@ -369,7 +482,7 @@ test("clicking the delete button next to a selected element removes it", () => {
   mouse("mousedown", canvas, { clientX: sx(btn.x), clientY: sy(btn.y), button: 0, ctrlKey: false });
   mouse("mouseup", window, {});
 
-  expect(editorRef(editor).sequence.elements).not.toContain(el);
+  expect(editorRef(editor).getSequences()[0].elements).not.toContain(el);
   expect(editorRef(editor).selectedElements.has(el)).toBe(false);
   expect(editorRef(editor).getElementDeleteButtonPosition()).toBeNull();
 
@@ -379,16 +492,17 @@ test("clicking the delete button next to a selected element removes it", () => {
 test("a stroke label anchors between the stroke end and the following element start", () => {
   const { editor } = makeEditor();
   editorRef(editor).mode = "elements";
-  const path = editor.getSequence().path;
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
   path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(4 / 3, 0), new Vector(5 / 3, 0), new Vector(2, 0)));
 
   const stroke = new LeftNormalForwardInsideGlide(0.2 as PathCoordinate, 0.6 as PathCoordinate);
   const following = new LeftForwardOutsideGlide(1.2 as PathCoordinate, 1.6 as PathCoordinate);
-  editor.getSequence().addElement(stroke);
-  editor.getSequence().addElement(following);
+  sequence.addElement(stroke);
+  sequence.addElement(following);
   editor.draw();
 
-  const geometry = editorRef(editor).getElementLabelGeometry(stroke);
+  const geometry = editorRef(editor).getElementLabelGeometry(sequence, stroke);
   const anchorU = ((stroke.end as number) + (following.start as number)) / 2;
   const expected = path.getPosition(anchorU as PathCoordinate);
   expect(geometry.point.x).toBeCloseTo(expected.x, 9);
@@ -403,12 +517,13 @@ test("a stroke label anchors between the stroke end and the following element st
 test("a stroke with no following element anchors its label at the path end", () => {
   const { editor } = makeEditor();
   editorRef(editor).mode = "elements";
-  const path = editor.getSequence().path;
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
   const stroke = new LeftNormalForwardInsideGlide(0.2 as PathCoordinate, 0.6 as PathCoordinate);
-  editor.getSequence().addElement(stroke);
+  sequence.addElement(stroke);
   editor.draw();
 
-  const geometry = editorRef(editor).getElementLabelGeometry(stroke);
+  const geometry = editorRef(editor).getElementLabelGeometry(sequence, stroke);
   // The path end substitutes for the following element start in the midpoint.
   const anchorU = ((stroke.end as number) + path.length) / 2;
   const expected = path.getPosition(anchorU as PathCoordinate);
@@ -426,12 +541,13 @@ test("a stroke with no following element anchors its label at the path end", () 
 test("a glide label keeps the span midpoint anchor", () => {
   const { editor } = makeEditor();
   editorRef(editor).mode = "elements";
-  const path = editor.getSequence().path;
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
   const glide = new LeftForwardOutsideGlide(0.2 as PathCoordinate, 0.6 as PathCoordinate);
-  editor.getSequence().addElement(glide);
+  sequence.addElement(glide);
   editor.draw();
 
-  const geometry = editorRef(editor).getElementLabelGeometry(glide);
+  const geometry = editorRef(editor).getElementLabelGeometry(sequence, glide);
   const mid = path.getPosition(0.4 as PathCoordinate);
   expect(geometry.point.x).toBeCloseTo(mid.x, 9);
   expect(geometry.point.y).toBeCloseTo(mid.y, 9);
@@ -442,8 +558,8 @@ test("a glide label keeps the span midpoint anchor", () => {
 test("a zero-size element does not hang drawing and picking in elements mode", () => {
   const { editor } = makeEditor();
   editor.mode = "elements";
-  const path = editor.getSequence().path;
-  editor.getSequence().addElement(
+  const path = editor.getSequences()[0].path;
+  editor.getSequences()[0].addElement(
     new LeftForwardOutsideGlide(0.5 as PathCoordinate, 0.5 as PathCoordinate),
   );
   const start = Date.now();

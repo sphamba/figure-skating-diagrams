@@ -7,13 +7,15 @@ import Fieldset from "openvue/fieldset";
 import SelectButton from "openvue/selectbutton";
 import Checkbox from "openvue/checkbox";
 import Dialog from "openvue/dialog";
+import InputText from "openvue/inputtext";
 import Listbox from "openvue/listbox";
 import { Editor, type EditMode } from "@/engine/sequenceEditor/editor";
-import type { SequenceJSON } from "@/engine/sequence";
+import type { Sequence, SequenceJSON } from "@/engine/sequence";
 import { changeElementType } from "@/engine/element/turnTypes";
 import type { PathCoordinate } from "@/engine/coordinates";
 import type { Element } from "@/engine/element/element";
 import type { PatternJSON } from "@/engine/pattern";
+import type { DiagramJSON } from "@/engine/diagram";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
@@ -176,6 +178,22 @@ let editor: Editor | null = null;
 
 const store = useSequenceEditorStore();
 
+const sequences = computed(() => store.getSequences());
+const activeSequence = computed(() => store.getActiveSequence());
+const visibleSequences = computed(() => sequences.value.filter((sequence) => store.isVisible(sequence)));
+const diagramName = computed({
+  get: () => store.getDiagram().name,
+  set: (value) => store.setDiagramName(value),
+});
+
+const deleteTarget = shallowRef<Sequence | null>(null);
+const deleteOpen = computed({
+  get: () => deleteTarget.value !== null,
+  set: (value) => {
+    if (!value) deleteTarget.value = null;
+  },
+});
+
 const clearOpen = ref(false);
 
 watch(editMode, (mode) => {
@@ -198,7 +216,8 @@ watch(
 
 onMounted(() => {
   if (!canvasRef.value) return;
-  editor = new Editor(canvasRef.value, store.getSequence());
+  if (visibleSequences.value.length === 0) return;
+  editor = new Editor(canvasRef.value, visibleSequences.value);
 
   editor.onElementChangeRequest = (element) => {
     elementToChange.value = element;
@@ -208,6 +227,10 @@ onMounted(() => {
     elementChangeOpen.value = true;
   };
   editor.onSequenceChange = () => store.saveToStorage();
+});
+
+watch(visibleSequences, (list) => {
+  if (editor) editor.setSequences(list);
 });
 
 onBeforeUnmount(() => {
@@ -225,19 +248,27 @@ async function onFileSelected(event: Event) {
   if (!file) return;
 
   try {
-    const json = JSON.parse(await file.text()) as PatternJSON | SequenceJSON;
-    const sequence = isPattern(json) ? (json.sequences[0] as SequenceJSON) : json;
-    store.loadFromJSON(sequence);
-    editor?.setSequence(store.getSequence());
+    const json = JSON.parse(await file.text()) as PatternJSON | DiagramJSON | SequenceJSON;
+    if (isPattern(json)) {
+      store.loadFromJSON({ name: json.name, sequences: json.sequences });
+    } else if (isSequenceJSON(json)) {
+      store.loadFromJSON({ name: "Diagram", sequences: [json] });
+    } else {
+      store.loadFromJSON(json);
+    }
   } catch (error) {
-    console.error("Could not open sequence file:", error);
+    console.error("Could not open diagram file:", error);
   } finally {
     input.value = "";
   }
 }
 
-function isPattern(json: PatternJSON | SequenceJSON): json is PatternJSON {
+function isPattern(json: PatternJSON | DiagramJSON | SequenceJSON): json is PatternJSON {
   return Array.isArray((json as PatternJSON).sequences);
+}
+
+function isSequenceJSON(json: PatternJSON | DiagramJSON | SequenceJSON): json is SequenceJSON {
+  return "path" in json && "keyframes" in json;
 }
 
 function saveFile() {
@@ -246,7 +277,7 @@ function saveFile() {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = "sequence.json";
+  anchor.download = "diagram.json";
   anchor.click();
   URL.revokeObjectURL(url);
 }
@@ -256,9 +287,8 @@ function changeElementKind(kind: string) {
   const current = elementToChange.value as Element;
   const template = current.toJSON() as { type: string; start: PathCoordinate; end: PathCoordinate };
   const replacement = changeElementType(kind, { ...template, type: kind });
-  const sequence = editor.getSequence();
-  sequence.replaceElement(current, replacement);
-  editor.replaceSelectedElement(current, replacement);
+  const sequence = editor.replaceElementOf(current, replacement);
+  if (!sequence) return;
   elementToChange.value = replacement;
   store.saveToStorage();
   editor.draw();
@@ -266,12 +296,18 @@ function changeElementKind(kind: string) {
 
 function onClearConfirmed() {
   store.clear();
-  editor?.setSequence(store.getSequence());
   closeClear();
 }
 
 function closeClear() {
   clearOpen.value = false;
+}
+
+function onDeleteConfirmed() {
+  const target = deleteTarget.value;
+  if (!target) return;
+  store.removeSequence(target);
+  deleteTarget.value = null;
 }
 
 function chooseElementBranch(branch: "glide" | "stroke" | "turn") {
@@ -356,6 +392,57 @@ function closeElementChange() {
             <div v-if="editMode !== 'elements'" class="editor-view__scale-checkbox">
               <Checkbox v-model="scaleElements" binary input-id="scale-elements" />
               <label for="scale-elements">Scale elements</label>
+            </div>
+          </div>
+
+          <div class="editor-view__actions">
+            <label class="editor-view__mode-label">Diagram</label>
+            <InputText v-model="diagramName" class="w-full" />
+          </div>
+
+          <div class="editor-view__actions">
+            <label class="editor-view__mode-label">Sequences</label>
+            <div class="editor-view__sequence-list">
+              <div
+                v-for="(sequence, index) in sequences"
+                :key="index"
+                class="editor-view__sequence-row"
+                :class="{ 'editor-view__sequence-row--active': sequence === activeSequence }"
+                @click="store.setActiveSequence(sequence)"
+              >
+                <Button
+                  :icon="store.isVisible(sequence) ? 'pi pi-eye' : 'pi pi-eye-slash'"
+                  :aria-label="store.isVisible(sequence) ? 'Hide sequence' : 'Show sequence'"
+                  severity="secondary"
+                  text
+                  rounded
+                  size="small"
+                  @click.stop="store.toggleVisible(sequence)"
+                />
+                <InputText
+                  :model-value="sequence.name"
+                  class="editor-view__sequence-name"
+                  @update:model-value="(name) => store.renameSequence(sequence, String(name))"
+                  @click.stop
+                />
+                <Button
+                  icon="pi pi-trash"
+                  aria-label="Delete sequence"
+                  severity="danger"
+                  text
+                  rounded
+                  size="small"
+                  @click.stop="deleteTarget = sequence"
+                />
+              </div>
+              <Button
+                label="Add sequence"
+                icon="pi pi-plus"
+                severity="secondary"
+                text
+                class="editor-view__add-sequence"
+                @click="store.addSequence()"
+              />
             </div>
           </div>
 
@@ -456,15 +543,23 @@ function closeElementChange() {
 
     <Dialog
       v-model:visible="clearOpen"
-      header="Clear sequence"
+      header="Clear diagram"
       modal
       class="editor-view__clear-dialog"
       @hide="closeClear"
     >
-      <p>Put back the default sequence? The current sequence will be lost.</p>
+      <p>Put back the default diagram? The current diagram will be lost.</p>
       <template #footer>
         <Button label="Cancel" severity="secondary" icon="pi pi-times" @click="closeClear" />
         <Button label="Clear" severity="danger" icon="pi pi-trash" @click="onClearConfirmed" />
+      </template>
+    </Dialog>
+
+    <Dialog v-model:visible="deleteOpen" header="Delete sequence" modal class="editor-view__delete-dialog">
+      <p>Delete "{{ deleteTarget?.name }}"? This cannot be undone.</p>
+      <template #footer>
+        <Button label="Cancel" severity="secondary" icon="pi pi-times" @click="deleteTarget = null" />
+        <Button label="Delete" severity="danger" icon="pi pi-trash" @click="onDeleteConfirmed" />
       </template>
     </Dialog>
   </div>
@@ -505,6 +600,34 @@ function closeElementChange() {
   margin-bottom: 0.25rem;
   color: var(--p-text-muted-color);
   font-size: 0.875rem;
+}
+
+.editor-view__sequence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.editor-view__sequence-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.editor-view__sequence-row--active {
+  background: var(--p-highlight-bg);
+}
+
+.editor-view__sequence-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.editor-view__add-sequence {
+  align-self: flex-start;
 }
 
 .editor-view__help {
@@ -566,6 +689,10 @@ function closeElementChange() {
 }
 
 .editor-view__clear-dialog {
+  width: 320px;
+}
+
+.editor-view__delete-dialog {
   width: 320px;
 }
 

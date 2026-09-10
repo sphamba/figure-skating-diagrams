@@ -67,9 +67,26 @@ type ViewState = {
 
 export type EditMode = "view" | "path" | "elements";
 
-type ControlPointSelection = {
+export type ControlPointSelection = {
+  sequence: Sequence;
   curveIndex: number;
   pointKey: ControlPointKey;
+};
+
+type JointMoveSnapshot = {
+  sequence: Sequence;
+  jointCurveIndex: number;
+  curveStarts: number[];
+  curveLengths: number[];
+  items: Array<{ element: Element; start: number; end: number }>;
+};
+
+type JointDeletionSnapshot = {
+  sequence: Sequence;
+  jointOldIndex: number;
+  curveStarts: number[];
+  curveLengths: number[];
+  items: Array<{ element: Element; start: number; end: number }>;
 };
 
 export class Editor {
@@ -78,46 +95,36 @@ export class Editor {
   width = 0;
   height = 0;
 
-  sequence: Sequence;
+  sequences: Sequence[] = [];
   mode: EditMode = "view";
   scaleElements = true;
   private view: ViewState;
-  private overlaySequences: Sequence[] = [];
 
-  private selected = new Set<string>();
+  private selectedPoints = new Map<Sequence, Set<string>>();
   onElementChangeRequest?: (element: Element) => void;
   onSequenceChange?: () => void;
   private sequenceMutated = false;
-  private selectedCurves = new Set<number>();
+  private selectedCurves = new Map<Sequence, Set<number>>();
   private selectedElements = new Set<Element>();
   private isPanning = false;
   private isDraggingPoint = false;
   private isDraggingCurve = false;
   private isSelectingRect = false;
-  private provisionalElement: Element | null = null;
+  private provisionalElements = new Map<Sequence, Element>();
+  private creatingSequence: Sequence | null = null;
   private isCreatingProvisional = false;
   private provisionalOriginU = 0;
   private isDraggingElementPoint = false;
   private dragElement: Element | null = null;
   private dragElementPointIsStart = false;
+  private dragSequence: Sequence | null = null;
   private isDraggingElementSegment = false;
   private segmentDragItems: Array<{ element: Element; start0: number; end0: number }> = [];
   private segmentDragDeltaMin = -Infinity;
   private segmentDragDeltaMax = Infinity;
   private segmentDragGrabU = 0;
-  private dragAnchorCurveIndex = 0;
-  private jointMoveSnapshot: {
-    jointCurveIndex: number;
-    curveStarts: number[];
-    curveLengths: number[];
-    items: Array<{ element: Element; start: number; end: number }>;
-  } | null = null;
-  private jointDeletionSnapshot: {
-    jointOldIndex: number;
-    curveStarts: number[];
-    curveLengths: number[];
-    items: Array<{ element: Element; start: number; end: number }>;
-  } | null = null;
+  private jointMoveSnapshot: JointMoveSnapshot | null = null;
+  private jointDeletionSnapshot: JointDeletionSnapshot | null = null;
   private rectAddToSelection = false;
   private rectTargetsElements = false;
   private rectDidMove = false;
@@ -139,10 +146,10 @@ export class Editor {
   private onWindowResize = () => this.resize();
   private resizeObserver: ResizeObserver | null = null;
 
-  constructor(canvas: HTMLCanvasElement, sequence: Sequence) {
+  constructor(canvas: HTMLCanvasElement, sequences: Sequence[]) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d") as CanvasRenderingContext2DSized;
-    this.sequence = sequence;
+    this.sequences = sequences;
 
     const ResizeObserverCtor = typeof ResizeObserver !== "undefined" ? ResizeObserver : null;
     if (ResizeObserverCtor) {
@@ -181,23 +188,60 @@ export class Editor {
     this.resizeObserver = null;
   }
 
-  setSequence(sequence: Sequence) {
-    this.sequence = sequence;
+  setSequences(sequences: Sequence[]) {
+    this.sequences = sequences;
     this.sequenceMutated = false;
     this.jointMoveSnapshot = null;
     this.jointDeletionSnapshot = null;
-    this.selected.clear();
+    this.selectedPoints.clear();
     this.selectedCurves.clear();
     this.selectedElements.clear();
-    this.provisionalElement = null;
+    this.provisionalElements.clear();
+    this.creatingSequence = null;
+    this.isCreatingProvisional = false;
+    this.dragSequence = null;
+    this.dragElement = null;
     this.draw();
   }
 
+  getSequences(): Sequence[] {
+    return this.sequences;
+  }
+
+  getSequenceOfElement(element: Element): Sequence | null {
+    for (const sequence of this.sequences) {
+      if (sequence.elements.includes(element)) return sequence;
+    }
+    for (const [sequence, provisional] of this.provisionalElements) {
+      if (provisional === element) return sequence;
+    }
+    return null;
+  }
+
+  getSelectedPointsFor(sequence: Sequence): Set<string> {
+    let selected = this.selectedPoints.get(sequence);
+    if (!selected) {
+      selected = new Set<string>();
+      this.selectedPoints.set(sequence, selected);
+    }
+    return selected;
+  }
+
+  getSelectedCurvesFor(sequence: Sequence): Set<number> {
+    let selected = this.selectedCurves.get(sequence);
+    if (!selected) {
+      selected = new Set<number>();
+      this.selectedCurves.set(sequence, selected);
+    }
+    return selected;
+  }
+
   clearSelection() {
-    this.selected.clear();
+    this.selectedPoints.clear();
     this.selectedCurves.clear();
     this.selectedElements.clear();
-    this.provisionalElement = null;
+    this.provisionalElements.clear();
+    this.creatingSequence = null;
   }
 
   replaceSelectedElement(oldElement: Element, newElement: Element) {
@@ -206,17 +250,16 @@ export class Editor {
     }
   }
 
-  addOverlaySequence(sequence: Sequence) {
-    this.overlaySequences.push(sequence);
-    this.draw();
+  replaceElementOf(oldElement: Element, newElement: Element): Sequence | null {
+    const sequence = this.getSequenceOfElement(oldElement);
+    if (!sequence) return null;
+    sequence.replaceElement(oldElement, newElement);
+    this.replaceSelectedElement(oldElement, newElement);
+    return sequence;
   }
 
-  getSequence(): Sequence {
-    return this.sequence;
-  }
-
-  addSegmentEnd() {
-    this.sequence.path.addCurveEnd();
+  addSegmentEnd(sequence: Sequence) {
+    sequence.path.addCurveEnd();
     this.notifySequenceChange();
     this.draw();
   }
@@ -227,17 +270,18 @@ export class Editor {
     this.transformContext();
     this.drawRink();
     if (this.mode !== "view") {
-      this.drawPath();
-      for (const sequence of this.overlaySequences) {
+      for (const sequence of this.sequences) {
         this.drawPath(sequence);
       }
     }
     this.drawSelectedCurves();
     if (this.mode === "path") {
-      this.drawControlHandles();
-      this.drawAddButton();
+      for (const sequence of this.sequences) {
+        this.drawControlHandles(sequence);
+      }
+      this.drawAddButtons();
       this.drawSplitButtons();
-      this.drawDeleteButton();
+      this.drawDeleteButtons();
     } else if (this.mode === "elements") {
       this.drawElements();
     } else {
@@ -246,7 +290,9 @@ export class Editor {
     if (this.mode === "path" || this.mode === "elements") {
       this.drawCurvatureWarnings();
     }
-    this.drawElementLabels();
+    for (const sequence of this.sequences) {
+      this.drawElementLabels(sequence);
+    }
     this.drawStartLabels();
     ctx.restore();
     this.drawSelectionRectangle();
@@ -255,15 +301,11 @@ export class Editor {
   private drawTraces() {
     const minTraceWidth = MIN_TRACE_WIDTH / this.view.zoom;
     const minBladeLength = this.scaleElements ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
-    this.drawMetres(() =>
-      this.sequence.drawTraces(
-        this.ctx,
-        minTraceWidth,
-        minBladeLength,
-        MIN_DRAW_INCREMENT / this.view.zoom,
-        this.getTraceViewport(minBladeLength),
-      ),
-    );
+    const minDrawIncrement = MIN_DRAW_INCREMENT / this.view.zoom;
+    const viewport = this.getTraceViewport(minBladeLength);
+    for (const sequence of this.sequences) {
+      this.drawMetres(() => sequence.drawTraces(this.ctx, minTraceWidth, minBladeLength, minDrawIncrement, viewport));
+    }
   }
 
   private getTraceViewport(minBladeLength?: number): AxisRect {
@@ -341,7 +383,7 @@ export class Editor {
     });
   }
 
-  private drawPath(sequence: Sequence = this.sequence) {
+  private drawPath(sequence: Sequence) {
     if (sequence.path.curves.length == 0) {
       return;
     }
@@ -406,67 +448,70 @@ export class Editor {
     ctx.lineWidth = (PATH_WIDTH + 2) / this.view.zoom;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    for (const curveIndex of this.selectedCurves) {
-      const curve = this.sequence.path.curves[curveIndex];
-      if (!curve) continue;
-      this.drawMetres(() => curve.draw(ctx));
+    for (const [sequence, curveIndices] of this.selectedCurves) {
+      for (const curveIndex of curveIndices) {
+        const curve = sequence.path.curves[curveIndex];
+        if (!curve) continue;
+        this.drawMetres(() => curve.draw(ctx));
+      }
     }
   }
 
   private drawElements() {
-    if (this.sequence.path.curves.length === 0) {
-      return;
-    }
-    if (this.sequence.elements.length === 0 && !this.provisionalElement) {
-      return;
-    }
-    const ctx = this.ctx;
     const nodeSize = (NODE_SIZE * CANVAS_SCALE) / this.view.zoom;
+    let drewElements = false;
 
-    for (const element of this.sequence.elements) {
-      const selected = this.selectedElements.has(element);
+    for (const sequence of this.sequences) {
+      if (sequence.path.curves.length === 0) continue;
+      for (const element of sequence.elements) {
+        drewElements = true;
+        const selected = this.selectedElements.has(element);
 
-      ctx.strokeStyle = selected ? "#d33" : "#000";
-      ctx.lineWidth = (PATH_WIDTH + 2) / this.view.zoom;
-      this.drawElementSpan(element);
+        this.ctx.strokeStyle = selected ? "#d33" : "#000";
+        this.ctx.lineWidth = (PATH_WIDTH + 2) / this.view.zoom;
+        this.drawElementSpan(sequence, element);
 
-      ctx.fillStyle = selected ? "#d33" : "#444";
-      for (const u of this.getDisplayedSpan(element)) {
-        const point = this.sequence.path.getPosition(u as PathCoordinate);
-        ctx.beginPath();
-        ctx.arc(point.x * CANVAS_SCALE, -point.y * CANVAS_SCALE, nodeSize / 2, 0, 2 * Math.PI);
-        ctx.fill();
+        this.ctx.fillStyle = selected ? "#d33" : "#444";
+        for (const u of this.getDisplayedSpan(sequence, element)) {
+          const point = sequence.path.getPosition(u as PathCoordinate);
+          this.ctx.beginPath();
+          this.ctx.arc(point.x * CANVAS_SCALE, -point.y * CANVAS_SCALE, nodeSize / 2, 0, 2 * Math.PI);
+          this.ctx.fill();
+        }
       }
     }
 
-    if (this.provisionalElement) {
-      const element = this.provisionalElement;
+    for (const [sequence, element] of this.provisionalElements) {
+      if (sequence.path.curves.length === 0) continue;
+      drewElements = true;
 
-      ctx.strokeStyle = PROVISIONAL_COLOR;
-      ctx.lineWidth = (PATH_WIDTH + 2) / this.view.zoom;
-      this.drawElementSpan(element);
+      this.ctx.strokeStyle = PROVISIONAL_COLOR;
+      this.ctx.lineWidth = (PATH_WIDTH + 2) / this.view.zoom;
+      this.drawElementSpan(sequence, element);
 
-      ctx.fillStyle = PROVISIONAL_COLOR;
-      for (const u of this.getDisplayedSpan(element)) {
-        const point = this.sequence.path.getPosition(u as PathCoordinate);
-        ctx.beginPath();
-        ctx.arc(point.x * CANVAS_SCALE, -point.y * CANVAS_SCALE, nodeSize / 2, 0, 2 * Math.PI);
-        ctx.fill();
+      this.ctx.fillStyle = PROVISIONAL_COLOR;
+      for (const u of this.getDisplayedSpan(sequence, element)) {
+        const point = sequence.path.getPosition(u as PathCoordinate);
+        this.ctx.beginPath();
+        this.ctx.arc(point.x * CANVAS_SCALE, -point.y * CANVAS_SCALE, nodeSize / 2, 0, 2 * Math.PI);
+        this.ctx.fill();
       }
     }
+
+    if (!drewElements) return;
 
     this.drawElementDeleteButton();
     this.drawElementCogButton();
-    this.drawProvisionalAddButton();
+    this.drawProvisionalAddButtons();
   }
 
-  private getDisplayedSpan(element: Element): [PathCoordinate, PathCoordinate] {
+  private getDisplayedSpan(sequence: Sequence, element: Element): [PathCoordinate, PathCoordinate] {
     const minBladeLength =
       this.scaleElements && this.mode !== "elements" ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
-    const scales = this.sequence.getSpanScales(minBladeLength);
+    const scales = sequence.getSpanScales(minBladeLength);
     const factor = scales.get(element) ?? 1;
     const [start, end] = factor === 1 ? [element.start, element.end] : element.scaleAboutMiddle(factor);
-    const pathLength = this.sequence.path.length;
+    const pathLength = sequence.path.length;
     const clamp = (u: number) => Math.max(0, Math.min(pathLength, u));
     return [
       clamp(Math.min(start as number, end as number)) as PathCoordinate,
@@ -474,9 +519,9 @@ export class Editor {
     ];
   }
 
-  private drawElementSpan(element: Element) {
-    const [start, end] = this.getDisplayedSpan(element);
-    this.drawMetres(() => this.sequence.path.drawRange(this.ctx, start, end));
+  private drawElementSpan(sequence: Sequence, element: Element) {
+    const [start, end] = this.getDisplayedSpan(sequence, element);
+    this.drawMetres(() => sequence.path.drawRange(this.ctx, start, end));
   }
 
   private getLabelFrame(path: Path, u: PathCoordinate): { point: Vector<2>; tangent: Vector<2>; curvature: number } {
@@ -487,10 +532,15 @@ export class Editor {
     return { point, tangent, curvature };
   }
 
-  private getElementLabelGeometry(element: Element): { point: Vector<2>; outside: Vector<2> } | null {
-    const path = this.sequence.path;
+  private getElementLabelGeometry(
+    sequence: Sequence,
+    element: Element,
+  ): { point: Vector<2>; outside: Vector<2> } | null {
+    const path = sequence.path;
     if (path.curves.length === 0) return null;
-    const anchorU = isStrokeElement(element) ? this.getStrokeLabelAnchor(element) : this.getSpanMidpoint(element);
+    const anchorU = isStrokeElement(element)
+      ? this.getStrokeLabelAnchor(sequence, element)
+      : this.getSpanMidpoint(element);
     const { point, tangent, curvature } = this.getLabelFrame(path, anchorU);
     const sign = curvature > 0 ? -1 : 1;
     const outside = tangent.getOrthogonal().times(sign);
@@ -503,17 +553,17 @@ export class Editor {
     return ((lo + hi) / 2) as PathCoordinate;
   }
 
-  private getStrokeLabelAnchor(element: DynamicGlide): PathCoordinate {
-    const path = this.sequence.path;
+  private getStrokeLabelAnchor(sequence: Sequence, element: DynamicGlide): PathCoordinate {
+    const path = sequence.path;
     const strokeEnd = Math.max(element.start as number, element.end as number);
-    const next = this.nextElementAfter(element);
+    const next = this.nextElementAfter(sequence, element);
     const nextStart = next ? Math.min(next.start as number, next.end as number) : path.length;
     const anchor = Math.max(0, Math.min(path.length, (strokeEnd + nextStart) / 2));
     return anchor as PathCoordinate;
   }
 
-  private nextElementAfter(element: Element): Element | null {
-    const sorted = [...this.sequence.elements].sort((a, b) => (a.start as number) - (b.start as number));
+  private nextElementAfter(sequence: Sequence, element: Element): Element | null {
+    const sorted = [...sequence.elements].sort((a, b) => (a.start as number) - (b.start as number));
     const index = sorted.indexOf(element);
     if (index === -1) return null;
     return sorted[index + 1] ?? null;
@@ -532,10 +582,13 @@ export class Editor {
   }
 
   private drawCurvatureWarnings() {
-    const checks = checkSequenceCurvatures(this.sequence);
-    for (const check of checks) {
-      if (!check.invalid) continue;
-      this.drawWarningTriangle(check.point, WARNING_TRIANGLE_COLOR);
+    for (const sequence of this.sequences) {
+      const provisional = this.provisionalElements.get(sequence);
+      const checks = checkSequenceCurvatures(sequence, provisional ? [provisional] : []);
+      for (const check of checks) {
+        if (!check.invalid) continue;
+        this.drawWarningTriangle(check.point, WARNING_TRIANGLE_COLOR);
+      }
     }
   }
 
@@ -558,11 +611,11 @@ export class Editor {
     ctx.fill();
   }
 
-  private drawElementLabels() {
-    if (this.sequence.path.curves.length === 0) return;
+  private drawElementLabels(sequence: Sequence) {
+    if (sequence.path.curves.length === 0) return;
 
-    for (const element of this.sequence.elements) {
-      const geometry = this.getElementLabelGeometry(element);
+    for (const element of sequence.elements) {
+      const geometry = this.getElementLabelGeometry(sequence, element);
       if (!geometry) continue;
       this.drawShiftedLabel(element.shortName, geometry.point, geometry.outside);
     }
@@ -591,8 +644,7 @@ export class Editor {
   }
 
   private drawStartLabels() {
-    this.drawStartLabel(this.sequence);
-    for (const sequence of this.overlaySequences) {
+    for (const sequence of this.sequences) {
       this.drawStartLabel(sequence);
     }
   }
@@ -604,8 +656,10 @@ export class Editor {
   }
 
   private getElementPoints(element: Element): Vector<2>[] {
-    const path = this.sequence.path;
-    const [start, end] = this.getDisplayedSpan(element);
+    const sequence = this.getSequenceOfElement(element);
+    if (!sequence) return [];
+    const path = sequence.path;
+    const [start, end] = this.getDisplayedSpan(sequence, element);
     const span = (end as number) - (start as number);
     const step = Math.min(ELEMENT_DRAW_INCREMENT, span / 4) || ELEMENT_DRAW_INCREMENT;
     const points: Vector<2>[] = [];
@@ -613,6 +667,13 @@ export class Editor {
       points.push(path.getPosition(u as PathCoordinate));
     }
     return points;
+  }
+
+  private selectableElements(sequence: Sequence): Element[] {
+    const provisional = this.provisionalElements.get(sequence);
+    const elements = [...sequence.elements];
+    if (provisional) elements.push(provisional);
+    return elements;
   }
 
   private selectElement(element: Element, ctrlKey: boolean) {
@@ -630,21 +691,20 @@ export class Editor {
     let best: { element: Element; isStart: boolean } | null = null;
     let bestDistance = Infinity;
 
-    const elements = this.provisionalElement
-      ? [...this.sequence.elements, this.provisionalElement]
-      : this.sequence.elements;
-    for (const element of elements) {
-      const points = this.getElementPoints(element);
-      if (points.length === 0) continue;
-      const endpoints: Array<[boolean, Vector<2>]> = [
-        [true, points[0]!],
-        [false, points[points.length - 1]!],
-      ];
-      for (const [isStart, point] of endpoints) {
-        const distance = point.minus(cursor).length();
-        if (distance <= tolerance && distance <= bestDistance) {
-          bestDistance = distance;
-          best = { element, isStart };
+    for (const sequence of this.sequences) {
+      for (const element of this.selectableElements(sequence)) {
+        const points = this.getElementPoints(element);
+        if (points.length === 0) continue;
+        const endpoints: Array<[boolean, Vector<2>]> = [
+          [true, points[0]!],
+          [false, points[points.length - 1]!],
+        ];
+        for (const [isStart, point] of endpoints) {
+          const distance = point.minus(cursor).length();
+          if (distance <= tolerance && distance <= bestDistance) {
+            bestDistance = distance;
+            best = { element, isStart };
+          }
         }
       }
     }
@@ -652,30 +712,32 @@ export class Editor {
   }
 
   private snapElementPointToPath(element: Element, isStart: boolean, cursor: Vector<2>): PathCoordinate | null {
-    const path = this.sequence.path;
-    const curves = path.curves;
-    if (curves.length === 0) return null;
+    const sequence = this.getSequenceOfElement(element);
+    if (!sequence) return null;
+    const path = sequence.path;
+    if (path.curves.length === 0) return null;
 
-    const u = this.snapCursorToPathAnywhere(cursor);
+    const u = this.snapCursorToPathAnywhere(sequence, cursor);
     if (u == null) return null;
 
     let clamped = Math.max(0, Math.min(path.length, u));
     const other = (isStart ? element.end : element.start) as number;
     clamped = isStart ? Math.min(clamped, other) : Math.max(clamped, other);
-    const bounds = this.neighbourBoundsAroundSpan(element.start as number, element.end as number, element);
+    const bounds = this.neighbourBoundsAroundSpan(sequence, element.start as number, element.end as number, element);
     clamped = isStart ? Math.max(clamped, bounds.left) : Math.min(clamped, bounds.right);
     return clamped as PathCoordinate;
   }
 
   private neighbourBoundsAroundSpan(
+    sequence: Sequence,
     start: number,
     end: number,
     exclude: Element | Set<Element> | null,
   ): { left: number; right: number } {
-    const path = this.sequence.path;
+    const path = sequence.path;
     let left = 0;
     let right = path.length;
-    for (const other of this.sequence.elements) {
+    for (const other of sequence.elements) {
       if (other === exclude || (exclude instanceof Set && exclude.has(other))) continue;
       const os = Math.min(other.start as number, other.end as number);
       const oe = Math.max(other.start as number, other.end as number);
@@ -685,8 +747,12 @@ export class Editor {
     return { left, right };
   }
 
-  private snapCursorToPathNearCurve(anchorCurveIndex: number, cursor: Vector<2>): PathCoordinate | null {
-    const curves = this.sequence.path.curves;
+  private snapCursorToPathNearCurve(
+    sequence: Sequence,
+    anchorCurveIndex: number,
+    cursor: Vector<2>,
+  ): PathCoordinate | null {
+    const curves = sequence.path.curves;
     if (curves.length === 0) return null;
 
     const lo = Math.max(0, anchorCurveIndex - 1);
@@ -707,8 +773,8 @@ export class Editor {
     return this.uniformCoordinateAt(curves, bestIndex, bestT) as PathCoordinate;
   }
 
-  private snapCursorToPathAnywhere(cursor: Vector<2>): PathCoordinate | null {
-    const curves = this.sequence.path.curves;
+  private snapCursorToPathAnywhere(sequence: Sequence, cursor: Vector<2>): PathCoordinate | null {
+    const curves = sequence.path.curves;
     if (curves.length === 0) return null;
 
     let bestIndex = 0;
@@ -727,13 +793,15 @@ export class Editor {
   }
 
   private startElementSegmentDrag(element: Element, screenX: number, screenY: number) {
-    const path = this.sequence.path;
+    const sequence = this.getSequenceOfElement(element);
+    if (!sequence) return;
+    const path = sequence.path;
     const curves = path.curves;
     if (curves.length === 0) return;
 
     const cursor = this.screenToWorld(screenX, screenY);
-    const anchorIndex = this.curveIndexAt(curves, element.start as number);
-    const grabbedU = this.snapCursorToPathNearCurve(anchorIndex, cursor);
+    const anchorIndex = this.curveIndexAt(path, element.start as number);
+    const grabbedU = this.snapCursorToPathNearCurve(sequence, anchorIndex, cursor);
     if (grabbedU == null) return;
 
     const startU = element.start as number;
@@ -745,7 +813,6 @@ export class Editor {
     this.isDraggingElementSegment = true;
     this.dragElement = element;
     this.segmentDragGrabU = clampedGrab;
-    this.dragAnchorCurveIndex = anchorIndex;
 
     const moving = new Set<Element>([element]);
     if (!this.isProvisionalElement(element) && this.selectedElements.has(element) && this.selectedElements.size > 1) {
@@ -756,23 +823,25 @@ export class Editor {
     let dMin = -Infinity;
     let dMax = Infinity;
     for (const moved of moving) {
+      const movedSequence = this.getSequenceOfElement(moved);
+      if (!movedSequence) continue;
       const s0 = Math.min(moved.start as number, moved.end as number);
       const e0 = Math.max(moved.start as number, moved.end as number);
       this.segmentDragItems.push({ element: moved, start0: s0, end0: e0 });
-      const bounds = this.neighbourBoundsAroundSpan(s0, e0, moving);
-      dMin = Math.max(dMin, -path.arcLengthBetween(bounds.left as PathCoordinate, s0 as PathCoordinate));
-      dMax = Math.min(dMax, path.arcLengthBetween(e0 as PathCoordinate, bounds.right as PathCoordinate));
+      const bounds = this.neighbourBoundsAroundSpan(movedSequence, s0, e0, moving);
+      dMin = Math.max(dMin, -movedSequence.path.arcLengthBetween(bounds.left as PathCoordinate, s0 as PathCoordinate));
+      dMax = Math.min(dMax, movedSequence.path.arcLengthBetween(e0 as PathCoordinate, bounds.right as PathCoordinate));
     }
     this.segmentDragDeltaMin = dMin;
     this.segmentDragDeltaMax = dMax;
   }
 
-  private curveIndexAt(curves: Curve[], u: number): number {
-    if (curves.length === 0) return 0;
+  private curveIndexAt(path: Path, u: number): number {
+    if (path.curves.length === 0) return 0;
     if (u <= 0) return 0;
-    if (u >= this.sequence.path.length) return curves.length - 1;
-    const [curve] = this.sequence.path.getCurveAndCurvilinearCoord(u as PathCoordinate);
-    const index = curves.indexOf(curve);
+    if (u >= path.length) return path.curves.length - 1;
+    const [curve] = path.getCurveAndCurvilinearCoord(u as PathCoordinate);
+    const index = path.curves.indexOf(curve);
     return index >= 0 ? index : 0;
   }
 
@@ -793,41 +862,40 @@ export class Editor {
     let best: Element | null = null;
     let bestDistance = Infinity;
 
-    const elements = this.provisionalElement
-      ? [...this.sequence.elements, this.provisionalElement]
-      : this.sequence.elements;
-    for (const element of elements) {
-      const points = this.getElementPoints(element);
-      if (points.length === 0) continue;
+    for (const sequence of this.sequences) {
+      for (const element of this.selectableElements(sequence)) {
+        const points = this.getElementPoints(element);
+        if (points.length === 0) continue;
 
-      for (const point of [points[0], points[points.length - 1]]) {
-        if (!point) continue;
-        const distance = point.minus(cursor).length();
-        if (distance <= tolerance && distance < bestDistance) {
-          bestDistance = distance;
-          best = element;
+        for (const point of [points[0], points[points.length - 1]]) {
+          if (!point) continue;
+          const distance = point.minus(cursor).length();
+          if (distance <= tolerance && distance < bestDistance) {
+            bestDistance = distance;
+            best = element;
+          }
         }
-      }
 
-      for (let i = 0; i < points.length - 1; i++) {
-        const distance = distanceToSegment(cursor, points[i]!, points[i + 1]!);
-        if (distance <= tolerance && distance < bestDistance) {
-          bestDistance = distance;
-          best = element;
+        for (let i = 0; i < points.length - 1; i++) {
+          const distance = distanceToSegment(cursor, points[i]!, points[i + 1]!);
+          if (distance <= tolerance && distance < bestDistance) {
+            bestDistance = distance;
+            best = element;
+          }
         }
       }
     }
     return best;
   }
 
-  private drawControlHandles() {
+  private drawControlHandles(sequence: Sequence) {
     const ctx = this.ctx;
-    const curves = this.sequence.path.curves;
+    const curves = sequence.path.curves;
 
     curves.forEach((curve, curveIndex) => {
       const points = [curve.p0, curve.p1, curve.p2, curve.p3];
-      const showP1 = this.isHandleVisible(curveIndex, "p1");
-      const showP2 = this.isHandleVisible(curveIndex, "p2");
+      const showP1 = this.isHandleVisible(sequence, curveIndex, "p1");
+      const showP2 = this.isHandleVisible(sequence, curveIndex, "p2");
 
       ctx.strokeStyle = `rgba(0, 0, 0, ${POLYGON_ALPHA})`;
       ctx.lineWidth = (1 * CANVAS_SCALE) / this.view.zoom;
@@ -839,7 +907,7 @@ export class Editor {
         const pointKey = keys[index]!;
         if ((pointKey === "p1" && !showP1) || (pointKey === "p2" && !showP2)) return;
 
-        const isSelected = this.selected.has(this.keyOf(curveIndex, pointKey));
+        const isSelected = this.isSelectedPoint(sequence, this.keyOf(curveIndex, pointKey));
         const size = ((isSelected ? NODE_SIZE * 1.5 : NODE_SIZE) * CANVAS_SCALE) / this.view.zoom;
 
         ctx.fillStyle = index === 0 || index === 3 ? "#444" : "#888";
@@ -856,6 +924,10 @@ export class Editor {
     });
   }
 
+  private isSelectedPoint(sequence: Sequence, key: string): boolean {
+    return this.selectedPoints.get(sequence)?.has(key) ?? false;
+  }
+
   private drawGuide(a: Vector<2>, b: Vector<2>) {
     this.ctx.beginPath();
     this.ctx.moveTo(a.x * CANVAS_SCALE, -a.y * CANVAS_SCALE);
@@ -863,8 +935,8 @@ export class Editor {
     this.ctx.stroke();
   }
 
-  private getAddButtonPosition(): Vector<2> {
-    const curves = this.sequence.path.curves;
+  private getAddButtonPosition(sequence: Sequence): Vector<2> {
+    const curves = sequence.path.curves;
     if (curves.length == 0) return new Vector<2>(0, 0);
 
     const lastCurve = curves[curves.length - 1]!;
@@ -903,40 +975,51 @@ export class Editor {
     ctx.stroke();
   }
 
-  private drawAddButton() {
-    this.drawPlusInCircle(this.getAddButtonPosition());
+  private drawAddButtons() {
+    for (const sequence of this.sequences) {
+      if (sequence.path.curves.length === 0) continue;
+      this.drawPlusInCircle(this.getAddButtonPosition(sequence));
+    }
   }
 
-  private hitAddButton(screenX: number, screenY: number): boolean {
-    const [iconX, iconY] = this.worldToScreen(this.getAddButtonPosition());
-    const dx = screenX - iconX;
-    const dy = screenY - iconY;
-    return Math.hypot(dx, dy) <= ADD_BUTTON_HIT_RADIUS;
+  private hitAddButton(screenX: number, screenY: number): Sequence | null {
+    for (const sequence of this.sequences) {
+      if (sequence.path.curves.length === 0) continue;
+      const [iconX, iconY] = this.worldToScreen(this.getAddButtonPosition(sequence));
+      const dx = screenX - iconX;
+      const dy = screenY - iconY;
+      if (Math.hypot(dx, dy) <= ADD_BUTTON_HIT_RADIUS) return sequence;
+    }
+    return null;
   }
 
-  private getRemovablePoint(): { point: Vector<2>; dir: Vector<2>; isStart: boolean; isEnd: boolean } | null {
-    if (this.selected.size !== 1 || this.selectedCurves.size > 0) return null;
-    const curves = this.sequence.path.curves;
-    if (curves.length === 0) return null;
-    const [ciStr, pkStr] = [...this.selected][0]!.split(":");
+  private getRemovablePoint(
+    sequence: Sequence,
+  ): { point: Vector<2>; dir: Vector<2>; isStart: boolean; isEnd: boolean } | null {
+    const selected = this.selectedPoints.get(sequence);
+    const curves = this.selectedCurves.get(sequence);
+    if (!selected || selected.size !== 1 || (curves && curves.size > 0)) return null;
+    const path = sequence.path;
+    if (path.curves.length === 0) return null;
+    const [ciStr, pkStr] = [...selected][0]!.split(":");
     const curveIndex = Number(ciStr);
     const pointKey = pkStr as ControlPointKey;
-    const curve = curves[curveIndex];
+    const curve = path.curves[curveIndex];
     if (!curve) return null;
 
-    if (pointKey === "p0" && curveIndex === 0 && curves.length > 1) {
+    if (pointKey === "p0" && curveIndex === 0 && path.curves.length > 1) {
       return { point: curve.p0, dir: curve.getDerivative(0 as Curvilinear).normalized(), isStart: true, isEnd: false };
     }
-    if (pointKey === "p3" && curveIndex === curves.length - 1 && curves.length > 1) {
+    if (pointKey === "p3" && curveIndex === path.curves.length - 1 && path.curves.length > 1) {
       return { point: curve.p3, dir: curve.getDerivative(1 as Curvilinear).normalized(), isStart: false, isEnd: true };
     }
     if (pointKey === "p0" && curveIndex > 0) {
       return { point: curve.p0, dir: curve.getDerivative(0 as Curvilinear).normalized(), isStart: false, isEnd: false };
     }
-    if (pointKey === "p3" && curveIndex < curves.length - 1) {
+    if (pointKey === "p3" && curveIndex < path.curves.length - 1) {
       return {
         point: curve.p3,
-        dir: curves[curveIndex + 1]!.getDerivative(0 as Curvilinear).normalized(),
+        dir: path.curves[curveIndex + 1]!.getDerivative(0 as Curvilinear).normalized(),
         isStart: false,
         isEnd: false,
       };
@@ -944,12 +1027,14 @@ export class Editor {
     return null;
   }
 
-  private getDeleteButtonPosition(): Vector<2> | null {
-    const removable = this.getRemovablePoint();
+  private getDeleteButtonData(
+    sequence: Sequence,
+  ): { removable: { point: Vector<2>; dir: Vector<2>; isStart: boolean; isEnd: boolean }; center: Vector<2> } | null {
+    const removable = this.getRemovablePoint(sequence);
     if (!removable) return null;
     const perp = removable.dir.getOrthogonal();
     const offset = DELETE_BUTTON_OFFSET / this.view.zoom; // px -> m
-    return removable.point.plus(perp.times(offset));
+    return { removable, center: removable.point.plus(perp.times(offset)) };
   }
 
   private drawMinusInCircle(world: Vector<2>) {
@@ -975,10 +1060,12 @@ export class Editor {
     ctx.stroke();
   }
 
-  private drawDeleteButton() {
-    const center = this.getDeleteButtonPosition();
-    if (!center) return;
-    this.drawMinusInCircle(center);
+  private drawDeleteButtons() {
+    for (const sequence of this.sequences) {
+      const data = this.getDeleteButtonData(sequence);
+      if (!data) continue;
+      this.drawMinusInCircle(data.center);
+    }
   }
 
   private getElementDeleteButtonElement(): Element | null {
@@ -987,14 +1074,20 @@ export class Editor {
   }
 
   private getElementActionButtonGeometry(): { point: Vector<2>; perp: Vector<2> } | null {
-    if (this.selectedElements.size !== 1 || this.sequence.path.curves.length === 0) {
-      return null;
-    }
-    const element = [...this.selectedElements][0]!;
+    const element = this.getElementDeleteButtonElement();
+    if (!element) return null;
+    const sequence = this.getSequenceOfElement(element);
+    if (!sequence || sequence.path.curves.length === 0) return null;
+    return this.midpointNormal(sequence, element);
+  }
+
+  private midpointNormal(sequence: Sequence, element: Element): { point: Vector<2>; perp: Vector<2> } | null {
+    const path = sequence.path;
+    if (path.curves.length === 0) return null;
     const lo = Math.min(element.start as number, element.end as number);
     const hi = Math.max(element.start as number, element.end as number);
     const midU = ((lo + hi) / 2) as PathCoordinate;
-    const [curve, curvilinear] = this.sequence.path.getCurveAndCurvilinearCoord(midU);
+    const [curve, curvilinear] = path.getCurveAndCurvilinearCoord(midU);
     const point = curve.getPosition(curvilinear);
     const perp = curve.getDerivative(curvilinear).normalized().getOrthogonal();
     return { point, perp };
@@ -1053,41 +1146,46 @@ export class Editor {
   }
 
   private isProvisionalElement(element: Element): boolean {
-    return element === this.provisionalElement;
+    for (const provisional of this.provisionalElements.values()) {
+      if (provisional === element) return true;
+    }
+    return false;
   }
 
-  private startProvisionalCreation(u: number) {
-    this.placeProvisionalElement(u);
+  private startProvisionalCreation(sequence: Sequence, u: number) {
+    this.placeProvisionalElement(sequence, u);
     this.isCreatingProvisional = true;
+    this.creatingSequence = sequence;
     this.provisionalOriginU = u;
   }
 
   private updateProvisionalCreation(cursor: Vector<2>) {
-    if (this.sequence.path.curves.length === 0) return;
-    const u = this.snapCursorToPathAnywhere(cursor);
+    const sequence = this.creatingSequence;
+    if (!sequence || sequence.path.curves.length === 0) return;
+    const u = this.snapCursorToPathAnywhere(sequence, cursor);
     if (u == null) return;
     const origin = this.provisionalOriginU;
     if (Math.abs(u - origin) < 1e-9) {
-      this.placeProvisionalElement(origin);
+      this.placeProvisionalElement(sequence, origin);
       return;
     }
-    this.setProvisionalSpan(Math.min(origin, u), Math.max(origin, u), origin);
+    this.setProvisionalSpan(sequence, Math.min(origin, u), Math.max(origin, u), origin);
   }
 
-  private placeProvisionalElement(u: number) {
+  private placeProvisionalElement(sequence: Sequence, u: number) {
     const half = PROVISIONAL_TOTAL_LENGTH / 2;
-    this.setProvisionalSpan(u - half, u + half);
+    this.setProvisionalSpan(sequence, u - half, u + half);
   }
 
-  private setProvisionalSpan(start: number, end: number, anchor?: number) {
-    const path = this.sequence.path;
+  private setProvisionalSpan(sequence: Sequence, start: number, end: number, anchor?: number) {
+    const path = sequence.path;
     if (path.curves.length === 0) return;
     const clampedStart = Math.max(0, start) as PathCoordinate;
     const clampedEnd = Math.min(path.length, end) as PathCoordinate;
     const mid = anchor ?? ((clampedStart as number) + (clampedEnd as number)) / 2;
     let left = 0;
     let right = path.length;
-    for (const other of this.sequence.elements) {
+    for (const other of sequence.elements) {
       const os = Math.min(other.start as number, other.end as number);
       const oe = Math.max(other.start as number, other.end as number);
       if (oe <= mid) left = Math.max(left, oe);
@@ -1096,61 +1194,70 @@ export class Editor {
     const lo = Math.max(clampedStart as number, left);
     const hi = Math.min(clampedEnd as number, right);
     const finalStart = Math.max(lo, Math.min(hi, lo)) as PathCoordinate;
-    if (!this.provisionalElement) {
-      this.provisionalElement = createDefaultFootTurn(finalStart, hi as PathCoordinate);
+    const existing = this.provisionalElements.get(sequence);
+    if (!existing) {
+      this.provisionalElements.set(sequence, createDefaultFootTurn(finalStart, hi as PathCoordinate));
     } else {
-      this.provisionalElement.start = finalStart;
-      this.provisionalElement.end = hi as PathCoordinate;
+      existing.start = finalStart;
+      existing.end = hi as PathCoordinate;
     }
-    this.selectedElements.clear();
-    this.selectedCurves.clear();
-    this.selected.clear();
+    this.selectedPoints.delete(sequence);
+    this.selectedCurves.delete(sequence);
+    this.selectedElements = new Set(
+      [...this.selectedElements].filter((element) => this.getSequenceOfElement(element) !== sequence),
+    );
     this.draw();
   }
 
-  private pickPathCoordinate(screenX: number, screenY: number): number | null {
+  private pickPathCoordinate(screenX: number, screenY: number): { sequence: Sequence; u: number } | null {
     const cursor = this.screenToWorld(screenX, screenY);
     const tolerance = PICK_RADIUS / this.view.zoom;
-    const hit = this.sequence.path.pickCurve(cursor, tolerance);
-    if (!hit) return null;
-    const { t } = hit.curve.getClosestPoint(cursor);
-    return this.uniformCoordinateAt(this.sequence.path.curves, hit.curveIndex, t);
+
+    let best: { sequence: Sequence; u: number; distance: number } | null = null;
+    for (const sequence of this.sequences) {
+      const hit = sequence.path.pickCurve(cursor, tolerance);
+      if (!hit) continue;
+      const { t } = hit.curve.getClosestPoint(cursor);
+      const u = this.uniformCoordinateAt(sequence.path.curves, hit.curveIndex, t);
+      if (!best || hit.distance < best.distance) {
+        best = { sequence, u, distance: hit.distance };
+      }
+    }
+    return best ? { sequence: best.sequence, u: best.u } : null;
   }
 
-  private getProvisionalAddButtonPosition(): Vector<2> | null {
-    const element = this.provisionalElement;
-    if (!element || this.sequence.path.curves.length === 0) return null;
-    const lo = Math.min(element.start as number, element.end as number);
-    const hi = Math.max(element.start as number, element.end as number);
-    const midU = ((lo + hi) / 2) as PathCoordinate;
-    const [curve, curvilinear] = this.sequence.path.getCurveAndCurvilinearCoord(midU);
-    const point = curve.getPosition(curvilinear);
-    const perp = curve.getDerivative(curvilinear).normalized().getOrthogonal();
+  private getProvisionalAddButtons(): { sequence: Sequence; center: Vector<2> }[] {
+    const result: { sequence: Sequence; center: Vector<2> }[] = [];
     const offset = DELETE_BUTTON_OFFSET / this.view.zoom; // px -> m
-    return point.plus(perp.times(-offset));
+    for (const [sequence, element] of this.provisionalElements) {
+      const geometry = this.midpointNormal(sequence, element);
+      if (!geometry) continue;
+      result.push({ sequence, center: geometry.point.plus(geometry.perp.times(-offset)) });
+    }
+    return result;
   }
 
-  private drawProvisionalAddButton() {
-    if (!this.provisionalElement) return;
-    const center = this.getProvisionalAddButtonPosition();
-    if (!center) return;
-    this.drawPlusInCircleWithColor(center, PROVISIONAL_COLOR);
+  private drawProvisionalAddButtons() {
+    for (const { center } of this.getProvisionalAddButtons()) {
+      this.drawPlusInCircleWithColor(center, PROVISIONAL_COLOR);
+    }
   }
 
-  private hitProvisionalAddButton(screenX: number, screenY: number): boolean {
-    const center = this.getProvisionalAddButtonPosition();
-    if (!center) return false;
-    const [iconX, iconY] = this.worldToScreen(center);
-    const dx = screenX - iconX;
-    const dy = screenY - iconY;
-    return Math.hypot(dx, dy) <= ADD_BUTTON_HIT_RADIUS;
+  private hitProvisionalAddButton(screenX: number, screenY: number): Sequence | null {
+    for (const { sequence, center } of this.getProvisionalAddButtons()) {
+      const [iconX, iconY] = this.worldToScreen(center);
+      const dx = screenX - iconX;
+      const dy = screenY - iconY;
+      if (Math.hypot(dx, dy) <= ADD_BUTTON_HIT_RADIUS) return sequence;
+    }
+    return null;
   }
 
-  private addProvisionalElement() {
-    const element = this.provisionalElement;
+  private addProvisionalElement(sequence: Sequence) {
+    const element = this.provisionalElements.get(sequence);
     if (!element) return;
-    this.provisionalElement = null;
-    this.sequence.addElement(element);
+    this.provisionalElements.delete(sequence);
+    sequence.addElement(element);
     this.notifySequenceChange();
     if (this.onElementChangeRequest) this.onElementChangeRequest(element);
     this.draw();
@@ -1174,27 +1281,34 @@ export class Editor {
     return Math.hypot(dx, dy) <= DELETE_BUTTON_HIT_RADIUS;
   }
 
-  private hitDeleteButton(screenX: number, screenY: number): boolean {
-    const center = this.getDeleteButtonPosition();
-    if (!center) return false;
-    const [iconX, iconY] = this.worldToScreen(center);
-    const dx = screenX - iconX;
-    const dy = screenY - iconY;
-    return Math.hypot(dx, dy) <= DELETE_BUTTON_HIT_RADIUS;
+  private hitDeleteButton(
+    screenX: number,
+    screenY: number,
+  ): { sequence: Sequence; removable: NonNullable<ReturnType<Editor["getRemovablePoint"]>> } | null {
+    for (const sequence of this.sequences) {
+      const data = this.getDeleteButtonData(sequence);
+      if (!data) continue;
+      const [iconX, iconY] = this.worldToScreen(data.center);
+      const dx = screenX - iconX;
+      const dy = screenY - iconY;
+      if (Math.hypot(dx, dy) <= DELETE_BUTTON_HIT_RADIUS) return { sequence, removable: data.removable };
+    }
+    return null;
   }
 
-  private getSplitButtonData(): { curveIndex: number; center: Vector<2> }[] {
-    const curves = this.sequence.path.curves;
-    const result: { curveIndex: number; center: Vector<2> }[] = [];
-    for (const curveIndex of this.selectedCurves) {
-      const curve = curves[curveIndex];
-      if (!curve) continue;
-      const mid = curve.getHalfLengthCoordinate();
-      const point = curve.getPosition(mid);
-      const dir = curve.getDerivative(mid).normalized();
-      const perp = dir.getOrthogonal();
-      const offset = SPLIT_BUTTON_OFFSET / this.view.zoom; // px -> m
-      result.push({ curveIndex, center: point.plus(perp.times(offset)) });
+  private getSplitButtonData(): { sequence: Sequence; curveIndex: number; center: Vector<2> }[] {
+    const result: { sequence: Sequence; curveIndex: number; center: Vector<2> }[] = [];
+    for (const [sequence, curveIndices] of this.selectedCurves) {
+      for (const curveIndex of curveIndices) {
+        const curve = sequence.path.curves[curveIndex];
+        if (!curve) continue;
+        const mid = curve.getHalfLengthCoordinate();
+        const point = curve.getPosition(mid);
+        const dir = curve.getDerivative(mid).normalized();
+        const perp = dir.getOrthogonal();
+        const offset = SPLIT_BUTTON_OFFSET / this.view.zoom; // px -> m
+        result.push({ sequence, curveIndex, center: point.plus(perp.times(offset)) });
+      }
     }
     return result;
   }
@@ -1205,21 +1319,22 @@ export class Editor {
     }
   }
 
-  private hitSplitButton(screenX: number, screenY: number): number | null {
-    for (const { curveIndex, center } of this.getSplitButtonData()) {
+  private hitSplitButton(screenX: number, screenY: number): { sequence: Sequence; curveIndex: number } | null {
+    for (const { sequence, curveIndex, center } of this.getSplitButtonData()) {
       const [iconX, iconY] = this.worldToScreen(center);
       const dx = screenX - iconX;
       const dy = screenY - iconY;
-      if (Math.hypot(dx, dy) <= ADD_BUTTON_HIT_RADIUS) return curveIndex;
+      if (Math.hypot(dx, dy) <= ADD_BUTTON_HIT_RADIUS) return { sequence, curveIndex };
     }
     return null;
   }
 
-  private isHandleVisible(curveIndex: number, pointKey: ControlPointKey): boolean {
+  private isHandleVisible(sequence: Sequence, curveIndex: number, pointKey: ControlPointKey): boolean {
     if (pointKey !== "p1" && pointKey !== "p2") return true;
-    if (this.selected.size === 0) return false;
-    const curveCount = this.sequence.path.curves.length;
-    const has = (ci: number, pk: ControlPointKey) => this.selected.has(this.keyOf(ci, pk));
+    const selected = this.selectedPoints.get(sequence);
+    if (!selected || selected.size === 0) return false;
+    const curveCount = sequence.path.curves.length;
+    const has = (ci: number, pk: ControlPointKey) => this.isSelectedPoint(sequence, this.keyOf(ci, pk));
 
     if (pointKey === "p1") {
       if (has(curveIndex, "p0") || has(curveIndex, "p1")) return true;
@@ -1250,7 +1365,6 @@ export class Editor {
   }
 
   private pickControlPoint(screenX: number, screenY: number): ControlPointSelection | null {
-    const curves = this.sequence.path.curves;
     const cursor = this.screenToWorld(screenX, screenY);
     const pickRadius = PICK_RADIUS / this.view.zoom;
     const keys: ControlPointKey[] = ["p0", "p1", "p2", "p3"];
@@ -1258,37 +1372,48 @@ export class Editor {
     let best: ControlPointSelection | null = null;
     let bestDistance = Infinity;
 
-    curves.forEach((curve, curveIndex) => {
-      keys.forEach((pointKey) => {
-        if ((pointKey === "p1" || pointKey === "p2") && !this.isHandleVisible(curveIndex, pointKey)) {
-          return;
-        }
-        const distance = curve[pointKey].minus(cursor).length();
-        if (distance <= pickRadius && distance < bestDistance) {
-          bestDistance = distance;
-          best = { curveIndex, pointKey };
-        }
+    for (const sequence of this.sequences) {
+      sequence.path.curves.forEach((curve, curveIndex) => {
+        keys.forEach((pointKey) => {
+          if ((pointKey === "p1" || pointKey === "p2") && !this.isHandleVisible(sequence, curveIndex, pointKey)) {
+            return;
+          }
+          const distance = curve[pointKey].minus(cursor).length();
+          if (distance <= pickRadius && distance < bestDistance) {
+            bestDistance = distance;
+            best = { sequence, curveIndex, pointKey };
+          }
+        });
       });
-    });
+    }
 
     return best;
   }
 
-  private pickCurve(screenX: number, screenY: number): number | null {
+  private pickCurve(screenX: number, screenY: number): { sequence: Sequence; curveIndex: number } | null {
     const cursor = this.screenToWorld(screenX, screenY);
     const tolerance = PICK_RADIUS / this.view.zoom;
-    const result = this.sequence.path.pickCurve(cursor, tolerance);
-    return result ? result.curveIndex : null;
+
+    let best: { sequence: Sequence; curveIndex: number; distance: number } | null = null;
+    for (const sequence of this.sequences) {
+      const result = sequence.path.pickCurve(cursor, tolerance);
+      if (!result) continue;
+      if (!best || result.distance < best.distance) {
+        best = { sequence, curveIndex: result.curveIndex, distance: result.distance };
+      }
+    }
+    return best ? { sequence: best.sequence, curveIndex: best.curveIndex } : null;
   }
 
-  private handleCurveSelection(curveIndex: number, ctrlKey: boolean) {
+  private handleCurveSelection(sequence: Sequence, curveIndex: number, ctrlKey: boolean) {
     if (ctrlKey) {
-      if (this.selectedCurves.has(curveIndex)) this.selectedCurves.delete(curveIndex);
-      else this.selectedCurves.add(curveIndex);
-    } else if (!this.selectedCurves.has(curveIndex)) {
-      this.selectedCurves = new Set([curveIndex]);
+      const selected = this.getSelectedCurvesFor(sequence);
+      if (selected.has(curveIndex)) selected.delete(curveIndex);
+      else selected.add(curveIndex);
+    } else if (!this.selectedCurves.get(sequence)?.has(curveIndex)) {
+      this.selectedCurves.set(sequence, new Set([curveIndex]));
     }
-    if (this.selectedCurves.size > 0) this.selected.clear();
+    if ((this.selectedCurves.get(sequence)?.size ?? 0) > 0) this.selectedPoints.delete(sequence);
   }
 
   private screenToWorld(screenX: number, screenY: number): Vector<2> {
@@ -1312,7 +1437,9 @@ export class Editor {
 
   private updateElementKeyframes(element: Element) {
     if (this.isProvisionalElement(element)) return;
-    this.sequence.updateElementKeyframes(element);
+    const sequence = this.getSequenceOfElement(element);
+    if (!sequence) return;
+    sequence.updateElementKeyframes(element);
   }
 
   private notifySequenceChange() {
@@ -1351,8 +1478,9 @@ export class Editor {
       if (this.mode === "view") return;
 
       if (this.mode !== "path") {
-        if (this.hitProvisionalAddButton(screenX, screenY)) {
-          this.addProvisionalElement();
+        const provisionalHit = this.hitProvisionalAddButton(screenX, screenY);
+        if (provisionalHit) {
+          this.addProvisionalElement(provisionalHit);
           return;
         }
         if (this.hitElementCogButton(screenX, screenY) && this.onElementChangeRequest) {
@@ -1363,7 +1491,8 @@ export class Editor {
         if (this.hitElementDeleteButton(screenX, screenY)) {
           const element = this.getElementDeleteButtonElement();
           if (element) {
-            this.sequence.removeElement(element);
+            const sequence = this.getSequenceOfElement(element);
+            if (sequence) sequence.removeElement(element);
             this.selectedElements.delete(element);
             this.notifySequenceChange();
             this.draw();
@@ -1372,8 +1501,12 @@ export class Editor {
         }
         const element = this.pickElement(screenX, screenY);
         if (element) {
-          if (!this.isProvisionalElement(element)) this.provisionalElement = null;
-          if (!this.isProvisionalElement(element)) this.selectElement(element, event.ctrlKey);
+          const isProvisional = this.isProvisionalElement(element);
+          if (!isProvisional) {
+            const owner = this.getSequenceOfElement(element);
+            if (owner) this.provisionalElements.delete(owner);
+            this.selectElement(element, event.ctrlKey);
+          }
           const pointHit = this.pickElementControlPoint(screenX, screenY);
           if (pointHit?.element === element) {
             this.isDraggingElementPoint = true;
@@ -1383,9 +1516,9 @@ export class Editor {
             this.startElementSegmentDrag(element, screenX, screenY);
           }
         } else {
-          const u = this.pickPathCoordinate(screenX, screenY);
-          if (u != null) {
-            this.startProvisionalCreation(u);
+          const pathHit = this.pickPathCoordinate(screenX, screenY);
+          if (pathHit) {
+            this.startProvisionalCreation(pathHit.sequence, pathHit.u);
           } else {
             this.isSelectingRect = true;
             this.rectDidMove = false;
@@ -1403,43 +1536,49 @@ export class Editor {
         return;
       }
 
-      if (this.hitDeleteButton(screenX, screenY)) {
-        const removable = this.getRemovablePoint();
-        if (removable) {
-          if (removable.isStart) {
-            this.sequence.path.removeStartCurve();
-          } else if (removable.isEnd) {
-            this.sequence.path.removeEndCurve();
-          } else {
-            const [curveBefore] = this.sequence.path.getCurvesAroundPoint(removable.point);
-            this.jointDeletionSnapshot = this.makeJointDeletionSnapshot(this.sequence.path.curves.indexOf(curveBefore));
-            this.sequence.path.removePoint(removable.point);
-            this.remapElementsAfterCurveRemoval();
-          }
-          this.selected.clear();
-          this.notifySequenceChange();
-          this.draw();
+      const deleteHit = this.hitDeleteButton(screenX, screenY);
+      if (deleteHit) {
+        const sequence = deleteHit.sequence;
+        const removable = deleteHit.removable;
+        if (removable.isStart) {
+          sequence.path.removeStartCurve();
+        } else if (removable.isEnd) {
+          sequence.path.removeEndCurve();
+        } else {
+          const [curveBefore] = sequence.path.getCurvesAroundPoint(removable.point);
+          this.jointDeletionSnapshot = this.makeJointDeletionSnapshot(
+            sequence,
+            sequence.path.curves.indexOf(curveBefore),
+          );
+          sequence.path.removePoint(removable.point);
+          this.remapElementsAfterCurveRemoval();
         }
+        this.selectedPoints.delete(sequence);
+        this.notifySequenceChange();
+        this.draw();
         return;
       }
-      if (this.hitAddButton(screenX, screenY)) {
-        this.addSegmentEnd();
+      const addHit = this.hitAddButton(screenX, screenY);
+      if (addHit) {
+        this.addSegmentEnd(addHit);
         return;
       }
-      const splitCurveIndex = this.hitSplitButton(screenX, screenY);
-      if (splitCurveIndex != null) {
-        const curve = this.sequence.path.curves[splitCurveIndex];
+      const splitHit = this.hitSplitButton(screenX, screenY);
+      if (splitHit) {
+        const sequence = splitHit.sequence;
+        const curve = sequence.path.curves[splitHit.curveIndex];
         if (curve) {
           const mid = curve.getHalfLengthCoordinate();
-          this.sequence.path.cut(splitCurveIndex, mid);
+          sequence.path.cut(splitHit.curveIndex, mid);
+          const remapFrom = this.selectedCurves.get(sequence) ?? [];
           const newSelected = new Set<number>();
-          for (const idx of this.selectedCurves) {
-            if (idx < splitCurveIndex) newSelected.add(idx);
-            else if (idx > splitCurveIndex) newSelected.add(idx + 1);
+          for (const idx of remapFrom) {
+            if (idx < splitHit.curveIndex) newSelected.add(idx);
+            else if (idx > splitHit.curveIndex) newSelected.add(idx + 1);
           }
-          newSelected.add(splitCurveIndex);
-          newSelected.add(splitCurveIndex + 1);
-          this.selectedCurves = newSelected;
+          newSelected.add(splitHit.curveIndex);
+          newSelected.add(splitHit.curveIndex + 1);
+          this.selectedCurves.set(sequence, newSelected);
           this.notifySequenceChange();
           this.draw();
         }
@@ -1447,29 +1586,38 @@ export class Editor {
       }
       const picked = this.pickControlPoint(screenX, screenY);
       if (picked) {
+        const sequence = picked.sequence;
         const key = this.keyOf(picked.curveIndex, picked.pointKey);
+        const selected = this.getSelectedPointsFor(sequence);
         if (event.ctrlKey) {
-          if (this.selected.has(key)) this.selected.delete(key);
-          else this.selected.add(key);
-        } else if (!this.selected.has(key)) {
-          this.selected = new Set([key]);
+          if (selected.has(key)) selected.delete(key);
+          else selected.add(key);
+        } else if (!selected.has(key)) {
+          // Plain click on an unselected point: select only that point and drop the
+          // selections of the other sequences so the drag moves it alone.
+          this.selectedPoints = new Map([[sequence, new Set([key])]]);
         }
-        if (this.selected.size > 0) this.selectedCurves.clear();
-        if (this.selected.has(key)) {
+        if ((this.selectedPoints.get(sequence)?.size ?? 0) > 0) this.selectedCurves.delete(sequence);
+        // Deselecting with ctrl does not start a drag. A plain click on a point ends
+        // with that point selected (fresh or kept), so the drag starts at once.
+        if (this.selectedPoints.get(sequence)?.has(key) ?? false) {
           this.isDraggingPoint = true;
-          this.dragOrigin = this.sequence.path.curves[picked.curveIndex]?.[picked.pointKey].copy() ?? null;
+          this.dragSequence = sequence;
+          this.dragOrigin = sequence.path.curves[picked.curveIndex]?.[picked.pointKey].copy() ?? null;
           this.lastDragDelta = new Vector<2>(0, 0);
           this.jointMoveSnapshot =
             picked.pointKey === "p0" || picked.pointKey === "p3"
-              ? this.makeJointMoveSnapshot(picked.curveIndex, picked.pointKey)
+              ? this.makeJointMoveSnapshot(sequence, picked.curveIndex, picked.pointKey)
               : null;
         }
       } else {
-        const curveIndex = this.pickCurve(screenX, screenY);
-        if (curveIndex != null) {
-          this.handleCurveSelection(curveIndex, event.ctrlKey);
-          if (this.selectedCurves.has(curveIndex)) {
+        const curveHit = this.pickCurve(screenX, screenY);
+        if (curveHit) {
+          const sequence = curveHit.sequence;
+          this.handleCurveSelection(sequence, curveHit.curveIndex, event.ctrlKey);
+          if (this.selectedCurves.get(sequence)?.has(curveHit.curveIndex)) {
             this.isDraggingCurve = true;
+            this.dragSequence = sequence;
             this.dragOrigin = this.screenToWorld(screenX, screenY);
             this.lastDragDelta = new Vector<2>(0, 0);
           }
@@ -1482,7 +1630,7 @@ export class Editor {
           this.rectStartY = screenY;
           this.rectEndX = screenX;
           this.rectEndY = screenY;
-          if (!event.ctrlKey) this.selected.clear();
+          if (!event.ctrlKey) this.selectedPoints.clear();
           this.selectedCurves.clear();
         }
       }
@@ -1540,18 +1688,24 @@ export class Editor {
 
     if (this.isDraggingElementSegment) {
       const [screenX, screenY] = this.screenPosition(event);
+      const dragSequence = this.dragElement ? this.getSequenceOfElement(this.dragElement) : null;
+      if (!dragSequence) return;
       const world = this.screenToWorld(screenX, screenY);
-      const path = this.sequence.path;
-      const currentGrab = this.snapCursorToPathAnywhere(world);
+      const currentGrab = this.snapCursorToPathAnywhere(dragSequence, world);
       if (currentGrab != null) {
         const delta =
           (currentGrab as number) >= this.segmentDragGrabU
-            ? path.arcLengthBetween(this.segmentDragGrabU as PathCoordinate, currentGrab as PathCoordinate)
-            : -path.arcLengthBetween(currentGrab as PathCoordinate, this.segmentDragGrabU as PathCoordinate);
+            ? dragSequence.path.arcLengthBetween(this.segmentDragGrabU as PathCoordinate, currentGrab as PathCoordinate)
+            : -dragSequence.path.arcLengthBetween(
+                currentGrab as PathCoordinate,
+                this.segmentDragGrabU as PathCoordinate,
+              );
         const clamped = Math.min(Math.max(delta, this.segmentDragDeltaMin), this.segmentDragDeltaMax);
         for (const item of this.segmentDragItems) {
-          item.element.start = path.moveAlongByArcLength(item.start0 as PathCoordinate, clamped);
-          item.element.end = path.moveAlongByArcLength(item.end0 as PathCoordinate, clamped);
+          const sequence = this.getSequenceOfElement(item.element);
+          if (!sequence) continue;
+          item.element.start = sequence.path.moveAlongByArcLength(item.start0 as PathCoordinate, clamped);
+          item.element.end = sequence.path.moveAlongByArcLength(item.end0 as PathCoordinate, clamped);
           this.updateElementKeyframes(item.element);
         }
         this.sequenceMutated = true;
@@ -1573,11 +1727,13 @@ export class Editor {
 
     if (this.isDraggingPoint) {
       const [screenX, screenY] = this.screenPosition(event);
-      if (this.selected.size === 1) {
-        const [ciStr, pkStr] = [...this.selected][0]!.split(":");
+      const sequence = this.dragSequence;
+      const selected = sequence ? this.selectedPoints.get(sequence) : undefined;
+      if (sequence && selected && selected.size === 1) {
+        const [ciStr, pkStr] = [...selected][0]!.split(":");
         const curveIndex = Number(ciStr);
         const pointKey = pkStr as ControlPointKey;
-        const curve = this.sequence.path.curves[curveIndex];
+        const curve = sequence.path.curves[curveIndex];
         const point = curve?.[pointKey];
         if (!curve || !point) return;
 
@@ -1585,9 +1741,15 @@ export class Editor {
         const delta = world.minus(point);
         point.x = world.x;
         point.y = world.y;
-        this.alignNeighbors(curveIndex, pointKey, delta);
-        this.sequence.path.updateLength();
+        this.alignNeighbors(sequence, curveIndex, pointKey, delta);
+        sequence.path.updateLength();
         if (pointKey === "p0" || pointKey === "p3") this.remapElementsAfterJointMove();
+        // Move the points selected on the other sequences by the same movement so a
+        // selection across sequences keeps moving together.
+        for (const [other, keys] of this.selectedPoints) {
+          if (other === sequence || keys.size === 0) continue;
+          this.translateGroupOf(other, keys, delta);
+        }
         this.sequenceMutated = true;
         this.draw();
       } else if (this.dragOrigin) {
@@ -1601,11 +1763,20 @@ export class Editor {
   }
 
   private translateGroup(delta: Vector<2>) {
-    const curves = this.sequence.path.curves;
+    for (const [sequence, selected] of this.selectedPoints) {
+      if (selected.size === 0) continue;
+      this.translateGroupOf(sequence, selected, delta);
+    }
+    this.sequenceMutated = true;
+    this.draw();
+  }
+
+  private translateGroupOf(sequence: Sequence, selected: ReadonlySet<string>, delta: Vector<2>) {
+    const curves = sequence.path.curves;
 
     const moveKeys = new Set<string>();
-    for (const key of this.selected) moveKeys.add(key);
-    for (const key of this.selected) {
+    for (const key of selected) moveKeys.add(key);
+    for (const key of selected) {
       const [ciStr, pkStr] = key.split(":");
       const curveIndex = Number(ciStr);
       const pointKey = pkStr as ControlPointKey;
@@ -1628,32 +1799,33 @@ export class Editor {
       point.y += delta.y;
     }
 
-    this.sequence.path.updateLength();
-    this.sequenceMutated = true;
-    this.draw();
+    sequence.path.updateLength();
   }
 
   private translateSelectedCurves(delta: Vector<2>) {
-    const curves = this.sequence.path.curves;
+    for (const [sequence, curveIndices] of this.selectedCurves) {
+      if (curveIndices.size === 0) continue;
+      const curves = sequence.path.curves;
 
-    const moved = new Set<Vector<2>>();
-    for (const curveIndex of this.selectedCurves) {
-      const curve = curves[curveIndex];
-      if (!curve) continue;
-      moved.add(curve.p0);
-      moved.add(curve.p1);
-      moved.add(curve.p2);
-      moved.add(curve.p3);
-      if (curveIndex > 0) moved.add(curves[curveIndex - 1]!.p2);
-      if (curveIndex < curves.length - 1) moved.add(curves[curveIndex + 1]!.p1);
+      const moved = new Set<Vector<2>>();
+      for (const curveIndex of curveIndices) {
+        const curve = curves[curveIndex];
+        if (!curve) continue;
+        moved.add(curve.p0);
+        moved.add(curve.p1);
+        moved.add(curve.p2);
+        moved.add(curve.p3);
+        if (curveIndex > 0) moved.add(curves[curveIndex - 1]!.p2);
+        if (curveIndex < curves.length - 1) moved.add(curves[curveIndex + 1]!.p1);
+      }
+
+      for (const point of moved) {
+        point.x += delta.x;
+        point.y += delta.y;
+      }
+
+      sequence.path.updateLength();
     }
-
-    for (const point of moved) {
-      point.x += delta.x;
-      point.y += delta.y;
-    }
-
-    this.sequence.path.updateLength();
     this.sequenceMutated = true;
     this.draw();
   }
@@ -1668,24 +1840,32 @@ export class Editor {
     const y0 = Math.min(this.rectStartY, this.rectEndY);
     const y1 = Math.max(this.rectStartY, this.rectEndY);
 
-    const curves = this.sequence.path.curves;
     const keys: ControlPointKey[] = ["p0", "p1", "p2", "p3"];
-    const hits: string[] = [];
-    curves.forEach((curve, curveIndex) => {
-      keys.forEach((pointKey) => {
-        if ((pointKey === "p1" || pointKey === "p2") && !this.isHandleVisible(curveIndex, pointKey)) return;
-        const [screenX, screenY] = this.worldToScreen(curve[pointKey]);
-        if (screenX >= x0 && screenX <= x1 && screenY >= y0 && screenY <= y1) {
-          hits.push(this.keyOf(curveIndex, pointKey));
+    const hits = new Map<Sequence, Set<string>>();
+    if (this.rectAddToSelection) {
+      for (const [sequence, selected] of this.selectedPoints) hits.set(sequence, new Set(selected));
+    }
+    for (const sequence of this.sequences) {
+      const sequenceHits = hits.get(sequence) ?? new Set<string>();
+      sequence.path.curves.forEach((curve, curveIndex) => {
+        for (const pointKey of keys) {
+          if ((pointKey === "p1" || pointKey === "p2") && !this.isHandleVisible(sequence, curveIndex, pointKey)) {
+            continue;
+          }
+          const [screenX, screenY] = this.worldToScreen(curve[pointKey]);
+          if (screenX >= x0 && screenX <= x1 && screenY >= y0 && screenY <= y1) {
+            sequenceHits.add(this.keyOf(curveIndex, pointKey));
+          }
         }
       });
-    });
-
-    if (this.rectAddToSelection) {
-      for (const hit of hits) this.selected.add(hit);
-    } else {
-      this.selected = new Set(hits);
+      if (sequenceHits.size > 0) {
+        hits.set(sequence, sequenceHits);
+      } else if (!this.rectAddToSelection) {
+        hits.delete(sequence);
+      }
     }
+
+    this.selectedPoints = hits;
     this.selectedCurves.clear();
   }
 
@@ -1697,26 +1877,28 @@ export class Editor {
 
     const hits = new Set<Element>();
     if (this.rectAddToSelection) for (const element of this.selectedElements) hits.add(element);
-    for (const element of this.sequence.elements) {
-      const inside = this.getElementPoints(element).some((point) => {
-        const [screenX, screenY] = this.worldToScreen(point);
-        return screenX >= x0 && screenX <= x1 && screenY >= y0 && screenY <= y1;
-      });
-      if (inside) hits.add(element);
+    for (const sequence of this.sequences) {
+      for (const element of this.selectableElements(sequence)) {
+        const inside = this.getElementPoints(element).some((point) => {
+          const [screenX, screenY] = this.worldToScreen(point);
+          return screenX >= x0 && screenX <= x1 && screenY >= y0 && screenY <= y1;
+        });
+        if (inside) hits.add(element);
+      }
     }
     this.selectedElements = hits;
-    this.selected.clear();
+    this.selectedPoints.clear();
     this.selectedCurves.clear();
   }
 
   private selectAll() {
-    const curves = this.sequence.path.curves;
     const keys: ControlPointKey[] = ["p0", "p3"];
-    curves.forEach((curve, curveIndex) => {
-      keys.forEach((pointKey) => {
-        this.selected.add(this.keyOf(curveIndex, pointKey));
+    for (const sequence of this.sequences) {
+      const selected = this.getSelectedPointsFor(sequence);
+      sequence.path.curves.forEach((curve, curveIndex) => {
+        for (const pointKey of keys) selected.add(this.keyOf(curveIndex, pointKey));
       });
-    });
+    }
     this.selectedCurves.clear();
     this.draw();
   }
@@ -1728,8 +1910,8 @@ export class Editor {
     }
   }
 
-  private makeJointMoveSnapshot(curveIndex: number, pointKey: "p0" | "p3") {
-    const curves = this.sequence.path.curves;
+  private makeJointMoveSnapshot(sequence: Sequence, curveIndex: number, pointKey: "p0" | "p3") {
+    const curves = sequence.path.curves;
     const jointCurveIndex = pointKey === "p3" ? curveIndex : curveIndex - 1;
     if (jointCurveIndex < 0 && curves.length === 0) return null;
 
@@ -1743,22 +1925,21 @@ export class Editor {
     }
 
     const items: Array<{ element: Element; start: number; end: number }> = [];
-    const elements =
-      this.provisionalElement != null ? [...this.sequence.elements, this.provisionalElement] : this.sequence.elements;
-    for (const element of elements) {
+    for (const element of this.selectableElements(sequence)) {
       items.push({ element, start: element.start as number, end: element.end as number });
     }
-    return { jointCurveIndex, curveStarts, curveLengths, items };
+    return { sequence, jointCurveIndex, curveStarts, curveLengths, items };
   }
 
   private remapElementsAfterJointMove() {
     const snapshot = this.jointMoveSnapshot;
     if (!snapshot) return;
+    const sequence = snapshot.sequence;
 
     const newCurveStarts: number[] = [];
     const newCurveLengths: number[] = [];
     let cumulated = 0;
-    for (const curve of this.sequence.path.curves) {
+    for (const curve of sequence.path.curves) {
       newCurveStarts.push(cumulated);
       newCurveLengths.push(curve.length);
       cumulated += curve.length;
@@ -1783,11 +1964,11 @@ export class Editor {
     }
   }
 
-  private axisTables(): { curveStarts: number[]; curveLengths: number[] } {
+  private axisTables(sequence: Sequence): { curveStarts: number[]; curveLengths: number[] } {
     const curveStarts: number[] = [];
     const curveLengths: number[] = [];
     let cumulated = 0;
-    for (const curve of this.sequence.path.curves) {
+    for (const curve of sequence.path.curves) {
       curveStarts.push(cumulated);
       curveLengths.push(curve.length);
       cumulated += curve.length;
@@ -1795,23 +1976,22 @@ export class Editor {
     return { curveStarts, curveLengths };
   }
 
-  private makeJointDeletionSnapshot(jointOldIndex: number) {
-    const { curveStarts, curveLengths } = this.axisTables();
+  private makeJointDeletionSnapshot(sequence: Sequence, jointOldIndex: number) {
+    const { curveStarts, curveLengths } = this.axisTables(sequence);
 
     const items: Array<{ element: Element; start: number; end: number }> = [];
-    const elements =
-      this.provisionalElement != null ? [...this.sequence.elements, this.provisionalElement] : this.sequence.elements;
-    for (const element of elements) {
+    for (const element of this.selectableElements(sequence)) {
       items.push({ element, start: element.start as number, end: element.end as number });
     }
-    return { jointOldIndex, curveStarts, curveLengths, items };
+    return { sequence, jointOldIndex, curveStarts, curveLengths, items };
   }
 
   private remapElementsAfterCurveRemoval() {
     const snapshot = this.jointDeletionSnapshot;
     if (!snapshot) return;
+    const sequence = snapshot.sequence;
 
-    const { curveStarts, curveLengths } = this.axisTables();
+    const { curveStarts, curveLengths } = this.axisTables(sequence);
 
     for (const item of snapshot.items) {
       item.element.start = remapUniformAtRemoval(
@@ -1837,8 +2017,8 @@ export class Editor {
     this.jointDeletionSnapshot = null;
   }
 
-  private alignNeighbors(curveIndex: number, pointKey: ControlPointKey, delta: Vector<2>) {
-    const curves = this.sequence.path.curves;
+  private alignNeighbors(sequence: Sequence, curveIndex: number, pointKey: ControlPointKey, delta: Vector<2>) {
+    const curves = sequence.path.curves;
     const curve = curves[curveIndex];
     if (!curve) return;
 
@@ -1863,7 +2043,7 @@ export class Editor {
       if (this.rectDidMove) {
         this.finishSelectionRectangle();
       } else if (this.rectTargetsElements) {
-        this.provisionalElement = null;
+        this.provisionalElements.clear();
         this.selectedElements.clear();
       }
       this.isSelectingRect = false;
@@ -1874,8 +2054,10 @@ export class Editor {
     this.isDraggingElementPoint = false;
     this.isDraggingElementSegment = false;
     this.isCreatingProvisional = false;
+    this.creatingSequence = null;
     this.jointMoveSnapshot = null;
     this.dragElement = null;
+    this.dragSequence = null;
     this.dragOrigin = null;
     this.lastDragDelta = new Vector<2>(0, 0);
     if (this.sequenceMutated) {

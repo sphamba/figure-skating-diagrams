@@ -31,6 +31,7 @@ type ElementKeyframes = {
 type FootOrHipsKey = "footL" | "footR" | "hips";
 
 export interface SequenceJSON {
+  name?: string;
   path: ReturnType<Path["toJSON"]>;
   keyframes: {
     footL: FootKeyframeJSON[];
@@ -67,6 +68,7 @@ function boundaryCoordinates(
 }
 
 export class Sequence {
+  name: string = "Sequence";
   path: Path;
   keyframes: SequenceKeyframes;
   elements: Element[];
@@ -208,6 +210,7 @@ export class Sequence {
 
   toJSON(): SequenceJSON {
     return {
+      name: this.name,
       path: this.path.toJSON(),
       keyframes: {
         footL: [],
@@ -221,6 +224,7 @@ export class Sequence {
 
   static fromJSON(json: SequenceJSON): Sequence {
     const sequence = new Sequence(Path.fromJSON(json.path));
+    sequence.name = json.name ?? "Sequence";
     sequence.keyframes = {
       footL: json.keyframes.footL.map((keyframe) => FootKeyframe.fromJSON(keyframe)),
       footR: json.keyframes.footR.map((keyframe) => FootKeyframe.fromJSON(keyframe)),
