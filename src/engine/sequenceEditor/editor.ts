@@ -28,6 +28,10 @@ const MIN_BLADE_LENGTH = 25; // px
 const MIN_DRAW_INCREMENT = 2; // px
 /** Path color in "elements" mode: translucent grey so the path stays visible but de-emphasized. */
 const ELEMENTS_PATH_COLOR = "#000";
+/** Font size of the element name labels, in screen pixels. Kept at any zoom by dividing by the zoom. */
+const LABEL_FONT_SIZE = 14; // px
+/** Distance between the element centre point and its label, in screen pixels. */
+const LABEL_OFFSET = 15; // px
 /** Path-coordinate step used to trace an element along the path. */
 const ELEMENT_DRAW_INCREMENT = 0.02;
 const NODE_SIZE = 10; // px
@@ -326,6 +330,8 @@ export class Editor {
     } else {
       this.drawTraces();
     }
+    // Element name labels, in all modes.
+    this.drawElementLabels();
     ctx.restore();
     // Selection rectangle, for both editing modes.
     this.drawSelectionRectangle();
@@ -558,6 +564,84 @@ export class Editor {
   private drawElementSpan(element: Element) {
     const [start, end] = this.getDisplayedSpan(element);
     this.sequence.path.drawRange(this.ctx, start, end);
+  }
+
+  /**
+   * Centre point of an element on the path, and the unit direction from it
+   * towards the outside of the curve: perpendicular to the tangent at the
+   * centre, opposite to the centre of curvature there. Null when the path
+   * has no curves.
+   */
+  private getElementLabelGeometry(element: Element): { point: Vector<2>; outside: Vector<2> } | null {
+    const path = this.sequence.path;
+    if (path.curves.length === 0) return null;
+    const lo = Math.min(element.start as number, element.end as number);
+    const hi = Math.max(element.start as number, element.end as number);
+    const midU = ((lo + hi) / 2) as PathCoordinate;
+    const [curve, curvilinear] = path.getCurveAndCurvilinearCoord(midU);
+    const point = curve.getPosition(curvilinear);
+    const tangent = curve.getDerivative(curvilinear).normalized();
+    const curvature = curve.getCurvature(curvilinear);
+    // The centre of curvature lies on the side of the CCW normal of the
+    // tangent (getOrthogonal) when the curvature is positive, and on the
+    // other side when it is negative or zero. The label goes the opposite
+    // way, so it stays outside of the curve.
+    const sign = curvature > 0 ? -1 : 1;
+    const outside = tangent.getOrthogonal().times(sign);
+    return { point, outside };
+  }
+
+  /**
+   * Distance from an ellipse centre to its boundary along the unit direction
+   * u: the support of the ellipse (semi-axes a and b) in that direction.
+   */
+  private ellipseSupport(ux: number, uy: number, a: number, b: number): number {
+    return 1 / Math.hypot(ux / a, uy / b);
+  }
+
+  /**
+   * Draw the name of every element with the canvas fillText method, in all
+   * edit modes. The text anchor (textAlign and textBaseline) stays centred,
+   * so the drawn label is centred on its anchor point. The label bounding
+   * box comes from the canvas measureText method: its width, and its ascent
+   * and descent. That rectangle is simplified as an ellipse, and the label
+   * centre is shifted from the path point only along the perpendicular
+   * outside direction (see getElementLabelGeometry), by the least distance
+   * that keeps the closest part of the box LABEL_OFFSET screen pixels away
+   * from the path: the offset plus the ellipse support along that direction.
+   * The font size stays 12 screen pixels at any zoom, and the whole offset
+   * is world-space, so the gap is also zoom-independent.
+   */
+  private drawElementLabels() {
+    const ctx = this.ctx;
+    if (this.sequence.path.curves.length === 0) return;
+    const offset = LABEL_OFFSET / this.view.zoom; // px -> vector units
+
+    ctx.font = `${LABEL_FONT_SIZE / this.view.zoom}px sans-serif`;
+    ctx.fillStyle = "#000";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    for (const element of this.sequence.elements) {
+      const geometry = this.getElementLabelGeometry(element);
+      if (!geometry) continue;
+
+      // Bounding box of the text, in the current (world-space) font size.
+      const metrics = ctx.measureText(element.shortName);
+      const a = metrics.width / 2;
+      const b = ((metrics.actualBoundingBoxAscent ?? 0) + (metrics.actualBoundingBoxDescent ?? 0)) / 2;
+      if (a === 0 && b === 0) continue;
+
+      // The support gives the distance from the label centre to the closest
+      // part of the box along the shift direction, so extending the shift by
+      // it keeps the box gap at the target offset.
+      const support = this.ellipseSupport(Math.abs(geometry.outside.x), Math.abs(geometry.outside.y), a, b);
+      const total = offset + support;
+      const labelX = geometry.point.x + geometry.outside.x * total;
+      const labelY = geometry.point.y + geometry.outside.y * total;
+
+      ctx.fillText(element.shortName, labelX, -labelY);
+    }
   }
 
   /** Sampled world-space points along the path covered by an element.

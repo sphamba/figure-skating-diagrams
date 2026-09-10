@@ -82,12 +82,21 @@ import { Editor } from "../src/engine/sequenceEditor/editor";
 const CTX_METHODS = [
   "scale", "clearRect", "save", "restore", "beginPath", "moveTo", "lineTo",
   "bezierCurveTo", "stroke", "fill", "arc", "fillRect", "strokeRect", "translate",
-  "setTransform", "closePath", "rect",
+  "setTransform", "closePath", "rect", "fillText",
 ];
+
+const CTX_RESULT: Record<string, () => unknown> = {
+  measureText: () => ({
+    width: 40,
+    actualBoundingBoxAscent: 8,
+    actualBoundingBoxDescent: 2,
+  }),
+};
 
 function makeEditor() {
   const ctx: Record<string, unknown> = { width: 0, height: 0 };
   for (const m of CTX_METHODS) ctx[m] = () => {};
+  for (const [m, fn] of Object.entries(CTX_RESULT)) ctx[m] = fn;
   const canvas = document.createElement("canvas") as HTMLCanvasElement & {
     getContext: () => Record<string, unknown>;
   };

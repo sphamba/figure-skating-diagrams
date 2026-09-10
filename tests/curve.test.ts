@@ -255,7 +255,6 @@ test("Cut curve", () => {
 	// The handles around the cutpoint keep the tangent of the original curve
 	// at the cutpoint and share the same length: the shorter of the two
 	// parameter-scaled lengths.
-	const dx = curve.getDerivative(0.2 as Curvilinear).times(1 / 3);
 	const common = Math.min(0.2, 0.8);
 	const handle1 = px.minus(dx.normalized().times(dx.length() * common));
 	const handle2 = px.plus(dx.normalized().times(dx.length() * common));

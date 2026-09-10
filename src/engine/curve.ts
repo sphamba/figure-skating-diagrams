@@ -215,6 +215,22 @@ export class Curve {
   }
 
   /**
+   * Signed curvature of the curve at the given curvilinear coordinate:
+   * (x' y'' - y' x'') / |D1|^3, from the first and second derivative methods.
+   * Positive when the curve bends towards the right-hand rotation (CCW
+   * normal) of its tangent, so the centre of curvature lies on that side.
+   *
+   * @param s - Curvilinear coordinate
+   */
+  getCurvature(s: Curvilinear): number {
+    const d1 = this.getDerivative(s);
+    const d2 = this.getSecondDerivative(s);
+    const speed = d1.length();
+    if (speed === 0) return 0; // A zero tangent has no curvature direction
+    return (d1.x * d2.y - d1.y * d2.x) / speed ** 3;
+  }
+
+  /**
    * Whether a point lies inside the axis-aligned bounding box that encloses
    * all four control points, expanded by a tolerance on every side.
    *
