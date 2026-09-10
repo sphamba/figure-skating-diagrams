@@ -1,5 +1,6 @@
 import { bladeLength } from "./constants.js";
 import type { PathCoordinate, Time } from "./coordinates.js";
+import type { AxisRect } from "./curve.js";
 import type { Element } from "./element/element.js";
 import { interpolate } from "./interpolate.js";
 import { FootKeyframe, HipsKeyframe, TimeKeyframe, type FootData } from "./keyframe.js";
@@ -310,20 +311,23 @@ export class Sequence {
     minTraceWidth?: number,
     minBladeLength?: number,
     minDrawIncrement?: number,
+    viewport?: AxisRect,
   ) {
     uEnd ??= this.path.length as PathCoordinate;
 
     this.drawPath(ctx, pathWidth, uStart, uEnd, pathColor);
-    this.drawFootTraces(ctx, uStart, uEnd, minTraceWidth, minBladeLength, minDrawIncrement);
+    this.drawFootTraces(ctx, uStart, uEnd, minTraceWidth, minBladeLength, minDrawIncrement, viewport);
   }
 
   /** Draw only the foot traces (no path line), from the start to the end of
-   * the path. Element scaling applies through minBladeLength. */
+   * the path. Element scaling applies through minBladeLength. An optional
+   * viewport limits the trace to the visible curve ranges. */
   drawTraces(
     ctx: CanvasRenderingContext2DSized,
     minTraceWidth?: number,
     minBladeLength?: number,
     minDrawIncrement?: number,
+    viewport?: AxisRect,
   ) {
     this.drawFootTraces(
       ctx,
@@ -332,6 +336,7 @@ export class Sequence {
       minTraceWidth,
       minBladeLength,
       minDrawIncrement,
+      viewport,
     );
   }
 
@@ -407,11 +412,12 @@ export class Sequence {
     minTraceWidth?: number,
     minBladeLength?: number,
     minDrawIncrement?: number,
+    viewport?: AxisRect,
   ) {
     uEnd ??= this.path.length as PathCoordinate;
 
-    this.drawFootTrace(ctx, "footL", uStart, uEnd, minTraceWidth, minBladeLength, minDrawIncrement);
-    this.drawFootTrace(ctx, "footR", uStart, uEnd, minTraceWidth, minBladeLength, minDrawIncrement);
+    this.drawFootTrace(ctx, "footL", uStart, uEnd, minTraceWidth, minBladeLength, minDrawIncrement, viewport);
+    this.drawFootTrace(ctx, "footR", uStart, uEnd, minTraceWidth, minBladeLength, minDrawIncrement, viewport);
   }
 
   /**
@@ -483,6 +489,7 @@ export class Sequence {
     minTraceWidth?: number,
     minBladeLength?: number,
     minDrawIncrement?: number,
+    viewport?: AxisRect,
   ) {
     uEnd ??= this.path.length as PathCoordinate;
 
@@ -514,69 +521,130 @@ export class Sequence {
     // larger minimum given by the caller so each drawn segment never advances
     // less than one screen pixel when zoomed out.
     const step = Math.max(drawIncrement, minDrawIncrement ?? 0);
-    for (
-      let pathCoordinate = uStart;
-      pathCoordinate <= uEnd;
-      pathCoordinate = (pathCoordinate + step) as PathCoordinate
-    ) {
-      const contactPoint = this.getInterpolatedValue(footKey, "contactPoint", pathCoordinate, drawKeyframes) as number;
-      const footRelativeOrientation = this.getInterpolatedValue(
-        footKey,
-        "orientation",
-        pathCoordinate,
-        drawKeyframes,
-      ) as Quaternion;
-      const pathOrientation = this.getPathOrientation(pathCoordinate);
-      const pathPosition = this.path.getPosition(pathCoordinate);
-      const footRelativePosition = this.getInterpolatedValue(
-        footKey,
-        "position",
-        pathCoordinate,
-        drawKeyframes,
-      ) as Vector<3>;
+    // The trace is drawn only inside the path-coordinate ranges of curves
+    // that reach the viewport (see getVisibleTraceRanges). Without a viewport
+    // the whole range is one range, exactly as before. A new range that does
+    // not continue the previous one (a culled curve between them) starts
+    // without a previous contact position, so no segment is drawn across the
+    // culled gap. Contiguous ranges keep it, so a fully visible scene draws
+    // exactly the same segments as before, with no seam at curve boundaries.
+    const visibleRanges = this.getVisibleTraceRanges(uStart, uEnd, viewport, minBladeLength);
+    let previousRangeEnd: number | undefined;
+    for (const [rangeStart, rangeEnd] of visibleRanges) {
+      // Reset the previous contact position only across a real gap.
+      if (previousRangeEnd !== undefined && Math.abs(rangeStart - previousRangeEnd) > 1e-9) {
+        previousContactPosition = undefined;
+      }
+      previousRangeEnd = rangeEnd;
+      for (
+        let pathCoordinate = rangeStart;
+        pathCoordinate <= rangeEnd;
+        pathCoordinate = (pathCoordinate + step) as PathCoordinate
+      ) {
+        const contactPoint = this.getInterpolatedValue(
+          footKey,
+          "contactPoint",
+          pathCoordinate,
+          drawKeyframes,
+        ) as number;
+        const footRelativeOrientation = this.getInterpolatedValue(
+          footKey,
+          "orientation",
+          pathCoordinate,
+          drawKeyframes,
+        ) as Quaternion;
+        const pathOrientation = this.getPathOrientation(pathCoordinate);
+        const pathPosition = this.path.getPosition(pathCoordinate);
+        const footRelativePosition = this.getInterpolatedValue(
+          footKey,
+          "position",
+          pathCoordinate,
+          drawKeyframes,
+        ) as Vector<3>;
 
-      let footRelativeDirection = new Vector<3>(1, 0, 0);
-      footRelativeDirection = footRelativeDirection.rotate(footRelativeOrientation);
+        let footRelativeDirection = new Vector<3>(1, 0, 0);
+        footRelativeDirection = footRelativeDirection.rotate(footRelativeOrientation);
 
-      let contactRelativePosition = footRelativePosition.copy();
-      contactRelativePosition.x += (contactPoint - 0.5) * drawBladeLength;
+        let contactRelativePosition = footRelativePosition.copy();
+        contactRelativePosition.x += (contactPoint - 0.5) * drawBladeLength;
 
-      const footOrientation = footRelativeOrientation.times(pathOrientation);
-      contactRelativePosition = contactRelativePosition.rotate(footOrientation);
-      const contactPosition = pathPosition.plus(contactRelativePosition as unknown as Vector<2>);
-      const footDirection = footRelativeDirection.rotate(pathOrientation);
+        const footOrientation = footRelativeOrientation.times(pathOrientation);
+        contactRelativePosition = contactRelativePosition.rotate(footOrientation);
+        const contactPosition = pathPosition.plus(contactRelativePosition as unknown as Vector<2>);
+        const footDirection = footRelativeDirection.rotate(pathOrientation);
 
-      if (previousContactPosition === undefined) {
+        if (previousContactPosition === undefined) {
+          previousContactPosition = contactPosition;
+          continue;
+        }
+
+        const onGround = contactRelativePosition.z <= 0;
+        if (!onGround) {
+          // The foot is off the ice: no trace is drawn for it.
+          previousContactPosition = contactPosition;
+          continue;
+        }
+        if (footKey == "footL") {
+          ctx.strokeStyle = traceColorL;
+        } else {
+          ctx.strokeStyle = traceColorR;
+        }
+        const lineWidth = getTraceWidth(
+          footDirection,
+          contactPosition.minus(previousContactPosition),
+          traceWidth,
+          skidWidth,
+        );
+        ctx.lineWidth = minTraceWidth === undefined ? lineWidth : Math.max(lineWidth, minTraceWidth);
+
+        ctx.beginPath();
+        ctx.moveTo(previousContactPosition.x, -previousContactPosition.y);
+        ctx.lineTo(contactPosition.x, -contactPosition.y);
+        ctx.stroke();
+
         previousContactPosition = contactPosition;
-        continue;
       }
-
-      const onGround = contactRelativePosition.z <= 0;
-      if (!onGround) {
-        // The foot is off the ice: no trace is drawn for it.
-        previousContactPosition = contactPosition;
-        continue;
-      }
-      if (footKey == "footL") {
-        ctx.strokeStyle = traceColorL;
-      } else {
-        ctx.strokeStyle = traceColorR;
-      }
-      const lineWidth = getTraceWidth(
-        footDirection,
-        contactPosition.minus(previousContactPosition),
-        traceWidth,
-        skidWidth,
-      );
-      ctx.lineWidth = minTraceWidth === undefined ? lineWidth : Math.max(lineWidth, minTraceWidth);
-
-      ctx.beginPath();
-      ctx.moveTo(previousContactPosition.x, -previousContactPosition.y);
-      ctx.lineTo(contactPosition.x, -contactPosition.y);
-      ctx.stroke();
-
-      previousContactPosition = contactPosition;
     }
+  }
+
+  /**
+   * The path-coordinate ranges to trace: every curve whose control-point
+   * bounding box expanded by the rendered blade length reaches the given
+   * viewport, as a range clipped to [uStart, uEnd]. Curves are contiguous
+   * along the uniform axis (curve i ends where curve i + 1 starts), so per
+   * curve the range starts at its cumulated length. Without a viewport, or
+   * with no curves, the whole [uStart, uEnd] range is returned as one range
+   * and nothing is culled.
+   */
+  private getVisibleTraceRanges(
+    uStart: PathCoordinate,
+    uEnd: PathCoordinate,
+    viewport: AxisRect | undefined,
+    minBladeLength?: number,
+  ): Array<[PathCoordinate, PathCoordinate]> {
+    const curves = this.path.curves;
+    if (!viewport || curves.length === 0) {
+      return [[uStart, uEnd]];
+    }
+    // The rendered blade length is the margin: a contact point centered on
+    // the path can still reach this far sideways and along the blade.
+    const margin = this.getDrawBladeLength(minBladeLength);
+    const ranges: Array<[PathCoordinate, PathCoordinate]> = [];
+    let curveStart = 0;
+    for (const curve of curves) {
+      const curveEnd = curveStart + curve.length;
+      if (curveEnd >= uStart && curveStart <= uEnd) {
+        if (curve.intersectsRect(viewport, margin)) {
+          const start = Math.max(uStart as number, curveStart);
+          const end = Math.min(uEnd as number, curveEnd);
+          if (end >= start) {
+            ranges.push([start as PathCoordinate, end as PathCoordinate]);
+          }
+        }
+      }
+      curveStart = curveEnd;
+    }
+    return ranges;
   }
 
   getPathDirection(pathCoordinate: PathCoordinate): Vector<3> {

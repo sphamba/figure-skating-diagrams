@@ -1,4 +1,6 @@
 import type { Curvilinear, Curve } from "../curve.js";
+import { type AxisRect } from "../curve.js";
+import { bladeLength } from "../constants.js";
 import type { PathCoordinate } from "../coordinates.js";
 import type { Element } from "../element/element.js";
 import { LENGTH, WIDTH, CORNER_RADIUS } from "../rink.js";
@@ -23,7 +25,7 @@ const MIN_BLADE_LENGTH = 25; // px
 /** Minimum foot trace draw step, in screen pixels: when zoomed out, the
  * default 0.02 m step would be shorter than one pixel, so the step is scaled
  * up to keep each drawn segment at least one pixel long. */
-const MIN_DRAW_INCREMENT = 1; // px
+const MIN_DRAW_INCREMENT = 2; // px
 /** Path color in "elements" mode: translucent grey so the path stays visible but de-emphasized. */
 const ELEMENTS_PATH_COLOR = "#000";
 /** Path-coordinate step used to trace an element along the path. */
@@ -334,7 +336,38 @@ export class Editor {
   private drawTraces() {
     const minTraceWidth = MIN_TRACE_WIDTH / this.view.zoom;
     const minBladeLength = this.scaleElements ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
-    this.sequence.drawTraces(this.ctx, minTraceWidth, minBladeLength, MIN_DRAW_INCREMENT / this.view.zoom);
+    this.sequence.drawTraces(
+      this.ctx,
+      minTraceWidth,
+      minBladeLength,
+      MIN_DRAW_INCREMENT / this.view.zoom,
+      this.getTraceViewport(minBladeLength),
+    );
+  }
+
+  /**
+   * The visible world-space viewport, expanded by the rendered blade length
+   * on every side, for foot trace culling.
+   *
+   * The mapping follows the canvas transform and the worldToScreen helpers:
+   * a world point is drawn at (x, -y), so the visible world y range is
+   * centered on view.center.y (screen y grows towards -y). The margin is the
+   * blade length in metres used to trace the feet: the real blade length, or
+   * the given minimum when it is larger, so it scales with the zoom through
+   * minBladeLength (MIN_BLADE_LENGTH / zoom when element scaling is on). It
+   * also comfortably covers the trace width and the lateral foot shift, so
+   * only traces well outside the viewport are culled.
+   */
+  private getTraceViewport(minBladeLength?: number): AxisRect {
+    const margin = minBladeLength === undefined ? bladeLength : Math.max(bladeLength, minBladeLength);
+    const halfWidth = this.width / 2 / this.view.zoom;
+    const halfHeight = this.height / 2 / this.view.zoom;
+    return {
+      minX: this.view.center.x - halfWidth - margin,
+      maxX: this.view.center.x + halfWidth + margin,
+      minY: this.view.center.y - halfHeight - margin,
+      maxY: this.view.center.y + halfHeight + margin,
+    };
   }
 
   private transformContext() {
@@ -377,6 +410,7 @@ export class Editor {
     // In "elements" mode the path is drawn in solid black.
     const pathColor = this.mode === "elements" ? ELEMENTS_PATH_COLOR : undefined;
     const minDrawIncrement = MIN_DRAW_INCREMENT / this.view.zoom;
+    const viewport = this.getTraceViewport(minBladeLength);
     if (this.mode === "path" && !pathColor) {
       // In path edit mode the foot traces are drawn at 50% opacity, so the
       // control points stay easy to read against them.
@@ -389,6 +423,7 @@ export class Editor {
         minTraceWidth,
         minBladeLength,
         minDrawIncrement,
+        viewport,
       );
       this.ctx.globalAlpha = 1;
     } else if (this.mode === "elements") {
@@ -404,6 +439,7 @@ export class Editor {
         minTraceWidth,
         minBladeLength,
         minDrawIncrement,
+        viewport,
       );
     } else {
       // Draw the path and the foot traces (same as the home page) for the
@@ -417,6 +453,7 @@ export class Editor {
         minTraceWidth,
         minBladeLength,
         minDrawIncrement,
+        viewport,
       );
     }
   }

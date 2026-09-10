@@ -3,6 +3,14 @@ import { Vector } from "./vector.js";
 
 export type Curvilinear = number & { readonly __tag: unique symbol };
 
+/** Axis-aligned world-space rectangle, used for viewport culling. */
+export type AxisRect = {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+};
+
 /**
  * Curvilinear increment for arc-length estimation and the uniform-to-
  * curvilinear lookup table.
@@ -225,6 +233,25 @@ export class Curve {
     const minY = Math.min(...ys) - tolerance;
     const maxY = Math.max(...ys) + tolerance;
     return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY;
+  }
+
+  /**
+   * True when the curve's control-point bounding box (the smallest
+   * axis-aligned box containing the whole Bezier, see isPointInBoundingBox)
+   * reaches the given axis-aligned rectangle. The box is first expanded by
+   * `tolerance` on every side, so the caller passes its own margin there (e.g.
+   * the rendered blade length around a foot trace). Returns false only when
+   * the whole expanded box lies outside the rectangle: curves that merely
+   * touch or overlap it are kept, so partially visible curves still draw.
+   */
+  intersectsRect(rect: AxisRect, tolerance = 0): boolean {
+    const xs = [this.p0.x, this.p1.x, this.p2.x, this.p3.x];
+    const ys = [this.p0.y, this.p1.y, this.p2.y, this.p3.y];
+    const minX = Math.min(...xs) - tolerance;
+    const maxX = Math.max(...xs) + tolerance;
+    const minY = Math.min(...ys) - tolerance;
+    const maxY = Math.max(...ys) + tolerance;
+    return minX <= rect.maxX && maxX >= rect.minX && minY <= rect.maxY && maxY >= rect.minY;
   }
 
   /**
