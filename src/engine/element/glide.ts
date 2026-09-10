@@ -150,7 +150,7 @@ export const glideConstructorsByType: Record<string, GlideConstructor> = {};
 
 /** Define one static glide variant class: the config closes over the
  * subclass, which registers itself into the type registry. */
-function defineGlide(type: string, config: GlideConfig): GlideConstructor {
+function defineGlide(type: string, shortName: string, config: GlideConfig): GlideConstructor {
   const Variant = class extends Glide {
     constructor(start: PathCoordinate, end: PathCoordinate) {
       super(config, start, end);
@@ -158,6 +158,10 @@ function defineGlide(type: string, config: GlideConfig): GlideConstructor {
 
     get type(): string {
       return type;
+    }
+
+    get shortName(): string {
+      return shortName;
     }
   };
   glideConstructorsByType[type] = Variant;
@@ -254,6 +258,7 @@ export abstract class DynamicGlide extends Glide {
  * subclass, which registers itself into the type registry. */
 function defineDynamicGlide(
   type: string,
+  shortName: string,
   config: { forward: boolean; left: boolean; crossed: boolean; edge: "inside" | "outside" | "neither" },
 ): GlideConstructor {
   const Variant = class extends DynamicGlide {
@@ -263,6 +268,10 @@ function defineDynamicGlide(
 
     get type(): string {
       return type;
+    }
+
+    get shortName(): string {
+      return shortName;
     }
   };
   glideConstructorsByType[type] = Variant;
@@ -289,6 +298,10 @@ const glideStrokes = [
   ["Crossed", true],
 ] as const;
 
+/** The uppercase edge letter of the short name pattern ("I", "O" or ""). */
+const edgeLetter = (edge: "inside" | "outside" | "neither"): string =>
+  edge === "inside" ? "I" : edge === "outside" ? "O" : "";
+
 /** Human-readable label for each available glide kind. */
 export const glideKindChoices: { type: string; label: string }[] = [];
 
@@ -301,8 +314,9 @@ for (const [side, left] of glideSides) {
     for (const [edgeName, edge] of glideEdges) {
       const type = `${side}${direction}${edgeName}Glide`;
       const config: GlideConfig = { forward, leftOnIce: left, rightOnIce: !left, edge };
+      const shortName = `${side[0]}${direction[0]}${edgeLetter(edge)}`;
       if (!glideConstructorsByType[type]) {
-        defineGlide(type, config);
+        defineGlide(type, shortName, config);
       }
       glideKindChoices.push({
         type,
@@ -316,8 +330,9 @@ for (const [side, left] of glideSides) {
 for (const [direction, forward] of glideDirections) {
   const type = `Both${direction}Glide`;
   const config: GlideConfig = { forward, leftOnIce: true, rightOnIce: true, edge: "neither" };
+  const shortName = "";
   if (!glideConstructorsByType[type]) {
-    defineGlide(type, config);
+    defineGlide(type, shortName, config);
   }
   glideKindChoices.push({ type, label: `Two-foot ${direction.toLowerCase()} glide` });
 }
@@ -330,8 +345,10 @@ for (const [side, left] of glideSides) {
       for (const [edgeName, edge] of glideEdges) {
         const type = `${side}${strokeName}${direction}${edgeName}Glide`;
         const config = { forward, left, crossed, edge };
+        // Strokes share the short name pattern of the static glides.
+        const shortName = `${side[0]}${direction[0]}${edgeLetter(edge)}`;
         if (!glideConstructorsByType[type]) {
-          defineDynamicGlide(type, config);
+          defineDynamicGlide(type, shortName, config);
         }
         glideKindChoices.push({
           type,
@@ -355,6 +372,10 @@ export class LeftForwardInsideGlide extends Glide {
   get type(): string {
     return "LeftForwardInsideGlide";
   }
+
+  get shortName(): string {
+    return "LFI";
+  }
 }
 
 export class LeftForwardOutsideGlide extends Glide {
@@ -364,6 +385,10 @@ export class LeftForwardOutsideGlide extends Glide {
 
   get type(): string {
     return "LeftForwardOutsideGlide";
+  }
+
+  get shortName(): string {
+    return "LFO";
   }
 }
 
@@ -375,6 +400,10 @@ export class LeftNormalForwardInsideGlide extends DynamicGlide {
   get type(): string {
     return "LeftNormalForwardInsideGlide";
   }
+
+  get shortName(): string {
+    return "LFI";
+  }
 }
 
 export class BothForwardGlide extends Glide {
@@ -384,6 +413,10 @@ export class BothForwardGlide extends Glide {
 
   get type(): string {
     return "BothForwardGlide";
+  }
+
+  get shortName(): string {
+    return "";
   }
 }
 

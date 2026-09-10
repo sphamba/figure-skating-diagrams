@@ -110,7 +110,11 @@ export const loopConstructorsByType: Record<string, LoopConstructor> = {};
 
 /** Define one loop variant class: the flags close over the subclass, which
  * registers itself into the type registry. */
-function defineLoop(type: string, flags: { left: boolean; forward: boolean; inside: boolean }): LoopConstructor {
+function defineLoop(
+  type: string,
+  shortName: string,
+  flags: { left: boolean; forward: boolean; inside: boolean },
+): LoopConstructor {
   const Variant = class extends Loop {
     constructor(footKey: FootKey, start: PathCoordinate, end: PathCoordinate) {
       super(footKey, flags, start, end);
@@ -118,6 +122,10 @@ function defineLoop(type: string, flags: { left: boolean; forward: boolean; insi
 
     get type(): string {
       return type;
+    }
+
+    get shortName(): string {
+      return shortName;
     }
   };
   loopConstructorsByType[type] = Variant;
@@ -146,7 +154,8 @@ for (const [side, left] of turnSides) {
   for (const [direction, forward] of turnDirections) {
     for (const [edge, inside] of turnEdges) {
       const type = `${side}${direction}${edge}Loop`;
-      defineLoop(type, { left, forward, inside });
+      const shortName = `${side[0]}${direction[0]}${edge[0]} Loop`;
+      defineLoop(type, shortName, { left, forward, inside });
       loopKindChoices.push({ type, label: `${side} ${direction.toLowerCase()} ${edge.toLowerCase()} loop` });
     }
   }

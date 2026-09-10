@@ -73,6 +73,7 @@ export const threeTurnConstructorsByType: Record<string, ThreeTurnConstructor> =
  * which registers itself into the type registry. */
 function defineThreeTurn(
   type: string,
+  shortName: string,
   flags: { left: boolean; forward: boolean; inside: boolean },
 ): ThreeTurnConstructor {
   const Variant = class extends ThreeTurn {
@@ -82,6 +83,10 @@ function defineThreeTurn(
 
     get type(): string {
       return type;
+    }
+
+    get shortName(): string {
+      return shortName;
     }
   };
   threeTurnConstructorsByType[type] = Variant;
@@ -110,7 +115,8 @@ for (const [side, left] of turnSides) {
   for (const [direction, forward] of turnDirections) {
     for (const [edge, inside] of turnEdges) {
       const type = `${side}${direction}${edge}ThreeTurn`;
-      defineThreeTurn(type, { left, forward, inside });
+      const shortName = `${side[0]}${direction[0]}${edge[0]}3`;
+      defineThreeTurn(type, shortName, { left, forward, inside });
       threeTurnKindChoices.push({
         type,
         label: `${side} ${direction.toLowerCase()} ${edge.toLowerCase()} three-turn`,

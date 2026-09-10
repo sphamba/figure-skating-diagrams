@@ -16,6 +16,10 @@ export abstract class Element {
   /** Name used to identify this element type when (de)serializing. */
   abstract get type(): string;
 
+  /** Generated short name used by the interface (for example "LFI" or
+   * "LFI3"), derived from the variant flags. Not saved to JSON. */
+  abstract get shortName(): string;
+
   /** True when the element responds to a span scale, re-basing its keyframes
    * and displayed span onto the span scaled about its middle. Only turns
    * scale: turns defined later inherit scaling from their base class. */
