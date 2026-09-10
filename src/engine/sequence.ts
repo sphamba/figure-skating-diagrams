@@ -9,6 +9,7 @@ import { Path } from "./path.js";
 import { Quaternion, getQuaternionFromAngleAxis } from "./quaternion.js";
 import type { CanvasRenderingContext2DSized } from "./rinkCanvas.js";
 import { changeElementType } from "./element/turnTypes.js";
+import { computeSpanScales } from "./element/spanScaling.js";
 import type { FootTurnJSON } from "./element/turn.js";
 import { Vector } from "./vector.js";
 
@@ -349,6 +350,12 @@ export class Sequence {
     return this.getDrawBladeLength(minBladeLength) / bladeLength;
   }
 
+  getSpanScales(minBladeLength?: number): Map<Element, number> {
+    const target = this.getBladeLengthScale(minBladeLength);
+    if (target === 1) return new Map();
+    return computeSpanScales(this.elements, target, this.path.length);
+  }
+
   getDrawFootKeyframes(footKey: FootKey, scale: number): FootKeyframe[] {
     if (scale === 1) {
       return this.keyframes[footKey];
@@ -357,8 +364,9 @@ export class Sequence {
     const keyframes: FootKeyframe[] = [];
     let endElement: Element | undefined;
     let endKeyframes: FootKeyframe[] | undefined;
+    const scales = scale === 1 ? undefined : computeSpanScales(this.elements, scale, this.path.length);
     for (const element of elements) {
-      const elementScale = element.scalable ? scale : undefined;
+      const elementScale = scales ? scales.get(element) : undefined;
       const startKeyframes =
         footKey === "footL"
           ? element.getLeftFootKeyframes(elementScale, scale)

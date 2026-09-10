@@ -424,7 +424,8 @@ export class Editor {
   private getDisplayedSpan(element: Element): [PathCoordinate, PathCoordinate] {
     const minBladeLength =
       this.scaleElements && this.mode !== "elements" ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
-    const factor = element.scalable ? this.sequence.getBladeLengthScale(minBladeLength) : 1;
+    const scales = this.sequence.getSpanScales(minBladeLength);
+    const factor = scales.get(element) ?? 1;
     const [start, end] = factor === 1 ? [element.start, element.end] : element.scaleAboutMiddle(factor);
     const pathLength = this.sequence.path.length;
     const clamp = (u: number) => Math.max(0, Math.min(pathLength, u));

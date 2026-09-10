@@ -41,7 +41,7 @@ export abstract class FootTurn extends Element {
     if (spanScale === undefined || spanScale === 1) {
       return [this.start, this.end];
     }
-    return scaledSpan(this.start, this.end, spanScale);
+    return this.scaleAboutMiddle(spanScale);
   }
 
   protected abstract createOnIceFootKeyframes(
@@ -74,11 +74,6 @@ export abstract class FootTurn extends Element {
     const footKey = json.type.startsWith("Right") ? "footR" : "footL";
     return new constructor(footKey, json.start as PathCoordinate, json.end as PathCoordinate);
   }
-}
-
-function scaledSpan(start: PathCoordinate, end: PathCoordinate, factor: number): [PathCoordinate, PathCoordinate] {
-  const middle = (start + end) / 2;
-  return [(middle + (start - middle) * factor) as PathCoordinate, (middle + (end - middle) * factor) as PathCoordinate];
 }
 
 export type FootTurnConstructor = new (footKey: FootKey, start: PathCoordinate, end: PathCoordinate) => FootTurn;

@@ -5,6 +5,7 @@ import { Path } from "../src/engine/path";
 import { LeftForwardInsideGlide } from "../src/engine/element/glide";
 import { LeftForwardInsideThreeTurn } from "../src/engine/element/threeTurn";
 import { Sequence } from "../src/engine/sequence";
+import { MIN_SCALE_GAP } from "../src/engine/element/spanScaling";
 import { Vector } from "../src/engine/vector";
 
 function makePath(): Path {
@@ -60,17 +61,22 @@ test("a zero-size element keeps its own keyframes in place", () => {
 
 test("scaled draw keyframes never overlap at the element boundaries", () => {
   const sequence = new Sequence(makePath());
-  sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0 as PathCoordinate, 1 as PathCoordinate));
-  sequence.addElement(new LeftForwardInsideThreeTurn("footL", 1.05 as PathCoordinate, 2 as PathCoordinate));
+  sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0.1 as PathCoordinate, 0.2 as PathCoordinate));
+  sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0.25 as PathCoordinate, 0.35 as PathCoordinate));
 
-  const keyframes = sequence.getDrawFootKeyframes("footR", 1.5);
+  const keyframes = sequence.getDrawFootKeyframes("footR", 3);
+  const coordinates = keyframes.map((keyframe) => keyframe.coordinate);
 
-  expect(keyframes.map((keyframe) => keyframe.coordinate).map((coordinate) => Number(coordinate.toFixed(10)))).toEqual([
-    -0.25,
-    1.03125,
-    1.03225,
-    2.2375,
+  expect(coordinates).toEqual([
+    expect.closeTo(0.076, 8),
+    expect.closeTo(0.224, 8),
+    expect.closeTo(0.226, 8),
+    expect.closeTo(0.374, 8),
   ]);
+  expect(coordinates[2] - coordinates[1]).toBeCloseTo(MIN_SCALE_GAP, 6);
+  for (let index = 1; index < coordinates.length; index++) {
+    expect(coordinates[index]).toBeGreaterThan(coordinates[index - 1]);
+  }
 });
 
 test("draw keyframes of glides stay on the real span under a scale", () => {
