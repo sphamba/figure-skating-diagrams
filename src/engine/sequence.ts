@@ -1,4 +1,4 @@
-import { bladeLength } from "./constants.js";
+import { bladeLength, maxBladeLength } from "./constants.js";
 import type { PathCoordinate, Time } from "./coordinates.js";
 import type { AxisRect } from "./curve.js";
 import type { Element } from "./element/element.js";
@@ -343,7 +343,8 @@ export class Sequence {
   }
 
   private getDrawBladeLength(minBladeLength?: number): number {
-    return minBladeLength === undefined ? bladeLength : Math.max(bladeLength, minBladeLength);
+    if (minBladeLength === undefined) return bladeLength;
+    return Math.min(maxBladeLength, Math.max(bladeLength, minBladeLength));
   }
 
   getBladeLengthScale(minBladeLength?: number): number {

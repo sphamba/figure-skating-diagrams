@@ -104,21 +104,54 @@ function scaledEdges(start: number, end: number, scale: number): [number, number
 
 test("a scaled turn stops before neighbouring glides", () => {
   const sequence = new Sequence(makePath());
-  sequence.addElement(new LeftForwardInsideGlide(0.05 as PathCoordinate, 0.25 as PathCoordinate));
+  sequence.addElement(new LeftForwardInsideGlide(0.2 as PathCoordinate, 0.35 as PathCoordinate));
   sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0.4 as PathCoordinate, 0.6 as PathCoordinate));
-  sequence.addElement(new LeftForwardInsideGlide(0.75 as PathCoordinate, 0.95 as PathCoordinate));
+  sequence.addElement(new LeftForwardInsideGlide(0.65 as PathCoordinate, 0.8 as PathCoordinate));
 
-  // Target scale 20: the scaling stops at the neighbour gaps, not at the
-  // path bounds, which would allow up to 5.
+  // The 0.5 m blade length cap holds the target at 2. The scaling still
+  // stops at the neighbour gaps at 1.48 rather than at the cap.
   const scales = sequence.getSpanScales(20 * 0.25);
   const turn = sequence.elements[1]!;
   const scale = scales.get(turn)!;
   expect(scale).toBeGreaterThan(1);
-  expect(scale).toBeLessThan(5);
+  expect(scale).toBeLessThan(2);
   const [scaledStart, scaledEnd] = scaledEdges(0.4, 0.6, scale);
-  expect(scaledStart).toBeCloseTo(0.25 + MIN_SCALE_GAP, 6);
-  expect(scaledEnd).toBeCloseTo(0.75 - MIN_SCALE_GAP, 6);
+  expect(scaledStart).toBeCloseTo(0.35 + MIN_SCALE_GAP, 6);
+  expect(scaledEnd).toBeCloseTo(0.65 - MIN_SCALE_GAP, 6);
   expect(scales.get(sequence.elements[0]!)).toBe(1);
+});
+
+test("an isolated turn stops scaling at the 0.5 m blade length cap", () => {
+  const sequence = new Sequence(makePath());
+  sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0.4 as PathCoordinate, 0.6 as PathCoordinate));
+
+  expect(sequence.getBladeLengthScale(100)).toBe(2);
+  const scales = sequence.getSpanScales(100);
+  const scale = scales.get(sequence.elements[0]!)!;
+  expect(scale).toBe(2);
+  expect(
+    sequence
+      .getDrawFootKeyframes("footL", sequence.getBladeLengthScale(100))
+      .map((keyframe) => keyframe.coordinate)
+      .map((coordinate) => Number(coordinate.toFixed(10))),
+  ).toEqual([0.3, 0.5, 0.7]);
+});
+
+test("a tiny isolated turn still grows up to the path bounds before the cap", () => {
+  const sequence = new Sequence(makePath());
+  sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0.45 as PathCoordinate, 0.55 as PathCoordinate));
+
+  // The cap allows 2, but the path bounds limit to middle / half span = 5,
+  // so the full cap of 2 is reachable.
+  expect(sequence.getSpanScales(100).get(sequence.elements[0]!)).toBe(2);
+});
+
+test("a turn touching the path start can grow past the cap partway", () => {
+  const sequence = new Sequence(makePath());
+  sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0.02 as PathCoordinate, 0.08 as PathCoordinate));
+
+  // The path bound would allow 1.6670, so the cap of 2 does not bind inside.
+  expect(sequence.getSpanScales(100).get(sequence.elements[0]!)).toBeCloseTo(0.05 / 0.03, 6);
 });
 
 test("adjacent scalable turns stop growing when they collide and split the space", () => {
