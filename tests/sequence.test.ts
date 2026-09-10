@@ -22,7 +22,6 @@ function makeStraightLengthOnePath(): Path {
 
 test("Clock maps path coordinate to time and back", () => {
   const sequence = new Sequence(makeStraightLengthOnePath());
-  // Clock samples: t = 0 at u = 0, t = 2 at u = 1.
   sequence.addKeyframe("time", new TimeKeyframe(2 as Time, { pathCoordinate: 1 as PathCoordinate }));
 
   expect(sequence.getPathCoordinateFromTime(1 as Time)).toBeCloseTo(0.5);
@@ -78,7 +77,6 @@ function makeMockContext() {
 function makeSequenceWithBothFeet(): Sequence {
   const sequence = new Sequence(makeStraightLengthOnePath());
   const orientation = new Quaternion(1, new Vector<3>(0, 0, 0));
-  // z = 0 keeps both feet on the ground so they draw with solid trace colors.
   const position = new Vector<3>(0, 0, 0);
   for (const foot of ["footL", "footR"] as const) {
     sequence.addKeyframe(
@@ -110,10 +108,6 @@ test("draw renders traces for both feet", () => {
 });
 
 test("drawing a sequence with no drawable foot data does not crash", () => {
-  // A sequence with 0 elements can still have baked/bare foot keyframes that
-  // only define a position (no orientation nor contact point). Drawing its
-  // foot trace must skip the trace instead of crashing inside
-  // getKeyframesAround on an empty keyframe set.
   const sequence = new Sequence(makeStraightLengthOnePath());
   sequence.keyframes.footL = [
     new FootKeyframe(0 as PathCoordinate, { position: new Vector(0, 0, 0) }),
@@ -144,8 +138,6 @@ test("replaceElement swaps an element in place and rebuilds its keyframes", () =
   const turn = new LeftForwardOutsideThreeTurn("footL", start, end, true, true);
   sequence.addElement(turn);
 
-  // A three-turn has only zero position keyframes on the centerline,
-  // a loop shifts the foot sideways in the middle of the turn.
   expect(sequence.keyframes.footL.every((kf) => kf.data.position!.y === 0)).toBe(true);
 
   const loop = new LeftForwardOutsideLoop("footL", start, end, true, true);
@@ -155,7 +147,6 @@ test("replaceElement swaps an element in place and rebuilds its keyframes", () =
   expect(sequence.elements[0]).toBe(loop);
   expect(sequence.elements[0]!.start).toBe(start);
   expect(sequence.elements[0]!.end).toBe(end);
-  // The loop contribution replaced the turn's keyframes.
   expect(sequence.keyframes.footL.some((kf) => kf.data.position !== undefined)).toBe(true);
 });
 
@@ -169,7 +160,6 @@ function makeTwoCurveStraightPath(): Path {
 function makeSequenceWithBothFeetOnPath(path: Path, uEnd: number): Sequence {
   const sequence = new Sequence(path);
   const orientation = new Quaternion(1, new Vector<3>(0, 0, 0));
-  // z = 0 keeps both feet on the ground so the trace draws over both curves.
   const position = new Vector<3>(0, 0, 0);
   for (const foot of ["footL", "footR"] as const) {
     sequence.addKeyframe(
@@ -196,9 +186,6 @@ test("foot trace culling skips curves outside the viewport", () => {
   const sequence = makeSequenceWithBothFeetOnPath(makeTwoCurveStraightPath(), 2);
   const full = makeMockContext();
   const culled = makeMockContext();
-  // The viewport ends at x = 0.7. The second curve's control-point box [1, 2]
-  // expanded by the 0.25 m blade-length margin starts at 0.75, so it lies
-  // fully outside and is culled. The first curve is kept.
   sequence.drawTraces(culled.ctx as never, undefined, undefined, undefined, {
     minX: -100,
     maxX: 0.7,
@@ -210,8 +197,6 @@ test("foot trace culling skips curves outside the viewport", () => {
   expect(culled.strokes.length).toBeGreaterThan(0);
   expect(culled.strokes.length).toBeLessThan(full.strokes.length);
   for (const line of [...culled.lines]) {
-    // Nothing is drawn from the culled second curve: every drawn point stays
-    // on the first curve (x below 1), and left of the viewport + margin.
     expect(Math.max(line.x1, line.x2)).toBeLessThanOrEqual(1);
     expect(Math.max(line.x1, line.x2)).toBeLessThanOrEqual(0.7 + 0.25 + 0.03);
   }
@@ -231,9 +216,6 @@ test("a fully visible viewport draws the same trace as no viewport", () => {
 
   expect(viewport.strokes).toEqual(plain.strokes);
   expect(viewport.lines).toHaveLength(plain.lines.length);
-  // Same size and same trace shape. The viewport draw clamps each curve range
-  // to its exact boundary, so path coordinates differ by at most accumulated
-  // step float error (around 1e-15, more accurate at the curve boundary).
   for (let i = 0; i < viewport.lines.length; i++) {
     const a = viewport.lines[i]!;
     const b = plain.lines[i]!;
@@ -250,9 +232,7 @@ test("Curve.intersectsRect keeps touching and culls fully outside boxes", () => 
   expect(curve.intersectsRect({ minX: 3, maxX: 4, minY: 0, maxY: 1 })).toBe(true);
   expect(curve.intersectsRect({ minX: -3, maxX: -1, minY: -1, maxY: 1 })).toBe(false);
   expect(curve.intersectsRect({ minX: 5, maxX: 6, minY: -1, maxY: 1 })).toBe(false);
-  // The tolerance expands the box on every side: a rect just outside the box
-  // is culled without it and kept when it reaches the expanded box.
-  expect(curve.intersectsRect({ minX: 0, maxX: 1, minY: 2.1, maxY: 3 })).toBe(false); // box y max 2
+  expect(curve.intersectsRect({ minX: 0, maxX: 1, minY: 2.1, maxY: 3 })).toBe(false);
   expect(curve.intersectsRect({ minX: 0, maxX: 1, minY: 2.1, maxY: 3 }, 0.1)).toBe(true);
   expect(curve.intersectsRect({ minX: 0, maxX: 1, minY: 2.2, maxY: 3 }, 0.1)).toBe(false);
 });

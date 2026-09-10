@@ -12,8 +12,6 @@ onMounted(async () => {
       sequence.draw(ctx);
     }
   } catch (error) {
-    // The test pattern now lives in tests/ and is no longer shipped as a
-    // public asset. Keep the empty canvas if it cannot be loaded.
     console.error("Could not load test pattern:", error);
   }
 });

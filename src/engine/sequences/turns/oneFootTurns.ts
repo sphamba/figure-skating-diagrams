@@ -47,7 +47,6 @@ function getArcCurve(center: Vector<2>, radius: number, startAngle: number, endA
   const endNormal = getUnitVectorFromAngle(endAngle);
   const startTangent = startNormal.getOrthogonal().times(Math.sign(angle));
   const endTangent = endNormal.getOrthogonal().times(-Math.sign(angle));
-  // https://stackoverflow.com/questions/1734745/how-to-create-circle-with-b%C3%A9zier-curves
   const controlPointDistance = (4 / 3) * Math.tan(Math.abs(angle) / 4) * radius;
 
   const p0 = center.plus(startNormal.times(radius));
@@ -66,19 +65,16 @@ function createTurn(
 ): Sequence {
   const turn = new Sequence(path);
   turn.addKeyframe("time", new TimeKeyframe(duration, { pathCoordinate: path.length as PathCoordinate }));
-  // Body part keyframes sit on the path coordinate axis (u).
-  turn.addKeyframe(footKey, skatingFootInitialKeyframe); // u = 0
-  turn.addKeyframe(getOppositeFootKey(footKey), freeFootInitialKeyframe); // u = 0
-  const center = (path.length / 2) as PathCoordinate; // placed at path midpoint
+  turn.addKeyframe(footKey, skatingFootInitialKeyframe);
+  turn.addKeyframe(getOppositeFootKey(footKey), freeFootInitialKeyframe);
+  const center = (path.length / 2) as PathCoordinate;
   const halfLength = defaultFootTurnLength;
   turn.addElement(
     new turnClass(footKey, (center - halfLength) as PathCoordinate, (center + halfLength) as PathCoordinate),
   );
-  turn.addKeyframe(footKey, new FootKeyframe(path.length as PathCoordinate, skatingFootInitialOrFinalData)); // u = path.length
+  turn.addKeyframe(footKey, new FootKeyframe(path.length as PathCoordinate, skatingFootInitialOrFinalData));
   return turn;
 }
-
-// Paths //////////////////////////////////////////////////////////////////////
 
 const clockwiseCPath = new Path();
 
@@ -104,8 +100,6 @@ counterClockwiseSPath.addCurveEnd(getArcCurve(new Vector(0, -pathRadius), pathRa
 
 counterClockwiseSPath.addCurveEnd(getArcCurve(new Vector(0, pathRadius), pathRadius, (3 * Math.PI) / 2, Math.PI / 2));
 
-// 3-turns ////////////////////////////////////////////////////////////////////
-
 export const LFI_3 = createTurn("footL", clockwiseCPath, LeftForwardInsideThreeTurn);
 export const LFO_3 = createTurn("footL", counterClockwiseCPath, LeftForwardOutsideThreeTurn);
 export const LBI_3 = createTurn("footL", clockwiseCPath, LeftBackwardInsideThreeTurn);
@@ -114,8 +108,6 @@ export const RFI_3 = createTurn("footR", counterClockwiseCPath, LeftForwardOutsi
 export const RFO_3 = createTurn("footR", clockwiseCPath, LeftForwardInsideThreeTurn);
 export const RBI_3 = createTurn("footR", counterClockwiseCPath, LeftBackwardOutsideThreeTurn);
 export const RBO_3 = createTurn("footR", clockwiseCPath, LeftBackwardInsideThreeTurn);
-
-// Brackets ///////////////////////////////////////////////////////////////////
 
 export const LFI_B = createTurn("footL", clockwiseCPath, LeftForwardOutsideThreeTurn);
 export const LFO_B = createTurn("footL", counterClockwiseCPath, LeftForwardInsideThreeTurn);
@@ -126,8 +118,6 @@ export const RFO_B = createTurn("footR", clockwiseCPath, LeftForwardOutsideThree
 export const RBI_B = createTurn("footR", counterClockwiseCPath, LeftBackwardInsideThreeTurn);
 export const RBO_B = createTurn("footR", clockwiseCPath, LeftBackwardOutsideThreeTurn);
 
-// Rockers ////////////////////////////////////////////////////////////////////
-
 export const LFI_RK = createTurn("footL", clockwiseSPath, LeftForwardInsideThreeTurn, SPathDuration);
 export const LFO_RK = createTurn("footL", counterClockwiseSPath, LeftForwardOutsideThreeTurn, SPathDuration);
 export const LBI_RK = createTurn("footL", clockwiseSPath, LeftBackwardInsideThreeTurn, SPathDuration);
@@ -137,8 +127,6 @@ export const RFO_RK = createTurn("footR", clockwiseSPath, LeftForwardInsideThree
 export const RBI_RK = createTurn("footR", counterClockwiseSPath, LeftBackwardOutsideThreeTurn, SPathDuration);
 export const RBO_RK = createTurn("footR", clockwiseSPath, LeftBackwardInsideThreeTurn, SPathDuration);
 
-// Counters ///////////////////////////////////////////////////////////////////
-
 export const LFI_CTR = createTurn("footL", clockwiseSPath, LeftForwardOutsideThreeTurn, SPathDuration);
 export const LFO_CTR = createTurn("footL", counterClockwiseSPath, LeftForwardInsideThreeTurn, SPathDuration);
 export const LBI_CTR = createTurn("footL", clockwiseSPath, LeftBackwardOutsideThreeTurn, SPathDuration);
@@ -147,8 +135,6 @@ export const RFI_CTR = createTurn("footR", counterClockwiseSPath, LeftForwardIns
 export const RFO_CTR = createTurn("footR", clockwiseSPath, LeftForwardOutsideThreeTurn, SPathDuration);
 export const RBI_CTR = createTurn("footR", counterClockwiseSPath, LeftBackwardInsideThreeTurn, SPathDuration);
 export const RBO_CTR = createTurn("footR", clockwiseSPath, LeftBackwardOutsideThreeTurn, SPathDuration);
-
-// Loops //////////////////////////////////////////////////////////////////////
 
 export const LFI_Loop = createTurn("footL", clockwiseCPath, LeftForwardInsideLoop);
 export const LFO_Loop = createTurn("footL", counterClockwiseCPath, LeftForwardOutsideLoop);

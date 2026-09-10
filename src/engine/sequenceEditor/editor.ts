@@ -9,75 +9,51 @@ import { createDefaultFootTurn } from "../element/turnTypes.js";
 import { Sequence } from "../sequence.js";
 import { Vector } from "../vector.js";
 
-/** One of the four cubic Bezier control points of a Curve. */
 export type ControlPointKey = "p0" | "p1" | "p2" | "p3";
 
 const RINK_COLOR = "#ccc";
 const PATH_WIDTH = 1; // px
-/** Minimum blade trace width, in screen pixels. Only limits the trace when zoomed out. */
 const MIN_TRACE_WIDTH = 2; // px
-/**
- * Minimum blade length, in screen pixels, used when element scaling is on.
- * Only has effect when zoomed out (a blade shorter than this would be hard to
- * follow). Elements are scaled by the same factor, about their middle point.
- */
-const MIN_BLADE_LENGTH = 25; // px
-/** Minimum foot trace draw step, in screen pixels: when zoomed out, the
- * default 0.02 m step would be shorter than one pixel, so the step is scaled
- * up to keep each drawn segment at least one pixel long. */
+const MIN_BLADE_LENGTH = 25; // px, only effective when zoomed out
 const MIN_DRAW_INCREMENT = 2; // px
-/** Path color in "elements" mode: translucent grey so the path stays visible but de-emphasized. */
 const ELEMENTS_PATH_COLOR = "#000";
-/** Font size of the element name labels, in screen pixels. Kept at any zoom by dividing by the zoom. */
 const LABEL_FONT_SIZE = 14; // px
-/** Distance between the element centre point and its label, in screen pixels. */
 const LABEL_OFFSET = 15; // px
-/** Path-coordinate step used to trace an element along the path. */
-const ELEMENT_DRAW_INCREMENT = 0.02;
+const ELEMENT_DRAW_INCREMENT = 0.02; // m
 const NODE_SIZE = 10; // px
 const POLYGON_ALPHA = 0.25;
 const PICK_RADIUS = 8; // px
 const RECT_CLICK_THRESHOLD = 4; // px (max movement still counted as a click)
-const ADD_BUTTON_OFFSET = 20; // px (screen distance from the path end to the button center)
-const ADD_BUTTON_RADIUS = 7; // px (circle radius)
+const ADD_BUTTON_OFFSET = 20; // px, screen distance from the path end to the button center
+const ADD_BUTTON_RADIUS = 7; // px
 const ADD_BUTTON_LINE_WIDTH = 1.5; // px
-const ADD_PLUS_LENGTH = 7; // px (total length of each "+" arm)
+const ADD_PLUS_LENGTH = 7; // px
 const ADD_BUTTON_HIT_RADIUS = 9; // px, slightly above the drawn radius
 const ADD_BUTTON_COLOR = "#d33";
-const DELETE_BUTTON_OFFSET = 14; // px, same distance as the split button near curves
-const DELETE_BUTTON_RADIUS = 7; // px (circle radius)
+const DELETE_BUTTON_OFFSET = 14; // px
+const DELETE_BUTTON_RADIUS = 7; // px
 const DELETE_BUTTON_LINE_WIDTH = 1.5; // px
-const DELETE_MINUS_LENGTH = 7; // px (total length of the "-" bar)
+const DELETE_MINUS_LENGTH = 7; // px
 const DELETE_BUTTON_HIT_RADIUS = 9; // px, slightly above the drawn radius
 const DELETE_BUTTON_COLOR = "#d33";
-/** The "change kind" cog button sits on the side opposite the delete button, with the same geometry. */
 const COG_BUTTON_COLOR = "#444";
 const COG_LINE_WIDTH = 3.5; // px (thick circle and teeth, thicker than the short teeth are long)
 const COG_TEETH_COUNT = 8;
-/** Color of the provisional (not yet added) element and its "+" button. */
 const PROVISIONAL_COLOR = "#1976d2";
-/** Total path length of a newly placed provisional element, in metres. */
-const PROVISIONAL_TOTAL_LENGTH = 0.8;
-const SPLIT_BUTTON_OFFSET = 14; // px (screen distance from the curve midpoint to the button center)
+const PROVISIONAL_TOTAL_LENGTH = 0.8; // m
+const SPLIT_BUTTON_OFFSET = 14; // px, from the curve midpoint
 const SELECTION_RECT_FILL = "rgba(100, 149, 237, 0.2)"; // gentle blue fill
 const SELECTION_RECT_STROKE = "rgba(100, 149, 237, 0.9)";
 const ZOOM_FACTOR = 1.005;
 const MIN_ZOOM = 2;
 const MAX_ZOOM = 5000;
-/** Canvas units per metre: 1 canvas unit = 1/CANVAS_SCALE m. Only the
- * editor's canvas drawing uses canvas units: a world point at x metres is
- * drawn at x * CANVAS_SCALE, and the canvas transform scales by
- * zoom / CANVAS_SCALE, so the rendered output is unchanged. Engine draw
- * methods still emit metre coordinates, so they draw inside a nested
- * CANVAS_SCALE wrap. */
-const CANVAS_SCALE = 20;
+const CANVAS_SCALE = 20; // canvas units per metre, editor drawing only
 
 type ViewState = {
   center: Vector<2>;
   zoom: number; // pixel per meter
 };
 
-/** The active editing tool set. Navigation works in every mode. */
 export type EditMode = "view" | "path" | "elements";
 
 type ControlPointSelection = {
@@ -85,116 +61,54 @@ type ControlPointSelection = {
   pointKey: ControlPointKey;
 };
 
-/**
- * Interactive canvas editor for a single Sequence.
- *
- * Only the path is editable for now: control points can be selected (single
- * click, ctrl + click to add/remove, ctrl + a for all, or via a drag selection
- * rectangle on empty space) and dragged with the left button, the canvas can
- * be panned with a right button drag, and zoomed with the mouse wheel.
- */
 export class Editor {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2DSized;
-  /** Logical canvas size, in CSS pixels. */
   width = 0;
   height = 0;
 
   sequence: Sequence;
-  /** Current editing mode. "view" shows the drawing with navigation only;
-   * "elements" disables path editing for now. */
   mode: EditMode = "view";
-  /** When true, the foot traces use a minimum blade length, and the element
-   * spans are scaled by the same factor about their middle point. */
   scaleElements = true;
   private view: ViewState;
-  /** Extra sequences drawn for their paths/traces but not editable. */
   private overlaySequences: Sequence[] = [];
 
   private selected = new Set<string>();
-  /**
-   * Called when the user clicks the "change kind" (cog) button on the single
-   * selected element. The host UI is expected to show a picker for the
-   * element's kind and then replace the element via the sequence.
-   */
   onElementChangeRequest?: (element: Element) => void;
-  /** Called once after every sequence mutation (an added point, curve or
-   * element, a removed one, or a completed drag). The host UI is expected to
-   * persist the sequence. Drags notify once on mouse up, not per move. */
   onSequenceChange?: () => void;
-  /** True when a drag mutated the sequence since the last notification. */
   private sequenceMutated = false;
-  /** Indices of the curves currently selected (by clicking on their line). */
   private selectedCurves = new Set<number>();
-  /** Elements currently selected (path-elements mode only). */
   private selectedElements = new Set<Element>();
   private isPanning = false;
   private isDraggingPoint = false;
   private isDraggingCurve = false;
   private isSelectingRect = false;
-  /** Element drawn but not yet added to the sequence (elements mode only). */
   private provisionalElement: Element | null = null;
-  /** Set while the provisional element is being created by a click and drag. */
   private isCreatingProvisional = false;
-  /** Path coordinate where the provisional element creation started. */
   private provisionalOriginU = 0;
-  /** Set while dragging an element's control point along the path (elements mode). */
   private isDraggingElementPoint = false;
-  /** Element whose control point is being dragged, and whether it is the start point. */
   private dragElement: Element | null = null;
   private dragElementPointIsStart = false;
-  /** Set while moving an element by dragging its segment (elements mode). */
   private isDraggingElementSegment = false;
-  /** Every element moved together by a segment drag, with their spans
-   * (path coordinates) at drag start. One item for a single element; all
-   * elements of the selection when a selected element's segment is dragged. */
   private segmentDragItems: Array<{ element: Element; start0: number; end0: number }> = [];
-  /** Real arc-length offset of the group at drag start (limits from the
-   * extreme ends against the path boundaries and unselected elements). */
   private segmentDragDeltaMin = -Infinity;
   private segmentDragDeltaMax = Infinity;
-  /** Path coordinate of the grabbed point at drag start (delta reference). */
   private segmentDragGrabU = 0;
-  /** Curve used as the anchor (current + neighbors) for the segment drag. */
   private dragAnchorCurveIndex = 0;
-  /** Snapshot taken when an anchor control point (p0, p3) starts to be
-   * dragged. It holds the uniform axis (cumulated curve starts and lengths)
-   * before the move and the element spans as path coordinates, so the spans
-   * can be re-based after each move step: an element on the curve that ends
-   * at the dragged joint keeps its ratio within that curve, an element on the
-   * curve that starts at the joint keeps its ratio too, and an element on a
-   * later curve stays at the same relative place on its own curve. Null when
-   * no anchor point is being dragged (or a guide handle is dragged instead:
-   * moving a guide handle does not change the joint geometry). */
   private jointMoveSnapshot: {
-    /** Index of the curve whose end anchor is dragged. -1 when the p0 of the
-     * first curve is dragged (no before-curve exists). */
     jointCurveIndex: number;
     curveStarts: number[];
     curveLengths: number[];
     items: Array<{ element: Element; start: number; end: number }>;
   } | null = null;
-  /** One-shot snapshot taken just before a joint is removed (the interior
-   * case of the delete button). It holds the uniform axis before the removal
-   * (cumulated curve starts and lengths), the index of the first curve merged
-   * away (curveBefore of the removed joint), and the element spans as path
-   * coordinates, so the spans can be re-based after the two curves around the
-   * joint merge into one: a point between A and C keeps its ratio measured
-   * from A over the whole merged range, and a point on a curve outside the
-   * merge keeps its place on its own curve. Cleared right after the remap
-   * (deletion happens once) and in setSequence. */
   private jointDeletionSnapshot: {
-    /** Index of the first curve merged away (curveBefore of the removed
-     * joint). The merged curve replaces it and the next one at this index. */
     jointOldIndex: number;
     curveStarts: number[];
     curveLengths: number[];
     items: Array<{ element: Element; start: number; end: number }>;
   } | null = null;
   private rectAddToSelection = false;
-  /** What the rectangle selection targets (set when the drag starts). */
   private rectTargetsElements = false;
-  /** True once the rectangle drag has actually moved (not a plain click). */
   private rectDidMove = false;
   private rectStartX = 0;
   private rectStartY = 0;
@@ -219,8 +133,6 @@ export class Editor {
     this.ctx = canvas.getContext("2d") as CanvasRenderingContext2DSized;
     this.sequence = sequence;
 
-    // Keep the backing store in sync whenever the canvas element resizes
-    // (e.g. when the layout changes or the sidebar splitter is dragged).
     const ResizeObserverCtor = typeof ResizeObserver !== "undefined" ? ResizeObserver : null;
     if (ResizeObserverCtor) {
       this.resizeObserver = new ResizeObserverCtor(() => this.resize());
@@ -246,7 +158,6 @@ export class Editor {
     this.draw();
   }
 
-  /** Remove all event listeners. Call when the editor is no longer used. */
   destroy() {
     this.canvas.removeEventListener("wheel", this.onWheel);
     this.canvas.removeEventListener("mousedown", this.onMouseDown);
@@ -261,7 +172,6 @@ export class Editor {
 
   setSequence(sequence: Sequence) {
     this.sequence = sequence;
-    // A new sequence starts with no unsaved drag state.
     this.sequenceMutated = false;
     this.jointMoveSnapshot = null;
     this.jointDeletionSnapshot = null;
@@ -272,7 +182,6 @@ export class Editor {
     this.draw();
   }
 
-  /** Deselect every selected curve, control point, and element. */
   clearSelection() {
     this.selected.clear();
     this.selectedCurves.clear();
@@ -280,18 +189,12 @@ export class Editor {
     this.provisionalElement = null;
   }
 
-  /**
-   * Swap a selected element reference for its replacement, so the new element
-   * stays selected after an in-place kind change. The sequence must already
-   * hold the new element.
-   */
   replaceSelectedElement(oldElement: Element, newElement: Element) {
     if (this.selectedElements.delete(oldElement)) {
       this.selectedElements.add(newElement);
     }
   }
 
-  /** Draw an extra sequence (path + foot traces) without making it editable. */
   addOverlaySequence(sequence: Sequence) {
     this.overlaySequences.push(sequence);
     this.draw();
@@ -301,22 +204,17 @@ export class Editor {
     return this.sequence;
   }
 
-  /** Append a 3 m straight curve at the end of the path. */
   addSegmentEnd() {
     this.sequence.path.addCurveEnd();
     this.notifySequenceChange();
     this.draw();
   }
 
-  // Drawing /////////////////////////////////////////////////////////////////
-
   draw() {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.width, this.height);
     this.transformContext();
     this.drawRink();
-    // In "view" mode only the scaled foot traces are drawn: no path line, no
-    // element selectors, just the traces over the rink (and the overlays).
     if (this.mode !== "view") {
       this.drawPath();
       for (const sequence of this.overlaySequences) {
@@ -324,9 +222,6 @@ export class Editor {
       }
     }
     this.drawSelectedCurves();
-    // Path-editing controls (control points, add/split/delete buttons,
-    // selection rectangle) are only meaningful while editing the path.
-    // In "view" and "elements" modes they are hidden, and selection is empty.
     if (this.mode === "path") {
       this.drawControlHandles();
       this.drawAddButton();
@@ -337,15 +232,11 @@ export class Editor {
     } else {
       this.drawTraces();
     }
-    // Element name labels, in all modes.
     this.drawElementLabels();
     ctx.restore();
-    // Selection rectangle, for both editing modes.
     this.drawSelectionRectangle();
   }
 
-  /** Draw the foot traces (scaled when element scaling is on), without the
-   * path line or any editing controls. Used in "view" mode. */
   private drawTraces() {
     const minTraceWidth = MIN_TRACE_WIDTH / this.view.zoom;
     const minBladeLength = this.scaleElements ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
@@ -360,19 +251,6 @@ export class Editor {
     );
   }
 
-  /**
-   * The visible world-space viewport, expanded by the rendered blade length
-   * on every side, for foot trace culling.
-   *
-   * The mapping follows the canvas transform and the worldToScreen helpers:
-   * a world point is drawn at (x, -y), so the visible world y range is
-   * centered on view.center.y (screen y grows towards -y). The margin is the
-   * blade length in metres used to trace the feet: the real blade length, or
-   * the given minimum when it is larger, so it scales with the zoom through
-   * minBladeLength (MIN_BLADE_LENGTH / zoom when element scaling is on). It
-   * also comfortably covers the trace width and the lateral foot shift, so
-   * only traces well outside the viewport are culled.
-   */
   private getTraceViewport(minBladeLength?: number): AxisRect {
     const margin = minBladeLength === undefined ? bladeLength : Math.max(bladeLength, minBladeLength);
     const halfWidth = this.width / 2 / this.view.zoom;
@@ -391,19 +269,10 @@ export class Editor {
     translation = translation.times(1 / this.view.zoom).minus(this.view.center);
 
     ctx.save();
-    // Canvas units are drawn at zoom / CANVAS_SCALE px (zoom stays px per
-    // metre): the drawn metre values are multiplied by CANVAS_SCALE, so the
-    // rendered output is unchanged.
     ctx.scale(this.view.zoom / CANVAS_SCALE, this.view.zoom / CANVAS_SCALE);
     ctx.translate(translation.x * CANVAS_SCALE, -translation.y * CANVAS_SCALE);
   }
 
-  /**
-   * Draw with the engine's metre coordinates. Engine draw methods (path,
-   * curves, foot traces) emit world metres, so a nested canvas-unit scale
-   * multiplies them onto the canvas unit (1 canvas unit = 1/CANVAS_SCALE m).
-   * Must only be used inside the transformed context.
-   */
   private drawMetres(draw: () => void) {
     const ctx = this.ctx;
     ctx.save();
@@ -414,7 +283,6 @@ export class Editor {
 
   private drawRink() {
     const ctx = this.ctx;
-    // Draw inset rectangle with thick border to have corner radius
     const width = (WIDTH - 2 * CORNER_RADIUS) * CANVAS_SCALE;
     const height = (LENGTH - 2 * CORNER_RADIUS) * CANVAS_SCALE;
 
@@ -431,15 +299,9 @@ export class Editor {
       return;
     }
     const pathWidth = PATH_WIDTH / this.view.zoom;
-    // Minimum blade trace width in path units, only effective when zoomed out
-    // (a trace thinner than one screen pixel would become hard to follow).
     const minTraceWidth = MIN_TRACE_WIDTH / this.view.zoom;
-    // Minimum blade length in path units, only effective when zoomed out, and
-    // only in "view" and "path" modes (elements mode always shows real
-    // proportions).
     const minBladeLength =
       this.scaleElements && this.mode !== "elements" ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
-    // In "elements" mode the path is drawn in solid black.
     const pathColor = this.mode === "elements" ? ELEMENTS_PATH_COLOR : undefined;
     const minDrawIncrement = MIN_DRAW_INCREMENT / this.view.zoom;
     const viewport = this.getTraceViewport(minBladeLength);
@@ -474,8 +336,6 @@ export class Editor {
         ),
       );
     } else {
-      // Draw the path and the foot traces (same as the home page) for the
-      // overlay sequences and the "view" mode.
       this.drawMetres(() =>
         sequence.draw(
           this.ctx,
@@ -492,12 +352,10 @@ export class Editor {
     }
   }
 
-  /** Draw the selected curves on top of the path, in a highlight color. */
   private drawSelectedCurves() {
     if (this.selectedCurves.size == 0) return;
     const ctx = this.ctx;
     ctx.strokeStyle = "#d33";
-    // Metre-space width: the curve is stroked inside the CANVAS_SCALE wrap.
     ctx.lineWidth = (PATH_WIDTH + 2) / this.view.zoom;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -508,12 +366,6 @@ export class Editor {
     }
   }
 
-  /**
-   * Draw the elements as black lines that follow the path, with a control
-   * point at each end. Each element spans a start and an end path coordinate,
-   * so its line is traced along the path between those two points, similar
-   * to how a curve is shown in path mode. Selected elements are highlighted.
-   */
   private drawElements() {
     if (this.sequence.path.curves.length === 0) {
       return;
@@ -527,15 +379,10 @@ export class Editor {
     for (const element of this.sequence.elements) {
       const selected = this.selectedElements.has(element);
 
-      // Black line that follows the path from start to end. Drawn as the
-      // native canvas Bezier sub-curves of the underlying path, never as a
-      // sampled polyline.
       ctx.strokeStyle = selected ? "#d33" : "#000";
-      // Metre-space width: the span is traced inside the CANVAS_SCALE wrap.
       ctx.lineWidth = (PATH_WIDTH + 2) / this.view.zoom;
       this.drawElementSpan(element);
 
-      // Control point at each end (exact path positions, not sampled).
       ctx.fillStyle = selected ? "#d33" : "#444";
       for (const u of this.getDisplayedSpan(element)) {
         const point = this.sequence.path.getPosition(u as PathCoordinate);
@@ -545,13 +392,10 @@ export class Editor {
       }
     }
 
-    // The provisional element is drawn in its own color to show the
-    // difference: it is an edit preview, not part of the sequence yet.
     if (this.provisionalElement) {
       const element = this.provisionalElement;
 
       ctx.strokeStyle = PROVISIONAL_COLOR;
-      // Metre-space width: the span is traced inside the CANVAS_SCALE wrap.
       ctx.lineWidth = (PATH_WIDTH + 2) / this.view.zoom;
       this.drawElementSpan(element);
 
@@ -564,21 +408,11 @@ export class Editor {
       }
     }
 
-    // Action buttons for the selected element, on top of the elements.
     this.drawElementDeleteButton();
     this.drawElementCogButton();
-    // The "+" button of the provisional element, where the cog would be.
     this.drawProvisionalAddButton();
   }
 
-  /**
-   * The element span as displayed (in increasing order): the real span, or,
-   * when element scaling is on and zoomed out, the span scaled about its
-   * middle point to match the scaled blade length. Only scalable elements
-   * (the turns) scale: glides and strokes keep their real span. Coordinates
-   * are clamped to the path range: a scaled span may extend past the path end
-   * points, where the path does not exist.
-   */
   private getDisplayedSpan(element: Element): [PathCoordinate, PathCoordinate] {
     const minBladeLength =
       this.scaleElements && this.mode !== "elements" ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
@@ -592,18 +426,11 @@ export class Editor {
     ];
   }
 
-  /** Trace an element's span along the path, as native Bezier sub-curves. */
   private drawElementSpan(element: Element) {
     const [start, end] = this.getDisplayedSpan(element);
     this.drawMetres(() => this.sequence.path.drawRange(this.ctx, start, end));
   }
 
-  /**
-   * Centre point of an element on the path, and the unit direction from it
-   * towards the outside of the curve: perpendicular to the tangent at the
-   * centre, opposite to the centre of curvature there. Null when the path
-   * has no curves.
-   */
   private getElementLabelGeometry(element: Element): { point: Vector<2>; outside: Vector<2> } | null {
     const path = this.sequence.path;
     if (path.curves.length === 0) return null;
@@ -614,36 +441,15 @@ export class Editor {
     const point = curve.getPosition(curvilinear);
     const tangent = curve.getDerivative(curvilinear).normalized();
     const curvature = curve.getCurvature(curvilinear);
-    // The centre of curvature lies on the side of the CCW normal of the
-    // tangent (getOrthogonal) when the curvature is positive, and on the
-    // other side when it is negative or zero. The label goes the opposite
-    // way, so it stays outside of the curve.
     const sign = curvature > 0 ? -1 : 1;
     const outside = tangent.getOrthogonal().times(sign);
     return { point, outside };
   }
 
-  /**
-   * Distance from an ellipse centre to its boundary along the unit direction
-   * u: the support of the ellipse (semi-axes a and b) in that direction.
-   */
   private ellipseSupport(ux: number, uy: number, a: number, b: number): number {
     return 1 / Math.hypot(ux / a, uy / b);
   }
 
-  /**
-   * Draw the name of every element with the canvas fillText method, in all
-   * edit modes. The text anchor (textAlign and textBaseline) stays centred,
-   * so the drawn label is centred on its anchor point. The label bounding
-   * box comes from the canvas measureText method: its width, and its ascent
-   * and descent. That rectangle is simplified as an ellipse, and the label
-   * centre is shifted from the path point only along the perpendicular
-   * outside direction (see getElementLabelGeometry), by the least distance
-   * that keeps the closest part of the box LABEL_OFFSET screen pixels away
-   * from the path: the offset plus the ellipse support along that direction.
-   * The font size stays 12 screen pixels at any zoom, and the whole offset
-   * is world-space, so the gap is also zoom-independent.
-   */
   private drawElementLabels() {
     const ctx = this.ctx;
     if (this.sequence.path.curves.length === 0) return;
@@ -658,20 +464,13 @@ export class Editor {
       const geometry = this.getElementLabelGeometry(element);
       if (!geometry) continue;
 
-      // Bounding box of the text, in the current (world-space) font size.
       const metrics = ctx.measureText(element.shortName);
       const a = metrics.width / 2;
       const b = ((metrics.actualBoundingBoxAscent ?? 0) + (metrics.actualBoundingBoxDescent ?? 0)) / 2;
       if (a === 0 && b === 0) continue;
 
-      // The support gives the distance from the label centre to the closest
-      // part of the box along the shift direction, so extending the shift by
-      // it keeps the box gap at the target offset.
       const support = this.ellipseSupport(Math.abs(geometry.outside.x), Math.abs(geometry.outside.y), a, b);
       const total = offset + support;
-      // The path point is a metre value from the engine: drawn in canvas
-      // units (x * CANVAS_SCALE), while the offset and support are already
-      // canvas-unit values from the canvas-unit font size.
       const labelX = geometry.point.x * CANVAS_SCALE + geometry.outside.x * total;
       const labelY = geometry.point.y * CANVAS_SCALE + geometry.outside.y * total;
 
@@ -679,18 +478,10 @@ export class Editor {
     }
   }
 
-  /** Sampled world-space points along the path covered by an element.
-   * Every element, even a rescaled and pathrange-clamped span, is sampled
-   * with at least five points: the step is shrunk below the increment when
-   * the drawn span is too short for five increment-spaced points. */
   private getElementPoints(element: Element): Vector<2>[] {
     const path = this.sequence.path;
     const [start, end] = this.getDisplayedSpan(element);
     const span = (end as number) - (start as number);
-    // The step must be strictly positive: a zero-length span (e.g. a
-    // zero-size element, or a clamped span with no free space left) gave a
-    // zero step, so the loop below never advanced and hung the page. A
-    // zero-length span is fine with just one point per coordinate.
     const step = Math.min(ELEMENT_DRAW_INCREMENT, span / 4) || ELEMENT_DRAW_INCREMENT;
     const points: Vector<2>[] = [];
     for (let u = start as number; u <= (end as number); u += step) {
@@ -699,7 +490,6 @@ export class Editor {
     return points;
   }
 
-  /** Select an element, toggling it with ctrl, or selecting only it on a plain click. */
   private selectElement(element: Element, ctrlKey: boolean) {
     if (ctrlKey) {
       if (this.selectedElements.has(element)) this.selectedElements.delete(element);
@@ -709,10 +499,6 @@ export class Editor {
     }
   }
 
-  /**
-   * Endpoint control point under the cursor, or null when the click is too far
-   * from every element start/end point. Used to start dragging an element point.
-   */
   private pickElementControlPoint(screenX: number, screenY: number): { element: Element; isStart: boolean } | null {
     const cursor = this.screenToWorld(screenX, screenY);
     const tolerance = PICK_RADIUS / this.view.zoom;
@@ -729,10 +515,6 @@ export class Editor {
         [true, points[0]!],
         [false, points[points.length - 1]!],
       ];
-      // The end point is visited after the start point. Using <= (instead of
-      // <) means that, when both ends are at the same spot (e.g. an element
-      // whose start and end coincide on screen), the END point wins the
-      // tie-break and gets priority to be dragged.
       for (const [isStart, point] of endpoints) {
         const distance = point.minus(cursor).length();
         if (distance <= tolerance && distance <= bestDistance) {
@@ -744,13 +526,6 @@ export class Editor {
     return best;
   }
 
-  /**
-   * Snap the dragged control point of an element to the point on the path
-   * closest to the given world cursor. Every curve of the path is considered,
-   * so an element endpoint may move anywhere along the path.
-   *
-   * @returns The new path coordinate, or null when it cannot be computed.
-   */
   private snapElementPointToPath(element: Element, isStart: boolean, cursor: Vector<2>): PathCoordinate | null {
     const path = this.sequence.path;
     const curves = path.curves;
@@ -760,25 +535,13 @@ export class Editor {
     if (u == null) return null;
 
     let clamped = Math.max(0, Math.min(path.length, u));
-    // Keep a valid, non-inverted span: the dragged point must not cross the
-    // opposite endpoint (start <= end).
     const other = (isStart ? element.end : element.start) as number;
     clamped = isStart ? Math.min(clamped, other) : Math.max(clamped, other);
-    // Keep the span free of overlaps: dragging the start endpoint leftwards is
-    // limited by the left neighbour, dragging the end endpoint rightwards by
-    // the right neighbour.
     const bounds = this.neighbourBoundsAroundSpan(element.start as number, element.end as number, element);
     clamped = isStart ? Math.max(clamped, bounds.left) : Math.min(clamped, bounds.right);
     return clamped as PathCoordinate;
   }
 
-  /**
-   * Path-coordinate limits that a span [start, end] may not cross without
-   * overlapping another element. Elements entirely to the left (their end at
-   * or before `start`) give the left limit; elements entirely to the right
-   * (their start at or after `end`) give the right limit. `exclude` is skipped
-   * (one element, or a set of them, e.g. all elements being dragged).
-   */
   private neighbourBoundsAroundSpan(
     start: number,
     end: number,
@@ -797,12 +560,6 @@ export class Editor {
     return { left, right };
   }
 
-  /**
-   * Point on the path closest to the cursor, considering only the given anchor
-   * curve and its direct neighbors. This avoids big jumps while dragging.
-   *
-   * @returns The uniform path coordinate, or null if the path is empty.
-   */
   private snapCursorToPathNearCurve(anchorCurveIndex: number, cursor: Vector<2>): PathCoordinate | null {
     const curves = this.sequence.path.curves;
     if (curves.length === 0) return null;
@@ -825,13 +582,6 @@ export class Editor {
     return this.uniformCoordinateAt(curves, bestIndex, bestT) as PathCoordinate;
   }
 
-  /**
-   * Point on the path closest to the cursor, considering every curve. Used
-   * when a first anchor point does not exist yet, e.g. while creating a
-   * provisional element with a click and drag.
-   *
-   * @returns The uniform path coordinate, or null if the path is empty.
-   */
   private snapCursorToPathAnywhere(cursor: Vector<2>): PathCoordinate | null {
     const curves = this.sequence.path.curves;
     if (curves.length === 0) return null;
@@ -851,16 +601,6 @@ export class Editor {
     return this.uniformCoordinateAt(curves, bestIndex, bestT) as PathCoordinate;
   }
 
-  /**
-   * Begin moving one element (or, when it belongs to a multi-selection, the
-   * whole selection) by dragging its segment. Records each moved element's
-   * span at drag start plus the real arc-length offsets the group may still
-   * travel left and right before its extreme ends touch a limit: the path
-   * boundaries or an unselected neighbouring element.
-   *
-   * Real (geometric) arc lengths are used throughout, so dragging across a
-   * curve with varying speed does not drift the elements' drawn lengths.
-   */
   private startElementSegmentDrag(element: Element, screenX: number, screenY: number) {
     const path = this.sequence.path;
     const curves = path.curves;
@@ -873,7 +613,6 @@ export class Editor {
 
     const startU = element.start as number;
     const endU = element.end as number;
-    // The grabbed point lies on the element, so clamp it into its span.
     const lo = Math.min(startU, endU);
     const hi = Math.max(startU, endU);
     const clampedGrab = Math.min(Math.max(grabbedU as number, lo), hi);
@@ -883,8 +622,6 @@ export class Editor {
     this.segmentDragGrabU = clampedGrab;
     this.dragAnchorCurveIndex = anchorIndex;
 
-    // The whole selection moves together, unless the provisional element
-    // (never selected) or a lone element is grabbed.
     const moving = new Set<Element>([element]);
     if (!this.isProvisionalElement(element) && this.selectedElements.has(element) && this.selectedElements.size > 1) {
       for (const selected of this.selectedElements) moving.add(selected);
@@ -897,9 +634,6 @@ export class Editor {
       const s0 = Math.min(moved.start as number, moved.end as number);
       const e0 = Math.max(moved.start as number, moved.end as number);
       this.segmentDragItems.push({ element: moved, start0: s0, end0: e0 });
-      // Limits for this element: the nearest unselected elements and the path
-      // boundaries. Over all moved elements, the group can only travel as far
-      // as the tightest limit (the extremes of the selection).
       const bounds = this.neighbourBoundsAroundSpan(s0, e0, moving);
       dMin = Math.max(dMin, -path.arcLengthBetween(bounds.left as PathCoordinate, s0 as PathCoordinate));
       dMax = Math.min(dMax, path.arcLengthBetween(e0 as PathCoordinate, bounds.right as PathCoordinate));
@@ -908,7 +642,6 @@ export class Editor {
     this.segmentDragDeltaMax = dMax;
   }
 
-  /** Index of the curve containing the given path coordinate (clamped). */
   private curveIndexAt(curves: Curve[], u: number): number {
     if (curves.length === 0) return 0;
     if (u <= 0) return 0;
@@ -918,10 +651,6 @@ export class Editor {
     return index >= 0 ? index : 0;
   }
 
-  /**
-   * Uniform path coordinate for a curvilinear parameter on a given curve, i.e.
-   * the cumulated length of the curves before it plus the point within it.
-   */
   private uniformCoordinateAt(curves: Curve[], curveIndex: number, s: number): number {
     let u = 0;
     for (let i = 0; i < curveIndex; i++) u += curves[i]!.length;
@@ -929,16 +658,10 @@ export class Editor {
     return u;
   }
 
-  /** Inverse of getCurvilinearCoordFromUniform for a single curve. */
   private uniformWithinCurve(curve: Curve, s: number): number {
     return curve.getUniformCoordFromCurvilinear(s as Curvilinear);
   }
 
-  /**
-   * Element under the cursor (by a control point or its segment), or null when
-   * the click is too far from every element. Uses the same pick radius as the
-   * path control points.
-   */
   private pickElement(screenX: number, screenY: number): Element | null {
     const cursor = this.screenToWorld(screenX, screenY);
     const tolerance = PICK_RADIUS / this.view.zoom;
@@ -952,7 +675,6 @@ export class Editor {
       const points = this.getElementPoints(element);
       if (points.length === 0) continue;
 
-      // Control points at either end.
       for (const point of [points[0], points[points.length - 1]]) {
         if (!point) continue;
         const distance = point.minus(cursor).length();
@@ -962,7 +684,6 @@ export class Editor {
         }
       }
 
-      // Segment: the line traced along the path.
       for (let i = 0; i < points.length - 1; i++) {
         const distance = distanceToSegment(cursor, points[i]!, points[i + 1]!);
         if (distance <= tolerance && distance < bestDistance) {
@@ -983,15 +704,11 @@ export class Editor {
       const showP1 = this.isHandleVisible(curveIndex, "p1");
       const showP2 = this.isHandleVisible(curveIndex, "p2");
 
-      // Control polygon guides: p0-p1 and p2-p3 only (no p1-p2 segment), and
-      // only for handles that are currently visible.
       ctx.strokeStyle = `rgba(0, 0, 0, ${POLYGON_ALPHA})`;
       ctx.lineWidth = (1 * CANVAS_SCALE) / this.view.zoom;
       if (showP1) this.drawGuide(points[0]!, points[1]!);
       if (showP2) this.drawGuide(points[2]!, points[3]!);
 
-      // Handles. Anchors (p0, p3) are always shown; the guide handles (p1, p2)
-      // only appear with their anchor, or while their aligned pair is selected.
       const keys: ControlPointKey[] = ["p0", "p1", "p2", "p3"];
       points.forEach((point, index) => {
         const pointKey = keys[index]!;
@@ -1000,7 +717,6 @@ export class Editor {
         const isSelected = this.selected.has(this.keyOf(curveIndex, pointKey));
         const size = ((isSelected ? NODE_SIZE * 1.5 : NODE_SIZE) * CANVAS_SCALE) / this.view.zoom;
 
-        // Endpoints (p0, p3) are anchors; inner points (p1, p2) are guides.
         ctx.fillStyle = index === 0 || index === 3 ? "#444" : "#888";
         ctx.beginPath();
         ctx.arc(point.x * CANVAS_SCALE, -point.y * CANVAS_SCALE, size / 2, 0, 2 * Math.PI);
@@ -1022,12 +738,6 @@ export class Editor {
     this.ctx.stroke();
   }
 
-  /**
-   * World position of the "+" add-segment button. It is placed just beyond
-   * the end of the path, offset from the shared end point along the direction
-   * of the path derivative at its end (the tangent where the next segment
-   * starts). For an empty path the button sits at the center of the rink.
-   */
   private getAddButtonPosition(): Vector<2> {
     const curves = this.sequence.path.curves;
     if (curves.length == 0) return new Vector<2>(0, 0);
@@ -1039,15 +749,10 @@ export class Editor {
     return end.plus(dir.times(offset));
   }
 
-  /** Draw a "+" inside a circle at the given world point. */
   private drawPlusInCircle(world: Vector<2>) {
     this.drawPlusInCircleWithColor(world, ADD_BUTTON_COLOR);
   }
 
-  /** Draw a "+" inside a circle at the given world point (metres), in the
-   * given color. The circle is drawn in canvas units: the metre world point
-   * is multiplied by CANVAS_SCALE, and the pixel sizes are converted to
-   * canvas units (X * CANVAS_SCALE / zoom). */
   private drawPlusInCircleWithColor(world: Vector<2>, color: string) {
     const ctx = this.ctx;
     const cx = world.x * CANVAS_SCALE;
@@ -1061,12 +766,10 @@ export class Editor {
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
-    // Circle outline.
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
     ctx.stroke();
 
-    // "+" inside the circle.
     ctx.beginPath();
     ctx.moveTo(cx - halfPlus, cy);
     ctx.lineTo(cx + halfPlus, cy);
@@ -1075,12 +778,10 @@ export class Editor {
     ctx.stroke();
   }
 
-  /** Draw the "+" add-segment button near the end of the path. */
   private drawAddButton() {
     this.drawPlusInCircle(this.getAddButtonPosition());
   }
 
-  /** True when the given CSS pixel position is over the "+" add-segment button. */
   private hitAddButton(screenX: number, screenY: number): boolean {
     const [iconX, iconY] = this.worldToScreen(this.getAddButtonPosition());
     const dx = screenX - iconX;
@@ -1088,14 +789,6 @@ export class Editor {
     return Math.hypot(dx, dy) <= ADD_BUTTON_HIT_RADIUS;
   }
 
-  /**
-   * The point selected for removal, if exactly one point is selected. Returns
-   * the world position of the point and the tangent direction of the path
-   * there (used to offset the delete button to the side), plus flags saying
-   * whether it is the very first or very last point of the path. Interior
-   * joints (shared by two consecutive curves) and both ends are removable;
-   * the guide handles (p1, p2) are not.
-   */
   private getRemovablePoint(): { point: Vector<2>; dir: Vector<2>; isStart: boolean; isEnd: boolean } | null {
     if (this.selected.size !== 1 || this.selectedCurves.size > 0) return null;
     const curves = this.sequence.path.curves;
@@ -1106,17 +799,12 @@ export class Editor {
     const curve = curves[curveIndex];
     if (!curve) return null;
 
-    // Very first point: deleting removes the first curve. Only allowed while
-    // more than one curve remains, so the path can never become empty.
     if (pointKey === "p0" && curveIndex === 0 && curves.length > 1) {
       return { point: curve.p0, dir: curve.getDerivative(0 as Curvilinear).normalized(), isStart: true, isEnd: false };
     }
-    // Very last point: deleting removes the last curve. Only allowed while
-    // more than one curve remains, so the path can never become empty.
     if (pointKey === "p3" && curveIndex === curves.length - 1 && curves.length > 1) {
       return { point: curve.p3, dir: curve.getDerivative(1 as Curvilinear).normalized(), isStart: false, isEnd: true };
     }
-    // Interior joint: p0 of a non-first curve, or p3 of a non-last curve.
     if (pointKey === "p0" && curveIndex > 0) {
       return { point: curve.p0, dir: curve.getDerivative(0 as Curvilinear).normalized(), isStart: false, isEnd: false };
     }
@@ -1131,10 +819,6 @@ export class Editor {
     return null;
   }
 
-  /**
-   * World position of the "-" delete button. It sits beside the selected
-   * point, offset to the side of the path (perpendicular to the tangent).
-   */
   private getDeleteButtonPosition(): Vector<2> | null {
     const removable = this.getRemovablePoint();
     if (!removable) return null;
@@ -1143,10 +827,6 @@ export class Editor {
     return removable.point.plus(perp.times(offset));
   }
 
-  /** Draw a "-" inside a circle at the given world point. */
-  /** Draw a "-" inside a circle at the given world point (metres). The
-   * circle is drawn in canvas units: the metre world point is multiplied by
-   * CANVAS_SCALE, and the pixel sizes are converted to canvas units. */
   private drawMinusInCircle(world: Vector<2>) {
     const ctx = this.ctx;
     const cx = world.x * CANVAS_SCALE;
@@ -1160,37 +840,27 @@ export class Editor {
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
-    // Circle outline.
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
     ctx.stroke();
 
-    // "-" bar inside the circle.
     ctx.beginPath();
     ctx.moveTo(cx - halfMinus, cy);
     ctx.lineTo(cx + halfMinus, cy);
     ctx.stroke();
   }
 
-  /** Draw the "-" delete button beside a selected joint. */
   private drawDeleteButton() {
     const center = this.getDeleteButtonPosition();
     if (!center) return;
     this.drawMinusInCircle(center);
   }
 
-  /** The single selected element, or null when not exactly one is selected. */
   private getElementDeleteButtonElement(): Element | null {
     if (this.selectedElements.size !== 1) return null;
     return [...this.selectedElements][0]!;
   }
 
-  /**
-   * Geometry shared by the element action buttons (delete "-" and change-kind
-   * cog): the path position at the element's centre and the perpendicular
-   * (sideways) direction there. Null when not exactly one element is selected
-   * or the path is empty.
-   */
   private getElementActionButtonGeometry(): { point: Vector<2>; perp: Vector<2> } | null {
     if (this.selectedElements.size !== 1 || this.sequence.path.curves.length === 0) {
       return null;
@@ -1205,12 +875,6 @@ export class Editor {
     return { point, perp };
   }
 
-  /**
-   * World position of the "-" delete button for a selected element. It sits
-   * beside the element's centre, offset to the side of the path
-   * (perpendicular to the tangent at the centre). Only shown while exactly
-   * one element is selected.
-   */
   private getElementDeleteButtonPosition(): Vector<2> | null {
     const geometry = this.getElementActionButtonGeometry();
     if (!geometry) return null;
@@ -1218,19 +882,12 @@ export class Editor {
     return geometry.point.plus(geometry.perp.times(offset));
   }
 
-  /** Draw the "-" delete button beside a selected element's centre. */
   private drawElementDeleteButton() {
     const center = this.getElementDeleteButtonPosition();
     if (!center) return;
     this.drawMinusInCircle(center);
   }
 
-  /**
-   * World position of the "change kind" cog button for a selected element. It
-   * sits at the element's centre like the delete button but on the opposite
-   * side of the path (negative perpendicular offset). Only shown while
-   * exactly one element is selected.
-   */
   private getElementCogButtonPosition(): Vector<2> | null {
     const geometry = this.getElementActionButtonGeometry();
     if (!geometry) return null;
@@ -1238,19 +895,12 @@ export class Editor {
     return geometry.point.plus(geometry.perp.times(-offset));
   }
 
-  /** Draw a cog (gear): a single thick circle with 8 thick teeth sticking
-   * out. Drawn in canvas units: the metre world point is multiplied by
-   * CANVAS_SCALE, and the pixel sizes are converted to canvas units. */
   private drawCogInCircle(world: Vector<2>) {
     const ctx = this.ctx;
     const cx = world.x * CANVAS_SCALE;
     const cy = -world.y * CANVAS_SCALE;
 
-    // The teeth reach the same outer radius as the "-" delete button, so both
-    // buttons look the same size.
     const outerRadius = (DELETE_BUTTON_RADIUS * CANVAS_SCALE) / this.view.zoom;
-    // The inner circle is smaller, so the teeth stick out from its edge. They
-    // do not traverse the circle (their inner end is exactly on its edge).
     const circleRadius = outerRadius * 0.62;
 
     ctx.strokeStyle = COG_BUTTON_COLOR;
@@ -1258,13 +908,10 @@ export class Editor {
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
-    // Single thick circle.
     ctx.beginPath();
     ctx.arc(cx, cy, circleRadius, 0, 2 * Math.PI);
     ctx.stroke();
 
-    // 8 thick teeth, from the circle edge out to the delete-button radius
-    // (thicker than long).
     for (let i = 0; i < COG_TEETH_COUNT; i++) {
       const angle = (i / COG_TEETH_COUNT) * 2 * Math.PI;
       ctx.beginPath();
@@ -1274,37 +921,22 @@ export class Editor {
     }
   }
 
-  /** Draw the "change kind" cog button beside a selected element's centre. */
   private drawElementCogButton() {
     const center = this.getElementCogButtonPosition();
     if (!center) return;
     this.drawCogInCircle(center);
   }
 
-  /** True when the given element is the provisional, not-yet-added one. */
   private isProvisionalElement(element: Element): boolean {
     return element === this.provisionalElement;
   }
 
-  /**
-   * Create the provisional element centered on the given path coordinate with
-   * the default span, remember the coordinate as the origin of a possible
-   * creation drag, and drop every selection (creating it deselects the other
-   * elements).
-   */
   private startProvisionalCreation(u: number) {
     this.placeProvisionalElement(u);
     this.isCreatingProvisional = true;
     this.provisionalOriginU = u;
   }
 
-  /**
-   * Extend the provisional element being created to the given path
-   * coordinate: the span goes from the creation origin to the current point.
-   * Dragging "backwards" along the path swaps which end is start and which is
-   * end, so the span stays valid. When the cursor is back on the origin, the
-   * centered default span is restored.
-   */
   private updateProvisionalCreation(cursor: Vector<2>) {
     if (this.sequence.path.curves.length === 0) return;
     const u = this.snapCursorToPathAnywhere(cursor);
@@ -1314,31 +946,19 @@ export class Editor {
       this.placeProvisionalElement(origin);
       return;
     }
-    // The origin decides which side is compressed when the dragged span
-    // crosses an existing element, so it stops against its boundary.
     this.setProvisionalSpan(Math.min(origin, u), Math.max(origin, u), origin);
   }
 
-  /** Give the provisional element the span [u - half, u + half], clamped. */
   private placeProvisionalElement(u: number) {
     const half = PROVISIONAL_TOTAL_LENGTH / 2;
     this.setProvisionalSpan(u - half, u + half);
   }
 
-  /**
-   * Set the provisional element's span to [start, end], clamped to the path
-   * and to the free gaps between the existing elements, so it never overlaps
-   * them. `anchor` (an origin path coordinate inside the desired span, e.g.
-   * the creation origin) decides which side is compressed when the desired
-   * span crosses an occupied one; it defaults to the span's midpoint.
-   */
   private setProvisionalSpan(start: number, end: number, anchor?: number) {
     const path = this.sequence.path;
     if (path.curves.length === 0) return;
     const clampedStart = Math.max(0, start) as PathCoordinate;
     const clampedEnd = Math.min(path.length, end) as PathCoordinate;
-    // Free space around the anchor point: the provisional element must not
-    // overlap any existing element.
     const mid = anchor ?? ((clampedStart as number) + (clampedEnd as number)) / 2;
     let left = 0;
     let right = path.length;
@@ -1363,10 +983,6 @@ export class Editor {
     this.draw();
   }
 
-  /**
-   * Path coordinate under the cursor, or null when the click is too far from
-   * the path. Used to place the provisional element on a click on the path.
-   */
   private pickPathCoordinate(screenX: number, screenY: number): number | null {
     const cursor = this.screenToWorld(screenX, screenY);
     const tolerance = PICK_RADIUS / this.view.zoom;
@@ -1376,12 +992,6 @@ export class Editor {
     return this.uniformCoordinateAt(this.sequence.path.curves, hit.curveIndex, t);
   }
 
-  /**
-   * World position of the "+" add-to-sequence button of the provisional
-   * element. It sits where the cog button of a selected element would be: at
-   * the element's centre, offset to the opposite side of the path from the
-   * delete button.
-   */
   private getProvisionalAddButtonPosition(): Vector<2> | null {
     const element = this.provisionalElement;
     if (!element || this.sequence.path.curves.length === 0) return null;
@@ -1395,7 +1005,6 @@ export class Editor {
     return point.plus(perp.times(-offset));
   }
 
-  /** Draw the "+" add-to-sequence button of the provisional element. */
   private drawProvisionalAddButton() {
     if (!this.provisionalElement) return;
     const center = this.getProvisionalAddButtonPosition();
@@ -1403,7 +1012,6 @@ export class Editor {
     this.drawPlusInCircleWithColor(center, PROVISIONAL_COLOR);
   }
 
-  /** True when the given CSS pixel position is over the provisional element's "+" button. */
   private hitProvisionalAddButton(screenX: number, screenY: number): boolean {
     const center = this.getProvisionalAddButtonPosition();
     if (!center) return false;
@@ -1413,11 +1021,6 @@ export class Editor {
     return Math.hypot(dx, dy) <= ADD_BUTTON_HIT_RADIUS;
   }
 
-  /**
-   * Add the provisional element to the sequence and open the "change kind"
-   * dialog for it (the same dialog as the cog button opens), then forget the
-   * provisional element. Does nothing when there is none.
-   */
   private addProvisionalElement() {
     const element = this.provisionalElement;
     if (!element) return;
@@ -1428,7 +1031,6 @@ export class Editor {
     this.draw();
   }
 
-  /** True when the given CSS pixel position is over the element cog button. */
   private hitElementCogButton(screenX: number, screenY: number): boolean {
     const center = this.getElementCogButtonPosition();
     if (!center) return false;
@@ -1438,7 +1040,6 @@ export class Editor {
     return Math.hypot(dx, dy) <= DELETE_BUTTON_HIT_RADIUS;
   }
 
-  /** True when the given CSS pixel position is over the element delete button. */
   private hitElementDeleteButton(screenX: number, screenY: number): boolean {
     const center = this.getElementDeleteButtonPosition();
     if (!center) return false;
@@ -1448,7 +1049,6 @@ export class Editor {
     return Math.hypot(dx, dy) <= DELETE_BUTTON_HIT_RADIUS;
   }
 
-  /** True when the given CSS pixel position is over the "-" delete button. */
   private hitDeleteButton(screenX: number, screenY: number): boolean {
     const center = this.getDeleteButtonPosition();
     if (!center) return false;
@@ -1458,13 +1058,6 @@ export class Editor {
     return Math.hypot(dx, dy) <= DELETE_BUTTON_HIT_RADIUS;
   }
 
-  /**
-   * The "+" split buttons: one for each selected curve, placed at the real
-   * arc-length midpoint of the curve and offset to the side (perpendicular to
-   * the tangent there). The midpoint is the curvilinear coordinate at half the
-   * curve's true arc length, so the button sits at the real middle of the
-   * curve, not halfway between its control points.
-   */
   private getSplitButtonData(): { curveIndex: number; center: Vector<2> }[] {
     const curves = this.sequence.path.curves;
     const result: { curveIndex: number; center: Vector<2> }[] = [];
@@ -1481,17 +1074,12 @@ export class Editor {
     return result;
   }
 
-  /** Draw a "+" split button at the midpoint of every selected curve. */
   private drawSplitButtons() {
     for (const { center } of this.getSplitButtonData()) {
       this.drawPlusInCircle(center);
     }
   }
 
-  /**
-   * True when the given CSS pixel position is over a "+" split button;
-   * returns the index of the curve it splits, or null when over none.
-   */
   private hitSplitButton(screenX: number, screenY: number): number | null {
     for (const { curveIndex, center } of this.getSplitButtonData()) {
       const [iconX, iconY] = this.worldToScreen(center);
@@ -1502,13 +1090,6 @@ export class Editor {
     return null;
   }
 
-  /**
-   * A guide handle (p1 or p2) is drawn only when an anchor on its shared joint
-   * is selected (either representation of the joint), when it is itself
-   * selected, or when its aligned partner handle across the shared joint is
-   * selected (so the two aligned handles stay visible together). Anchors (p0,
-   * p3) are always visible.
-   */
   private isHandleVisible(curveIndex: number, pointKey: ControlPointKey): boolean {
     if (pointKey !== "p1" && pointKey !== "p2") return true;
     if (this.selected.size === 0) return false;
@@ -1520,18 +1101,15 @@ export class Editor {
       if (curveIndex > 0 && (has(curveIndex - 1, "p3") || has(curveIndex - 1, "p2"))) return true;
       return false;
     }
-    // pointKey === "p2"
     if (has(curveIndex, "p3") || has(curveIndex, "p2")) return true;
     if (curveIndex < curveCount - 1 && (has(curveIndex + 1, "p0") || has(curveIndex + 1, "p1"))) return true;
     return false;
   }
 
-  /** Stable string key identifying one control point across the path. */
   private keyOf(curveIndex: number, pointKey: ControlPointKey): string {
     return `${curveIndex}:${pointKey}`;
   }
 
-  /** Draw the in-progress selection rectangle in screen pixels (after ctx.restore). */
   private drawSelectionRectangle() {
     if (!this.isSelectingRect) return;
     const ctx = this.ctx;
@@ -1557,7 +1135,6 @@ export class Editor {
 
     curves.forEach((curve, curveIndex) => {
       keys.forEach((pointKey) => {
-        // Hidden guide handles cannot be picked.
         if ((pointKey === "p1" || pointKey === "p2") && !this.isHandleVisible(curveIndex, pointKey)) {
           return;
         }
@@ -1572,10 +1149,6 @@ export class Editor {
     return best;
   }
 
-  /**
-   * Index of the curve under the cursor, or null when the click is too far
-   * from every curve. Uses the same pick radius as the control points.
-   */
   private pickCurve(screenX: number, screenY: number): number | null {
     const cursor = this.screenToWorld(screenX, screenY);
     const tolerance = PICK_RADIUS / this.view.zoom;
@@ -1583,25 +1156,16 @@ export class Editor {
     return result ? result.curveIndex : null;
   }
 
-  /** Select a curve, replacing the point selection on a plain click, or toggling it with ctrl. */
   private handleCurveSelection(curveIndex: number, ctrlKey: boolean) {
     if (ctrlKey) {
       if (this.selectedCurves.has(curveIndex)) this.selectedCurves.delete(curveIndex);
       else this.selectedCurves.add(curveIndex);
     } else if (!this.selectedCurves.has(curveIndex)) {
-      // Plain click selects only this curve, unless the clicked curve is
-      // already part of a multi-selection (the group is kept so dragging it
-      // moves every selected curve).
       this.selectedCurves = new Set([curveIndex]);
     }
-    // Points and curves never share the selection: keeping any curve selected
-    // drops the control-point selection.
     if (this.selectedCurves.size > 0) this.selected.clear();
   }
 
-  // Coordinate transforms //////////////////////////////////////////////////
-
-  /** Convert a CSS pixel position (relative to the canvas) to world meters. */
   private screenToWorld(screenX: number, screenY: number): Vector<2> {
     return new Vector<2>(
       this.view.center.x + (screenX - this.width / 2) / this.view.zoom,
@@ -1609,7 +1173,6 @@ export class Editor {
     );
   }
 
-  /** Convert a world position (meters) to CSS pixels (relative to the canvas). */
   private worldToScreen(world: Vector<2>): [number, number] {
     return [
       this.width / 2 + (world.x - this.view.center.x) * this.view.zoom,
@@ -1622,19 +1185,11 @@ export class Editor {
     return [event.clientX - rect.left, event.clientY - rect.top];
   }
 
-  // Event handlers /////////////////////////////////////////////////////////
-
-  /**
-   * Recompute an element's keyframes in the sequence after an edit. The
-   * provisional element is not part of the sequence, so its keyframes must
-   * not be touched: only its start and end coordinates change.
-   */
   private updateElementKeyframes(element: Element) {
     if (this.isProvisionalElement(element)) return;
     this.sequence.updateElementKeyframes(element);
   }
 
-  /** Notify the host UI that the sequence changed. */
   private notifySequenceChange() {
     if (this.onSequenceChange) this.onSequenceChange();
   }
@@ -1646,7 +1201,6 @@ export class Editor {
 
     this.view.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, this.view.zoom * Math.pow(ZOOM_FACTOR, -event.deltaY)));
 
-    // Keep the world point under the cursor fixed while zooming.
     this.view.center = new Vector<2>(
       worldBefore.x - (screenX - this.width / 2) / this.view.zoom,
       worldBefore.y + (screenY - this.height / 2) / this.view.zoom,
@@ -1669,29 +1223,18 @@ export class Editor {
     if (event.button === 0) {
       const [screenX, screenY] = this.screenPosition(event);
 
-      // "view" mode: navigation only. The left button does nothing.
       if (this.mode === "view") return;
 
-      // "elements" mode: clicking any part of an element selects it. Clicking
-      // an endpoint control point starts dragging that point along the path;
-      // clicking the segment moves the whole element along the path. No
-      // path-editing actions are available here.
       if (this.mode !== "path") {
-        // The "+" button of the provisional element adds it to the sequence
-        // and opens the change-kind dialog (same dialog as the cog button).
         if (this.hitProvisionalAddButton(screenX, screenY)) {
           this.addProvisionalElement();
           return;
         }
-        // The "change kind" cog button takes priority over selecting/picking
-        // the element, but only actually does something when a callback is
-        // wired up (the host UI shows the kind picker).
         if (this.hitElementCogButton(screenX, screenY) && this.onElementChangeRequest) {
           const element = this.getElementDeleteButtonElement();
           if (element) this.onElementChangeRequest(element);
           return;
         }
-        // Delete button takes priority over selecting/picking the element.
         if (this.hitElementDeleteButton(screenX, screenY)) {
           const element = this.getElementDeleteButtonElement();
           if (element) {
@@ -1704,10 +1247,7 @@ export class Editor {
         }
         const element = this.pickElement(screenX, screenY);
         if (element) {
-          // Clicking on a real element discards the provisional one.
           if (!this.isProvisionalElement(element)) this.provisionalElement = null;
-          // The provisional element can be dragged but not selected, so the
-          // selected-element action buttons never target it.
           if (!this.isProvisionalElement(element)) this.selectElement(element, event.ctrlKey);
           const pointHit = this.pickElementControlPoint(screenX, screenY);
           if (pointHit?.element === element) {
@@ -1718,15 +1258,8 @@ export class Editor {
             this.startElementSegmentDrag(element, screenX, screenY);
           }
         } else {
-          // Clicking the path where no element exists places (or re-centers)
-          // the provisional element there. A drag starting anywhere else
-          // (outside the provisional element and the path) draws a selection
-          // rectangle for elements; a plain click there discards the
-          // provisional element.
           const u = this.pickPathCoordinate(screenX, screenY);
           if (u != null) {
-            // Create centered; a subsequent drag extends it from the pressed
-            // point to the cursor (works dragged backwards too).
             this.startProvisionalCreation(u);
           } else {
             this.isSelectingRect = true;
@@ -1754,13 +1287,8 @@ export class Editor {
             this.sequence.path.removeEndCurve();
           } else {
             const [curveBefore] = this.sequence.path.getCurvesAroundPoint(removable.point);
-            // Snapshot the axis and the element spans before the removal, so
-            // they can be re-based after the two curves around the joint
-            // merge into one.
             this.jointDeletionSnapshot = this.makeJointDeletionSnapshot(this.sequence.path.curves.indexOf(curveBefore));
             this.sequence.path.removePoint(removable.point);
-            // removePoint already recomputed the curve lengths: re-base the
-            // element spans on the new axis.
             this.remapElementsAfterCurveRemoval();
           }
           this.selected.clear();
@@ -1779,8 +1307,6 @@ export class Editor {
         if (curve) {
           const mid = curve.getHalfLengthCoordinate();
           this.sequence.path.cut(splitCurveIndex, mid);
-          // Split adds a joint and shifts the indices of the curves after it.
-          // Re-index the selection and keep both halves selected.
           const newSelected = new Set<number>();
           for (const idx of this.selectedCurves) {
             if (idx < splitCurveIndex) newSelected.add(idx);
@@ -1798,43 +1324,31 @@ export class Editor {
       if (picked) {
         const key = this.keyOf(picked.curveIndex, picked.pointKey);
         if (event.ctrlKey) {
-          // Ctrl + click toggles the point in the selection.
           if (this.selected.has(key)) this.selected.delete(key);
           else this.selected.add(key);
         } else if (!this.selected.has(key)) {
-          // Plain click selects only this point, unless it is already part of
-          // a multi-selection (keep the group).
           this.selected = new Set([key]);
         }
-        // Points and curves never share the selection: keeping any point
-        // selected drops the curve selection.
         if (this.selected.size > 0) this.selectedCurves.clear();
-        // Start dragging only if the clicked point remains in the selection.
         if (this.selected.has(key)) {
           this.isDraggingPoint = true;
           this.dragOrigin = this.sequence.path.curves[picked.curveIndex]?.[picked.pointKey].copy() ?? null;
           this.lastDragDelta = new Vector<2>(0, 0);
-          // Snapshot the element spans and the uniform axis before the first
-          // move step, but only for an anchor: a guide handle (p1, p2) does
-          // not change the joint geometry, so nothing has to be re-based.
           this.jointMoveSnapshot =
             picked.pointKey === "p0" || picked.pointKey === "p3"
               ? this.makeJointMoveSnapshot(picked.curveIndex, picked.pointKey)
               : null;
         }
       } else {
-        // Click on a curve line selects the curve.
         const curveIndex = this.pickCurve(screenX, screenY);
         if (curveIndex != null) {
           this.handleCurveSelection(curveIndex, event.ctrlKey);
-          // Start dragging the curve(s) if the clicked curve is selected.
           if (this.selectedCurves.has(curveIndex)) {
             this.isDraggingCurve = true;
             this.dragOrigin = this.screenToWorld(screenX, screenY);
             this.lastDragDelta = new Vector<2>(0, 0);
           }
         } else {
-          // Left drag on empty space draws a selection rectangle (no longer pans).
           this.isSelectingRect = true;
           this.rectDidMove = false;
           this.rectTargetsElements = false;
@@ -1859,9 +1373,6 @@ export class Editor {
       this.lastPanX = screenX;
       this.lastPanY = screenY;
 
-      // The world y-axis is flipped relative to the screen (screenToWorld,
-      // drawing), so grab-style panning needs opposite signs on x and y:
-      // drag right/down to move the content right/down.
       this.view.center = this.view.center.plus(new Vector<2>(-deltaX, deltaY).times(1 / this.view.zoom));
       this.draw();
       return;
@@ -1908,19 +1419,11 @@ export class Editor {
       const path = this.sequence.path;
       const currentGrab = this.snapCursorToPathAnywhere(world);
       if (currentGrab != null) {
-        // Real arc-length offset of the grabbed point from its position at
-        // drag start, clamped to the group's movement limits so its extreme
-        // ends stop against the path boundaries and unselected elements.
-        // arcLengthBetween returns 0 when its end is not after its start, so
-        // the magnitude is measured in the direction of the movement.
         const delta =
           (currentGrab as number) >= this.segmentDragGrabU
             ? path.arcLengthBetween(this.segmentDragGrabU as PathCoordinate, currentGrab as PathCoordinate)
             : -path.arcLengthBetween(currentGrab as PathCoordinate, this.segmentDragGrabU as PathCoordinate);
         const clamped = Math.min(Math.max(delta, this.segmentDragDeltaMin), this.segmentDragDeltaMax);
-        // Every element keeps its real length: its two control points move by
-        // the same real arc-length offset from their spans at drag start, so
-        // the whole selection moves rigidly along the path.
         for (const item of this.segmentDragItems) {
           item.element.start = path.moveAlongByArcLength(item.start0 as PathCoordinate, clamped);
           item.element.end = path.moveAlongByArcLength(item.end0 as PathCoordinate, clamped);
@@ -1935,8 +1438,6 @@ export class Editor {
     if (this.isDraggingCurve) {
       const [screenX, screenY] = this.screenPosition(event);
       if (!this.dragOrigin) return;
-      // Translate every selected curve by the change in delta, so the whole
-      // selection tracks the cursor exactly (no accumulation error).
       const world = this.screenToWorld(screenX, screenY);
       const delta = world.minus(this.dragOrigin);
       const change = delta.minus(this.lastDragDelta);
@@ -1948,7 +1449,6 @@ export class Editor {
     if (this.isDraggingPoint) {
       const [screenX, screenY] = this.screenPosition(event);
       if (this.selected.size === 1) {
-        // Single point: keep the original align-neighbours behaviour.
         const [ciStr, pkStr] = [...this.selected][0]!.split(":");
         const curveIndex = Number(ciStr);
         const pointKey = pkStr as ControlPointKey;
@@ -1962,16 +1462,10 @@ export class Editor {
         point.y = world.y;
         this.alignNeighbors(curveIndex, pointKey, delta);
         this.sequence.path.updateLength();
-        // An anchor drag changes the lengths of the curves around the joint,
-        // so the uniform axis moves under the element spans: re-base them
-        // (points keep their ratio within the two affected curves and their
-        // place on later curves). Guide handles do not move the axis.
         if (pointKey === "p0" || pointKey === "p3") this.remapElementsAfterJointMove();
         this.sequenceMutated = true;
         this.draw();
       } else if (this.dragOrigin) {
-        // Multiple points: translate each step by the change in delta, so the
-        // whole selection tracks the cursor exactly (no accumulation error).
         const world = this.screenToWorld(screenX, screenY);
         const delta = world.minus(this.dragOrigin);
         const change = delta.minus(this.lastDragDelta);
@@ -1981,16 +1475,9 @@ export class Editor {
     }
   }
 
-  /**
-   * Translate every selected point (and the flanking handles of selected
-   * anchors, so the path stays connected) by `delta`. Points are deduplicated
-   * with a set so a shared handle is moved exactly once.
-   */
   private translateGroup(delta: Vector<2>) {
     const curves = this.sequence.path.curves;
 
-    // Collect the keys that should move: every selected point plus the
-    // flanking handles of selected anchors (so the path stays connected).
     const moveKeys = new Set<string>();
     for (const key of this.selected) moveKeys.add(key);
     for (const key of this.selected) {
@@ -2006,10 +1493,6 @@ export class Editor {
       }
     }
 
-    // Apply the translation once per distinct point. A joint shared by two
-    // curves (one curve's p3 and the next curve's p0) is the same Vector
-    // object, so it can appear under several keys; dedupe by object identity
-    // so it is never moved twice.
     const moved = new Set<Vector<2>>();
     for (const key of moveKeys) {
       const point = curves[Number(key.split(":")[0])]?.[key.split(":")[1] as ControlPointKey];
@@ -2025,18 +1508,6 @@ export class Editor {
     this.draw();
   }
 
-  /**
-   * Translate every selected curve by `delta`: each curve's endpoints (p0,
-   * p3) and both control points (p1, p2) all move together with the same
-   * motion, so the whole edge slides without changing its shape. Shared joints
-   * are deduplicated by object identity so they are moved exactly once.
-   *
-   * To keep the path continuous, the supplementary control points of the
-   * neighbouring curves are translated too: the previous curve's p2 at the
-   * start joint and the next curve's p1 at the end joint. Moving them by the
-   * same delta as the joint keeps them collinear with it, so the derivative
-   * stays continuous (and unchanged) at the joints.
-   */
   private translateSelectedCurves(delta: Vector<2>) {
     const curves = this.sequence.path.curves;
 
@@ -2048,8 +1519,6 @@ export class Editor {
       moved.add(curve.p1);
       moved.add(curve.p2);
       moved.add(curve.p3);
-      // Supplementary control points of the neighbouring curves, if they exist,
-      // to keep the derivative continuous at the shared joints.
       if (curveIndex > 0) moved.add(curves[curveIndex - 1]!.p2);
       if (curveIndex < curves.length - 1) moved.add(curves[curveIndex + 1]!.p1);
     }
@@ -2064,7 +1533,6 @@ export class Editor {
     this.draw();
   }
 
-  /** Select the control points (or elements) inside the dragged rectangle. */
   private finishSelectionRectangle() {
     if (this.rectTargetsElements) {
       this.finishElementSelectionRectangle();
@@ -2096,18 +1564,12 @@ export class Editor {
     this.selectedCurves.clear();
   }
 
-  /**
-   * Select every element with at least one of its sampled points inside the
-   * dragged rectangle. The provisional element is not selectable.
-   */
   private finishElementSelectionRectangle() {
     const x0 = Math.min(this.rectStartX, this.rectEndX);
     const x1 = Math.max(this.rectStartX, this.rectEndX);
     const y0 = Math.min(this.rectStartY, this.rectEndY);
     const y1 = Math.max(this.rectStartY, this.rectEndY);
 
-    // Keep an added element only if a point actually falls in (or stays in)
-    // this rectangle, so ctrl + drag shrinks the selection as expected.
     const hits = new Set<Element>();
     if (this.rectAddToSelection) for (const element of this.selectedElements) hits.add(element);
     for (const element of this.sequence.elements) {
@@ -2122,7 +1584,6 @@ export class Editor {
     this.selectedCurves.clear();
   }
 
-  /** Select the anchor control points (p0, p3) of all curves, not the guides (p1, p2). */
   private selectAll() {
     const curves = this.sequence.path.curves;
     const keys: ControlPointKey[] = ["p0", "p3"];
@@ -2142,16 +1603,8 @@ export class Editor {
     }
   }
 
-  /**
-   * Snapshot taken when an anchor drag starts: the uniform axis (cumulated
-   * curve starts and lengths, curve i starts at the sum of the lengths of the
-   * curves 0..i-1) and the span of every element (the added ones plus the
-   * provisional one) as plain path coordinates, before the anchor moves.
-   */
   private makeJointMoveSnapshot(curveIndex: number, pointKey: "p0" | "p3") {
     const curves = this.sequence.path.curves;
-    // The curve whose end anchor is dragged. For the p0 of the first curve no
-    // before-curve exists: only the curve that starts at the joint moves.
     const jointCurveIndex = pointKey === "p3" ? curveIndex : curveIndex - 1;
     if (jointCurveIndex < 0 && curves.length === 0) return null;
 
@@ -2173,15 +1626,6 @@ export class Editor {
     return { jointCurveIndex, curveStarts, curveLengths, items };
   }
 
-  /**
-   * Re-base every element span recorded in the snapshot onto the uniform axis
-   * as it is after the last anchor move. Each endpoint moves to the same
-   * relative place within its containing curve: ratio preserved inside the
-   * two curves adjacent to the joint, and place on the own curve preserved on
-   * the later (geometrically unaffected) ones, whose start offset only shifts
-   * by the length change before them. The snapshot stays for the whole drag;
-   * it is cleared on mouse up (and when a new sequence is set).
-   */
   private remapElementsAfterJointMove() {
     const snapshot = this.jointMoveSnapshot;
     if (!snapshot) return;
@@ -2210,14 +1654,10 @@ export class Editor {
         newCurveStarts,
         newCurveLengths,
       ) as PathCoordinate;
-      // Recompute the keyframes of an added element from the new span (the
-      // provisional element is skipped there).
       this.updateElementKeyframes(item.element);
     }
   }
 
-  /** Cumulated curve starts and lengths of the current path, as the
-   * uniform axis on which element spans and path coordinates are defined. */
   private axisTables(): { curveStarts: number[]; curveLengths: number[] } {
     const curveStarts: number[] = [];
     const curveLengths: number[] = [];
@@ -2230,14 +1670,6 @@ export class Editor {
     return { curveStarts, curveLengths };
   }
 
-  /**
-   * Snapshot taken just before a joint is removed (the interior case of the
-   * delete button): the uniform axis (cumulated curve starts and lengths) and
-   * the span of every element (the added ones plus the provisional one) as
-   * plain path coordinates. `jointOldIndex` is the index of the first curve
-   * merged away (curveBefore of the removed joint); the merged curve replaces
-   * it and the next one at the same index.
-   */
   private makeJointDeletionSnapshot(jointOldIndex: number) {
     const { curveStarts, curveLengths } = this.axisTables();
 
@@ -2250,16 +1682,6 @@ export class Editor {
     return { jointOldIndex, curveStarts, curveLengths, items };
   }
 
-  /**
-   * Re-base every element span recorded in the snapshot onto the uniform axis
-   * as it is after the joint removal. A point inside the merged range (the
-   * two curves merged away) keeps its ratio measured from the first merged
-   * curve start over the whole merged range, so AP/AC == AP'/AC' after the
-   * merge. A point on a curve outside the merge keeps its place on its own
-   * curve: its length is unchanged, only its start offset shifts by the
-   * length change before it. The snapshot is one-shot: deletion happens
-   * once, so it is cleared here.
-   */
   private remapElementsAfterCurveRemoval() {
     const snapshot = this.jointDeletionSnapshot;
     if (!snapshot) return;
@@ -2285,51 +1707,28 @@ export class Editor {
         snapshot.jointOldIndex,
         2,
       ) as PathCoordinate;
-      // Recompute the keyframes of an added element from the new span (the
-      // provisional element is skipped there).
       this.updateElementKeyframes(item.element);
     }
     this.jointDeletionSnapshot = null;
   }
 
-  /**
-   * Keep the path continuous after a control point is dragged.
-   *
-   * Dragging an anchor (p0 or p3) translates the flanking handles together
-   * with it, all with the same motion: around a joint, the handle before the
-   * joint (previous curve's p2 for a p0, this curve's p2 for a p3) and the
-   * handle after it (this curve's p1 for a p0, next curve's p1 for a p3) keep
-   * their offset to the anchor unchanged. This preserves the derivative at the
-   * join. Dragging p1 aligns the previous curve's end handle (p2) about the
-   * shared joint so the two handles stay collinear, with the same length as
-   * the dragged handle. Dragging p2 does the same on the other side: the next
-   * curve's start handle (p1) is aligned about the shared joint with the same
-   * length. The two handles about a joint always stay collinear and of equal
-   * length.
-   */
   private alignNeighbors(curveIndex: number, pointKey: ControlPointKey, delta: Vector<2>) {
     const curves = this.sequence.path.curves;
     const curve = curves[curveIndex];
     if (!curve) return;
 
     if (pointKey === "p0" || pointKey === "p3") {
-      // Anchor: translate the flanking handle of this curve.
       if (pointKey === "p0") curve.p1 = curve.p1.plus(delta);
       else curve.p2 = curve.p2.plus(delta);
 
-      // And the handle of the neighbouring curve on the other side.
       if (pointKey === "p0" && curveIndex > 0) {
         curves[curveIndex - 1]!.p2 = curves[curveIndex - 1]!.p2.plus(delta);
       } else if (pointKey === "p3" && curveIndex < curves.length - 1) {
         curves[curveIndex + 1]!.p1 = curves[curveIndex + 1]!.p1.plus(delta);
       }
     } else if (pointKey === "p1" && curveIndex > 0) {
-      // Handle: mirror the previous curve's end handle (p2) about the joint,
-      // with the same length as the dragged handle.
       curves[curveIndex - 1]!.alignEnd(curve, curve.p1.minus(curve.p0).length());
     } else if (pointKey === "p2" && curveIndex < curves.length - 1) {
-      // Handle: mirror the next curve's start handle (p1) about the joint,
-      // with the same length as the dragged handle.
       curves[curveIndex + 1]!.alignStart(curve, curve.p2.minus(curve.p3).length());
     }
   }
@@ -2339,8 +1738,6 @@ export class Editor {
       if (this.rectDidMove) {
         this.finishSelectionRectangle();
       } else if (this.rectTargetsElements) {
-        // A plain click on empty space (not the start of a drag) discards the
-        // provisional element and drops the element selection.
         this.provisionalElement = null;
         this.selectedElements.clear();
       }
@@ -2356,7 +1753,6 @@ export class Editor {
     this.dragElement = null;
     this.dragOrigin = null;
     this.lastDragDelta = new Vector<2>(0, 0);
-    // A drag mutated the sequence: notify once on mouse up, not per move.
     if (this.sequenceMutated) {
       this.sequenceMutated = false;
       this.notifySequenceChange();
@@ -2378,21 +1774,6 @@ export class Editor {
   }
 }
 
-/**
- * Uniform path coordinate done where a coordinate `oldU` lands after an
- * anchor joint moved, given the uniform axis before (old curve starts and
- * lengths) and after (new curve starts and lengths) the move.
- *
- * The containing old curve is found with the snapshot tables (the last entry
- * wins at and after its end, so a point exactly at a joint or at the path end
- * maps into the last reached curve). A zero-length old curve gives ratio 0.
- * The result, `newCurveStart(k) + (oldU - oldCurveStart(k)) / oldCurveLength(k)
- * * newCurveLength(k)`, keeps the ratio within the curve: this preserves the
- * position on the curve ending at the joint, on the one starting at it, and
- * (because an unaffected curve keeps its length, only its start offset
- * shifts) the place on every later curve. The result is clamped to
- * [0, new total length].
- */
 export function remapUniformAtJoint(
   oldU: number,
   oldCurveStarts: number[],
@@ -2406,8 +1787,6 @@ export function remapUniformAtJoint(
 
   const newTotal = newCurveStarts[newCount - 1]! + (newCurveLengths[newCount - 1] ?? 0);
 
-  // Index of the old curve containing oldU (at and after its end, the last
-  // reached curve wins, so boundary points stay valid).
   let index = 0;
   for (let i = 0; i < oldCount; i++) {
     if (oldU >= oldCurveStarts[i]!) index = i;
@@ -2422,24 +1801,6 @@ export function remapUniformAtJoint(
   return Math.max(0, Math.min(newTotal, newStart + ratio * newLen));
 }
 
-/**
- * Uniform path coordinate of where a coordinate `oldU` lands after a joint
- * removal, given the uniform axis before (old curve starts and lengths) and
- * after (new curve starts and lengths) the removal, and the range of old
- * curves merged into one: `mergedOldIndex` is the index of the first curve
- * merged away and `mergedOldCount` the number of old curves merged (2 for
- * `removePoint`).
- *
- * The containing old curve is found with the old tables (the last entry wins
- * at and after its end, so a point exactly at a joint or at the path end maps
- * into the last reached curve). A point on the merged range keeps its ratio
- * measured from the first merged curve start over the whole merged length
- * (the sum of the merged old lengths), so AP/AC == AP'/AC' over the merged
- * curve. A point on a curve outside the merge keeps the ratio within its own
- * curve: unchanged before the merge, and shifted (with its start offset) on
- * the later curves, whose lengths do not change. A zero-length old curve
- * gives ratio 0. The result is clamped to [0, new total length].
- */
 export function remapUniformAtRemoval(
   oldU: number,
   oldCurveStarts: number[],
@@ -2455,15 +1816,11 @@ export function remapUniformAtRemoval(
 
   const newTotal = newCurveStarts[newCount - 1]! + (newCurveLengths[newCount - 1] ?? 0);
 
-  // Index of the old curve containing oldU (at and after its end, the last
-  // reached curve wins, so boundary points stay valid).
   let index = 0;
   for (let i = 0; i < oldCount; i++) {
     if (oldU >= oldCurveStarts[i]!) index = i;
   }
 
-  // Ratio within the point's own curve, or within the whole merged range
-  // when the point is on a curve that merges away.
   const onMerged = index >= mergedOldIndex && index < mergedOldIndex + mergedOldCount;
   const baseStart = onMerged ? oldCurveStarts[mergedOldIndex]! : oldCurveStarts[index]!;
   let baseLength = 0;
@@ -2474,9 +1831,6 @@ export function remapUniformAtRemoval(
   }
   const ratio = baseLength > 0 ? (oldU - baseStart) / baseLength : 0;
 
-  // New curve index: old curves before the merge keep their index, the
-  // merged range maps to the first merged curve, and the later curves shift
-  // down by one per extra merged curve (mergedOldCount - 1).
   const newCurveIndex = index < mergedOldIndex ? index : onMerged ? mergedOldIndex : index - (mergedOldCount - 1);
   const clampedIndex = Math.min(newCurveIndex, newCount - 1);
   const newStart = newCurveStarts[clampedIndex] ?? 0;
@@ -2484,7 +1838,6 @@ export function remapUniformAtRemoval(
   return Math.max(0, Math.min(newTotal, newStart + ratio * newLen));
 }
 
-/** Shortest squared distance from point p to the segment [a, b]. */
 function distanceToSegment(p: Vector<2>, a: Vector<2>, b: Vector<2>): number {
   const ab = b.minus(a);
   const lengthSquared = ab.lengthSquared();

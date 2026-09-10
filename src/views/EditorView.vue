@@ -25,34 +25,21 @@ const editModeOptions = [
   { label: "Elements", value: "elements" },
 ];
 const editMode = ref<EditMode>("view");
-/** When checked, foot traces and elements are scaled up when zoomed out. */
 const scaleElements = ref(true);
 
-/** Overlay state for the "choose element" picker. */
 const elementChangeOpen = ref(false);
-/** The single selected element we are changing the kind of. A shallow ref
- * keeps the raw element identity so it can be found in the sequence. */
 const elementToChange = shallowRef<Element | null>(null);
-/** Branch chosen on step 1. "glide" selects static glide elements, "stroke"
- * the crossed/normal dynamic stroke elements, "turn" one-foot turns. */
 const elementChangeBranch = ref<"glide" | "stroke" | "turn" | null>(null);
-/** Chosen values along the glide path: side, direction and, for a one-foot
- * glide, the edge. A two-foot glide has no edge step. */
 const glidePath = ref<string[]>([]);
-/** Chosen values along the stroke path: side, direction, edge, crossed/normal. */
 const strokePath = ref<string[]>([]);
-/** Chosen values along the one-foot turn path: group, side, direction, edge. */
 const turnPath = ref<string[]>([]);
 
-/** Step 1 choices: the element kind. Clicking one goes to the next step. */
 const elementKindGroupOptions = [
   { label: "Glide", value: "glide" },
   { label: "Stroke", value: "stroke" },
   { label: "One-foot turn", value: "turn" },
 ];
 
-/** Choice levels of the glide path, after the kind step: side, direction,
- * edge. A two-foot glide is neither, so it skips the edge step. */
 const glideLevelOptions: { label: string; value: string }[][] = [
   [
     { label: "Left", value: "Left" },
@@ -70,9 +57,6 @@ const glideLevelOptions: { label: string; value: string }[][] = [
   ],
 ];
 
-/** Choice levels of the stroke path, after the kind step: side, direction,
- * edge, crossed/normal. Selecting the crossed/normal value completes the
- * element. */
 const strokeLevelOptions: { label: string; value: string }[][] = [
   [
     { label: "Left", value: "Left" },
@@ -93,8 +77,6 @@ const strokeLevelOptions: { label: string; value: string }[][] = [
   ],
 ];
 
-/** Choice levels of the one-foot turn path, after the kind step: group,
- * side, direction, edge. Selecting the edge completes the element. */
 const turnLevelOptions: { label: string; value: string }[][] = [
   [
     { label: "Three-turn", value: "ThreeTurn" },
@@ -114,28 +96,19 @@ const turnLevelOptions: { label: string; value: string }[][] = [
   ],
 ];
 
-/** The current turn step selects the final edge when the path is full. */
 const turnStepFinal = computed(() => turnPath.value.length >= turnLevelOptions.length);
 
-/** Options shown at the current depth of the turn path. */
 const currentTurnOptions = computed(() => (turnStepFinal.value ? [] : turnLevelOptions[turnPath.value.length]));
 
-/** The current glide step selects the final direction when the glide is
- * two-foot, or the final edge for a one-foot glide. */
 const glideSideTwoFoot = computed(() => glidePath.value[0] === "TwoFoot");
 const glideStepFinal = computed(() => glidePath.value.length >= (glideSideTwoFoot.value ? 2 : 3));
 
-/** Options shown at the current depth of the glide path. */
 const currentGlideOptions = computed(() => (glideStepFinal.value ? [] : glideLevelOptions[glidePath.value.length]));
 
-/** The current stroke step selects the final crossed/normal choice when the
- * path is full. */
 const strokeStepFinal = computed(() => strokePath.value.length >= strokeLevelOptions.length);
 
-/** Options shown at the current depth of the stroke path. */
 const currentStrokeOptions = computed(() => (strokeStepFinal.value ? [] : strokeLevelOptions[strokePath.value.length]));
 
-/** Chosen labels to show as tags at the top of the dialog. */
 const chosenLabels = computed<string[]>(() => {
   if (!elementChangeBranch.value) return [];
   if (elementChangeBranch.value === "glide") {
@@ -162,10 +135,8 @@ const chosenLabels = computed<string[]>(() => {
   return labels;
 });
 
-/** A help line: one or more input gestures shown as pills, plus a description. */
 type HelpItem = { keys: string[]; description: string };
 
-/** Help commands that are actually usable in the current edit mode. */
 const helpItems = computed<HelpItem[]>(() =>
   editMode.value === "view"
     ? [
@@ -202,13 +173,11 @@ let editor: Editor | null = null;
 
 const store = useSequenceEditorStore();
 
-/** Whether the user confirmed the Clear action in the dialog. */
 const clearOpen = ref(false);
 
 watch(editMode, (mode) => {
   if (editor) {
     editor.mode = mode;
-    // Unselect everything when switching modes (e.g. path -> elements).
     editor.clearSelection();
     editor.draw();
   }
@@ -226,21 +195,15 @@ watch(
 
 onMounted(() => {
   if (!canvasRef.value) return;
-  // The state comes from the store: it was loaded from local storage on startup.
   editor = new Editor(canvasRef.value, store.getSequence());
 
-  // Open the element kind picker when the user clicks the cog button on the
-  // single selected element.
   editor.onElementChangeRequest = (element) => {
     elementToChange.value = element;
-    // Start the step-by-step flow at the kind selection.
     elementChangeBranch.value = null;
     glidePath.value = [];
     turnPath.value = [];
     elementChangeOpen.value = true;
   };
-  // Every sequence mutation (added or removed points, curves and elements,
-  // finished drags) is persisted to local storage right away.
   editor.onSequenceChange = () => store.saveToStorage();
 });
 
@@ -285,10 +248,6 @@ function saveFile() {
   URL.revokeObjectURL(url);
 }
 
-/**
- * Replace the element being edited with a new element of the given kind.
- * The element keeps its foot key, span and loop shift; only its type changes.
- */
 function changeElementKind(kind: string) {
   if (!editor || !elementToChange.value) return;
   const current = elementToChange.value as Element;
@@ -298,12 +257,10 @@ function changeElementKind(kind: string) {
   sequence.replaceElement(current, replacement);
   editor.replaceSelectedElement(current, replacement);
   elementToChange.value = replacement;
-  // The sequence changed, so the persisted state must be updated too.
   store.saveToStorage();
   editor.draw();
 }
 
-/** Confirmed clear: put back the default sequence and update local storage. */
 function onClearConfirmed() {
   store.clear();
   editor?.setSequence(store.getSequence());
@@ -314,7 +271,6 @@ function closeClear() {
   clearOpen.value = false;
 }
 
-/** Choose a kind on step 1 and go to the next step. */
 function chooseElementBranch(branch: "glide" | "stroke" | "turn") {
   elementChangeBranch.value = branch;
   glidePath.value = [];
@@ -322,16 +278,12 @@ function chooseElementBranch(branch: "glide" | "stroke" | "turn") {
   turnPath.value = [];
 }
 
-/** Choose one value of the glide path. A two-foot glide completes at the
- * direction step (two-foot glides are neither); a one-foot glide completes
- * at the edge step. */
 function onGlideChange(value: string) {
   const next = [...glidePath.value, value];
   if (next.length < (next[0] === "TwoFoot" ? 2 : 3)) {
     glidePath.value = next;
     return;
   }
-  // next holds side, direction and, for a one-foot glide, the edge.
   const [side, direction, edge] = next;
   const type =
     side === "TwoFoot" ? `Both${direction}Glide` : `${side}${direction}${edge === "Neither" ? "" : edge}Glide`;
@@ -339,36 +291,28 @@ function onGlideChange(value: string) {
   closeElementChange();
 }
 
-/** Choose one value of the stroke path. The final crossed/normal selection
- * completes the path: it builds the element and closes the dialog. */
 function onStrokeChange(value: string) {
   const next = [...strokePath.value, value];
   if (next.length < strokeLevelOptions.length) {
     strokePath.value = next;
     return;
   }
-  // next holds side, direction, edge and the crossed/normal choice in that
-  // order.
   const [side, direction, edge, crossed] = next;
   changeElementKind(`${side}${crossed}${direction}${edge === "Neither" ? "" : edge}Glide`);
   closeElementChange();
 }
 
-/** Choose one value of the one-foot turn path. The final edge selection
- * completes the path: it builds the element and closes the dialog. */
 function onTurnChange(value: string) {
   const next = [...turnPath.value, value];
   if (next.length < turnLevelOptions.length) {
     turnPath.value = next;
     return;
   }
-  // next holds group, side, direction, edge in that order.
   const [group, side, direction, edge] = next;
   changeElementKind(`${side}${direction}${edge}${group}`);
   closeElementChange();
 }
 
-/** Go back from the current step to the previous one. */
 function previousElementChangeStep() {
   if (elementChangeBranch.value === "glide" && glidePath.value.length > 0) {
     glidePath.value = glidePath.value.slice(0, -1);
@@ -392,7 +336,6 @@ function closeElementChange() {
 
 <template>
   <div class="editor-view">
-    <!-- Fixed-width sidebar, flush with the left edge of the screen. -->
     <aside class="editor-view__sidebar">
       <Card class="editor-view__panel">
         <template #title>Sequence editor</template>
@@ -438,12 +381,10 @@ function closeElementChange() {
       </Card>
     </aside>
 
-    <!-- The canvas takes all remaining horizontal space. -->
     <div class="editor-view__canvas">
       <canvas ref="canvasRef" class="editor-view__canvas-element"></canvas>
     </div>
 
-    <!-- Overlay to choose an element step by step: first the kind, then the choices. -->
     <Dialog
       v-model:visible="elementChangeOpen"
       header="Element selection"
@@ -451,7 +392,6 @@ function closeElementChange() {
       class="editor-view__element-dialog"
       @hide="closeElementChange"
     >
-      <!-- Step 1: element kind. Clicking a kind goes to the next step. -->
       <template v-if="!elementChangeBranch">
         <Listbox
           :model-value="elementChangeBranch"
@@ -468,7 +408,6 @@ function closeElementChange() {
           <Tag v-for="label in chosenLabels" :key="label" :value="label" />
         </div>
 
-        <!-- Glide branch: side, then direction, then edge for one-foot glides. -->
         <Listbox
           v-if="elementChangeBranch === 'glide'"
           :model-value="null"
@@ -479,7 +418,6 @@ function closeElementChange() {
           @change="(event) => onGlideChange(event.value)"
         />
 
-        <!-- Stroke branch: side, then direction, then edge, then crossed/normal. -->
         <Listbox
           v-else-if="elementChangeBranch === 'stroke'"
           :model-value="null"
@@ -490,7 +428,6 @@ function closeElementChange() {
           @change="(event) => onStrokeChange(event.value)"
         />
 
-        <!-- One-foot turn branch: group, then side, then direction, then edge. -->
         <Listbox
           v-else
           :model-value="null"
@@ -514,7 +451,6 @@ function closeElementChange() {
       </template>
     </Dialog>
 
-    <!-- Confirm dialog for the Clear action. -->
     <Dialog
       v-model:visible="clearOpen"
       header="Clear sequence"
@@ -532,7 +468,6 @@ function closeElementChange() {
 </template>
 
 <style scoped lang="scss">
-/* Minimal structural layout only; visual styling comes from OpenVue. */
 .editor-view {
   display: flex;
   flex: 1;
@@ -541,7 +476,6 @@ function closeElementChange() {
 }
 
 .editor-view__sidebar {
-  // Fixed width regardless of the viewport (not a percentage).
   flex: 0 0 360px;
   width: 360px;
   height: 100%;

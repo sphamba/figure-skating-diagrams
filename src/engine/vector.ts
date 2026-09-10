@@ -4,19 +4,17 @@ type VectorConstructor<Vector> = new (...args: number[]) => Vector;
 
 export class Vector<Size extends number> {
   data: number[];
-  readonly size: Size; // Store this value to not allow implicit casting between vectors of different sizes
+  readonly size: Size;
 
   constructor(...args: number[]) {
     this.data = [...args];
     this.size = this.data.length as Size;
   }
 
-  /** Serialize to a plain JSON object. Normalizes -0 to 0 (JSON cannot encode -0). */
   toJSON(): { data: number[] } {
     return { data: this.data.map((value) => (value === 0 ? 0 : value)) };
   }
 
-  /** Reconstruct a Vector from serialized data. */
   static fromJSON(json: { data: number[] }): Vector<number> {
     return new Vector(...json.data);
   }
@@ -64,17 +62,14 @@ export class Vector<Size extends number> {
     return new (this.constructor as VectorConstructor<this>)(...this.data);
   }
 
-  /** Add a vector */
   plus(v: this): this {
     return new (this.constructor as VectorConstructor<this>)(...this.data.map((value, i) => value + v.data[i]!));
   }
 
-  /** Subtract a vector */
   minus(v: this): this {
     return new (this.constructor as VectorConstructor<this>)(...this.data.map((value, i) => value - v.data[i]!));
   }
 
-  /** Multiply by a scalar */
   times(s: number): this {
     return new (this.constructor as VectorConstructor<this>)(...this.data.map((value) => value * s));
   }
@@ -87,7 +82,6 @@ export class Vector<Size extends number> {
     return new Vector<3>(this.y * v.z - this.z * v.y, this.z * v.x - this.x * v.z, this.x * v.y - this.y * v.x);
   }
 
-  /** Dot product */
   dot(v: this): number {
     return this.data.reduce((sum, value, i) => sum + value * v.data[i]!, 0);
   }
@@ -122,7 +116,6 @@ export class Vector<Size extends number> {
     }
   }
 
-  /** @param angle in radians */
   private rotate2D(angle: number): Vector<2> {
     const c = Math.cos(angle);
     const s = Math.sin(angle);
@@ -140,7 +133,3 @@ export class Vector<Size extends number> {
 export function getUnitVectorFromAngle(angle: number): Vector<2> {
   return new Vector<2>(Math.cos(angle), Math.sin(angle));
 }
-
-// let a = new Vector<2>(1, 2);
-// let b = new Vector<3>(1, 2, 3);
-// let c = a.plus(b);

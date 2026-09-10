@@ -4,18 +4,14 @@ import { useRoute } from "vue-router";
 import Button from "openvue/button";
 import Menubar from "openvue/menubar";
 
-// Full-bleed routes (e.g. the editor) fill the whole page without the centered
-// content container, so the editor can be flush with the screen edges.
 const route = useRoute();
 const isFullBleed = computed(() => Boolean(route.meta.fullBleed));
 
-// Populate the top navigation bar with router links.
 const items = ref([
   { label: "Home", icon: "pi pi-home", route: "/" },
   { label: "Editor", icon: "pi pi-pencil", route: "/editor" },
 ]);
 
-// Composition API: expose the current year for the footer.
 const year = new Date().getFullYear();
 </script>
 
@@ -43,7 +39,6 @@ const year = new Date().getFullYear();
     </header>
 
     <main class="main-layout__content" :class="{ 'main-layout__content--full-bleed': isFullBleed }">
-      <!-- Child routes (e.g. HomeView) render here. -->
       <router-view />
     </main>
 
@@ -54,7 +49,6 @@ const year = new Date().getFullYear();
 </template>
 
 <style scoped lang="scss">
-// Minimal structural layout only; all visual styling comes from OpenVue.
 .main-layout {
   display: flex;
   min-height: 100vh;

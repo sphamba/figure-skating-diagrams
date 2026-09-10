@@ -19,7 +19,6 @@ export type FootData = PositionAndOrientation3D & {
   contactPoint?: number; // 0: heel, 1: toe
 };
 
-// JSON shapes for keyframe (de)serialization
 interface VectorJSON {
   data: number[];
 }
@@ -52,18 +51,7 @@ export interface TimeKeyframeJSON {
   transitionOut: Transition;
 }
 
-/**
- * A keyframe lives on an axis and stores data for that axis.
- *
- * The axis is an abstract coordinate. It is not always time.
- *
- * Part keyframes (foot, hips) sit on the path coordinate axis (u).
- * Clock keyframes (time) sit on the time axis (t) and store the path
- * coordinate as data. See Sequence.getTimeFromPathCoordinate.
- */
 class Keyframe<DataType extends KeyframeData, Coordinate extends number = number> {
-  /** Coordinate of the keyframe on its axis. For clock keyframes this is
-   *  a Time. For part keyframes this is a PathCoordinate. */
   coordinate: Coordinate;
   data: DataType;
   transitionIn: Transition;
@@ -83,7 +71,6 @@ class Keyframe<DataType extends KeyframeData, Coordinate extends number = number
 }
 
 export class FootKeyframe extends Keyframe<FootData, PathCoordinate> {
-  /** Serialize to a plain JSON object. */
   toJSON(): FootKeyframeJSON {
     return {
       kind: "FootKeyframe",
@@ -98,7 +85,6 @@ export class FootKeyframe extends Keyframe<FootData, PathCoordinate> {
     };
   }
 
-  /** Reconstruct a FootKeyframe from serialized data. */
   static fromJSON(json: FootKeyframeJSON): FootKeyframe {
     const data: FootData = {};
     if (json.data?.position) data.position = Vector.fromJSON(json.data.position) as Vector<3>;
@@ -109,7 +95,6 @@ export class FootKeyframe extends Keyframe<FootData, PathCoordinate> {
 }
 
 export class HipsKeyframe extends Keyframe<PositionAndOrientation3D, PathCoordinate> {
-  /** Serialize to a plain JSON object. */
   toJSON(): HipsKeyframeJSON {
     return {
       kind: "HipsKeyframe",
@@ -123,7 +108,6 @@ export class HipsKeyframe extends Keyframe<PositionAndOrientation3D, PathCoordin
     };
   }
 
-  /** Reconstruct a HipsKeyframe from serialized data. */
   static fromJSON(json: HipsKeyframeJSON): HipsKeyframe {
     const data: PositionAndOrientation3D = {};
     if (json.data?.position) data.position = Vector.fromJSON(json.data.position) as Vector<3>;
@@ -133,7 +117,6 @@ export class HipsKeyframe extends Keyframe<PositionAndOrientation3D, PathCoordin
 }
 
 export class TimeKeyframe extends Keyframe<TimeData, Time> {
-  /** Serialize to a plain JSON object. */
   toJSON(): TimeKeyframeJSON {
     return {
       kind: "TimeKeyframe",
@@ -146,7 +129,6 @@ export class TimeKeyframe extends Keyframe<TimeData, Time> {
     };
   }
 
-  /** Reconstruct a TimeKeyframe from serialized data. */
   static fromJSON(json: TimeKeyframeJSON): TimeKeyframe {
     return new TimeKeyframe(
       json.coordinate as Time,

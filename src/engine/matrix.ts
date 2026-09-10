@@ -17,7 +17,6 @@ export class Matrix<NRows extends number, NColumns extends number> {
     return new (this.constructor as MatrixConstructor<this>)(...this.columns);
   }
 
-  /** Multiply by a scalar, a Vector, or a Matrix */
   times<NColumnsOther extends number>(
     other: number | Vector<NColumns> | Matrix<NColumns, NColumnsOther>,
   ): this | Vector<NRows> | Matrix<NRows, NColumnsOther> {

@@ -3,7 +3,6 @@ import { Vector } from "./vector.js";
 
 export type Curvilinear = number & { readonly __tag: unique symbol };
 
-/** Axis-aligned world-space rectangle, used for viewport culling. */
 export type AxisRect = {
   minX: number;
   maxX: number;
@@ -11,38 +10,17 @@ export type AxisRect = {
   maxY: number;
 };
 
-/**
- * Curvilinear increment for arc-length estimation and the uniform-to-
- * curvilinear lookup table.
- *
- * This must be fine enough that the piecewise-linear interpolation in
- * `getCurvilinearCoordFromUniform` stays accurate on curves whose speed varies
- * strongly along their length (e.g. a path made of curves of very different
- * lengths/shapes). A coarse step makes `Path.getPosition` return slightly wrong
- * points, so an element (traced along the path by fixed arc-length increments)
- * appears to change length as it is dragged across such curves. 0.001 evenly
- * divides 1, which keeps `uniformWithinCurve` consistent with the table.
- */
-const ds = 0.001 as Curvilinear;
-/** Number of integration steps per curve used for accurate arc-length lookup. */
-const ARC_LENGTH_SAMPLES = 128;
+const ds = 0.001 as Curvilinear; // fine curvilinear step for arc-length sampling
+const ARC_LENGTH_SAMPLES = 128; // integration steps per curve for the arc-length lookup
 
 export class Curve {
   p0: Vector<2>;
   p1: Vector<2>;
   p2: Vector<2>;
   p3: Vector<2>;
-  // Useful for conversion between curvilinear and uniform coordinates
   uniformCoordinates: number[];
   length: number;
 
-  /** Cubic Bezier curve, to desrcibe path of foot/body center
-   * 0--(1)-(2)--3
-   * @param p0 - Starting point
-   * @param p1 - First control point
-   * @param p2 - Second control point
-   * @param p3 - Ending point
-   */
   constructor(p0: Vector<2>, p1: Vector<2>, p2: Vector<2>, p3: Vector<2>) {
     this.p0 = p0;
     this.p1 = p1;
@@ -54,8 +32,6 @@ export class Curve {
     this.updateLength();
   }
 
-  /** Serialize to a plain JSON object. The control points are flat arrays
-   * of coordinates: p0: [x, y]. */
   toJSON(): { p0: number[]; p1: number[]; p2: number[]; p3: number[] } {
     return {
       p0: this.p0.toJSON().data,
@@ -65,8 +41,6 @@ export class Curve {
     };
   }
 
-  /** Reconstruct a Curve from serialized data: p0: [x, y]. Also accepts the
-   * former wrapped shape p0: { data: [x, y] }. */
   static fromJSON(json: {
     p0: number[] | { data: number[] };
     p1: number[] | { data: number[] };
@@ -84,10 +58,9 @@ export class Curve {
 
   updateLength() {
     this.length = 0;
-    this.uniformCoordinates = [0]; // Cumulated length
+    this.uniformCoordinates = [0];
 
     for (let s = 0 as Curvilinear; s < 1; s = (s + ds) as Curvilinear) {
-      // Have correct increment for last segment
       const dsCorrected = Math.min(ds, 1 - s);
 
       const derivative = this.getDerivative(s);
@@ -98,13 +71,11 @@ export class Curve {
     }
   }
 
-  /** @param u - Uniform coordinate, from 0 to curve length */
   getCurvilinearCoordFromUniform(u: number): Curvilinear {
     if (u >= this.length) return 1 as Curvilinear;
 
-    // Find which interval contains u
     const upper = this.uniformCoordinates.findIndex((x: number) => x > u);
-    if (upper <= 0) return 0 as Curvilinear; // Defensive: should not occur for u in [0, length)
+    if (upper <= 0) return 0 as Curvilinear;
 
     const lower = upper - 1;
     const uUpper = this.uniformCoordinates[upper]!;
@@ -115,13 +86,6 @@ export class Curve {
     return (((u - uLower) / (uUpper - uLower)) * (sUpper - sLower) + sLower) as Curvilinear;
   }
 
-  /**
-   * Curvilinear coordinate at which the curve has reached half of its real
-   * arc length. The arc length is integrated at a fine resolution (unlike the
-   * coarse `uniformCoordinates` sampling used by `getCurvilinearCoordFromUniform`),
-   * then a binary search finds the parameter whose covered length equals half
-   * the total, so the result is accurate even for strongly non-uniform curves.
-   */
   getHalfLengthCoordinate(): Curvilinear {
     const target = this.arcLength(0 as Curvilinear, 1 as Curvilinear) / 2;
 
@@ -135,17 +99,9 @@ export class Curve {
     return ((lo + hi) / 2) as Curvilinear;
   }
 
-  /** Arc length of the curve between the curvilinear coordinates `a` and `b`. */
   arcLength(a: Curvilinear, b: Curvilinear): number {
     if (b <= a) return 0;
-    // Composite Simpson's rule over the (smooth) speed along the curve. On a
-    // cubic Bezier the speed |dP/dt| is smooth, so Simpson converges far faster
-    // than the trapezoidal rule and keeps the integration error (and the
-    // resulting non-additivity between adjacent sub-intervals) far below what
-    // the eye can notice. That additivity is what lets an element dragged along
-    // the path keep its real length constant: the walk used to place its two
-    // control points and the measurement used to verify its length agree.
-    const steps = ARC_LENGTH_SAMPLES; // number of even sub-intervals
+    const steps = ARC_LENGTH_SAMPLES;
     const h = (b - a) / steps;
     let sum = this.getDerivative(a).length() + this.getDerivative(b).length();
     for (let i = 1; i < steps; i++) {
@@ -155,24 +111,11 @@ export class Curve {
     return (sum * h) / 3;
   }
 
-  /**
-   * Inverse of `getCurvilinearCoordFromUniform`: map a curvilinear coordinate
-   * back to the uniform (approximate arc-length) coordinate, using the same
-   * piecewise-linear interpolation and the same sample spacing so that the
-   * round trip `u -> s -> u` is the identity.
-   *
-   * Keeping the forward and inverse mappings consistent is what lets an element
-   * traced along the path by fixed arc-length increments keep its real length
-   * constant when it is dragged across curves whose speed varies strongly.
-   */
   getUniformCoordFromCurvilinear(s: Curvilinear): number {
     if (s <= 0) return 0;
     if (s >= 1) return this.length;
     const n = this.uniformCoordinates.length;
     if (n === 0) return 0;
-    // The uniform-coordinate table stores one sample every 0.001 of the
-    // parameter (see the module-level `ds` used by `updateLength` and
-    // `getCurvilinearCoordFromUniform`), so index i sits at t = i * ds.
     const ds = 0.001;
     const pos = s / ds;
     const i0 = Math.min(n - 1, Math.floor(pos));
@@ -182,7 +125,6 @@ export class Curve {
     return u0 + (u1 - u0) * (pos - i0);
   }
 
-  /** @param s - Curvilinear coordinate */
   getPosition(s: Curvilinear): Vector<2> {
     const r = 1 - s;
     return this.p0
@@ -192,7 +134,6 @@ export class Curve {
       .plus(this.p3.times(s ** 3));
   }
 
-  /** @param s - Curvilinear coordinate */
   getDerivative(s: Curvilinear): Vector<2> {
     const r = 1 - s;
     const subValue1 = this.p1.minus(this.p0);
@@ -205,7 +146,6 @@ export class Curve {
       .plus(subValue3.times(3 * s ** 2));
   }
 
-  /** @param s - Curvilinear coordinate */
   getSecondDerivative(s: Curvilinear): Vector<2> {
     const r = 1 - s;
     const subValue1 = this.p2.minus(this.p1.times(2)).plus(this.p0);
@@ -214,33 +154,14 @@ export class Curve {
     return subValue1.times(6 * r).plus(subValue2.times(6 * s));
   }
 
-  /**
-   * Signed curvature of the curve at the given curvilinear coordinate:
-   * (x' y'' - y' x'') / |D1|^3, from the first and second derivative methods.
-   * Positive when the curve bends towards the right-hand rotation (CCW
-   * normal) of its tangent, so the centre of curvature lies on that side.
-   *
-   * @param s - Curvilinear coordinate
-   */
   getCurvature(s: Curvilinear): number {
     const d1 = this.getDerivative(s);
     const d2 = this.getSecondDerivative(s);
     const speed = d1.length();
-    if (speed === 0) return 0; // A zero tangent has no curvature direction
+    if (speed === 0) return 0;
     return (d1.x * d2.y - d1.y * d2.x) / speed ** 3;
   }
 
-  /**
-   * Whether a point lies inside the axis-aligned bounding box that encloses
-   * all four control points, expanded by a tolerance on every side.
-   *
-   * This is a fast rejection test used to filter out curves that cannot be
-   * close to the point (a Bezier curve is always contained in the bounding
-   * box of its control points).
-   *
-   * @param point - The point to test.
-   * @param tolerance - Extra margin around the box, in the same units as the point.
-   */
   isPointInBoundingBox(point: Vector<2>, tolerance = 0): boolean {
     const xs = [this.p0.x, this.p1.x, this.p2.x, this.p3.x];
     const ys = [this.p0.y, this.p1.y, this.p2.y, this.p3.y];
@@ -251,15 +172,6 @@ export class Curve {
     return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY;
   }
 
-  /**
-   * True when the curve's control-point bounding box (the smallest
-   * axis-aligned box containing the whole Bezier, see isPointInBoundingBox)
-   * reaches the given axis-aligned rectangle. The box is first expanded by
-   * `tolerance` on every side, so the caller passes its own margin there (e.g.
-   * the rendered blade length around a foot trace). Returns false only when
-   * the whole expanded box lies outside the rectangle: curves that merely
-   * touch or overlap it are kept, so partially visible curves still draw.
-   */
   intersectsRect(rect: AxisRect, tolerance = 0): boolean {
     const xs = [this.p0.x, this.p1.x, this.p2.x, this.p3.x];
     const ys = [this.p0.y, this.p1.y, this.p2.y, this.p3.y];
@@ -270,36 +182,17 @@ export class Curve {
     return minX <= rect.maxX && maxX >= rect.minX && minY <= rect.maxY && maxY >= rect.minY;
   }
 
-  /**
-   * The point on this cubic Bezier curve closest to a given point.
-   *
-   * The squared distance from the query point is a 5th-degree polynomial in
-   * the curve parameter. Its stationary points (roots of the derivative) and
-   * the two curve endpoints are the only candidates for the minimum, so they
-   * are computed and the closest one is kept. This follows the classic
-   * Graphics Gems approach (Schneider, "Nearest-Point-on-Curve Problem").
-   *
-   * @param point - The query point.
-   * @returns The parameter at the closest point, the closest point itself,
-   *          and the distance between the query point and the curve.
-   */
   getClosestPoint(point: Vector<2>): { t: Curvilinear; point: Vector<2>; distance: number } {
-    // Control points of this curve, in the order expected by the algorithm.
     const control = [this.p0, this.p1, this.p2, this.p3] as Vector<2>[];
 
-    // Convert the problem to a 5th-degree Bezier form whose roots are the
-    // stationary points of the squared distance.
     const w = convertToBezierForm(point, control);
     const tCandidates = new Array<number>(W_DEGREE);
     const nSolutions = findRoots(w, W_DEGREE, tCandidates, 0);
 
-    // Start from t = 0 and compare every root candidate with it.
     let bestT = 0 as Curvilinear;
     let bestSquared = point.minus(this.p0).lengthSquared();
 
     const update = (t: number) => {
-      // Clamp to the segment: a candidate slightly outside [0, 1] (or a root
-      // found just past an endpoint) must never extrapolate off the curve.
       const clamped = Math.min(1, Math.max(0, t));
       const candidate = this.getPosition(clamped as Curvilinear);
       const squared = point.minus(candidate).lengthSquared();
@@ -313,7 +206,6 @@ export class Curve {
       update(tCandidates[i]!);
     }
 
-    // Finally compare with the end of the curve, t = 1.
     update(1);
 
     return {
@@ -323,42 +215,30 @@ export class Curve {
     };
   }
 
-  /** Move first endpoint and control point to align with preceeding curve
-   * @param c - Preceeding curve
-   * @param length - If given, p1 is placed at this distance from p0. Otherwise the current p0-p1 distance is conserved.
-   */
   alignStart(c: Curve, length?: number) {
     if (this.p0 != c.p3) {
-      this.p0 = c.p3; // Common endpoint
+      this.p0 = c.p3;
     }
 
-    // Compute target direction
     let dir = c.p3.minus(c.p2);
-    if (dir.lengthSquared() == 0) return; // No direction to match
+    if (dir.lengthSquared() == 0) return;
     dir = dir.normalized();
 
-    // p0-p1 distance, conserved or forced to the given length
     const dist = length ?? this.p1.minus(this.p0).length();
     if (dist == 0) return;
 
     this.p1 = this.p0.plus(dir.times(dist));
   }
 
-  /** Move last endpoint and control point to align with following curve
-   * @param c - Following curve
-   * @param length - If given, p2 is placed at this distance from p3. Otherwise the current p2-p3 distance is conserved.
-   */
   alignEnd(c: Curve, length?: number) {
     if (this.p3 != c.p0) {
-      this.p3 = c.p0; // Common endpoint
+      this.p3 = c.p0;
     }
 
-    // Compute target direction
     let dir = c.p0.minus(c.p1);
-    if (dir.lengthSquared() == 0) return; // No direction to match
+    if (dir.lengthSquared() == 0) return;
     dir = dir.normalized();
 
-    // p2-p3 distance, conserved or forced to the given length
     const dist = length ?? this.p3.minus(this.p2).length();
     if (dist == 0) return;
 
@@ -373,8 +253,6 @@ export class Curve {
     ctx.stroke();
   }
 
-  /** Creates a new Curve passing through specified points.
-   * The points are matched at curvilinear coordinates 0, 1/3, 2/3, and 1. */
   static intersecting(d0: Vector<2>, d1: Vector<2>, d2: Vector<2>, d3: Vector<2>): Curve {
     return new Curve(
       d0,
@@ -392,19 +270,9 @@ export class Curve {
     );
   }
 
-  /** Creates two new curves from t = 0 to x and from x to 1.
-   *  @param x - Curvilinear coordinate
-   */
   cut(x: Curvilinear): [Curve, Curve] {
-    // Cutpoint
     const px = this.getPosition(x);
 
-    // Control points. The original p1 and p2 keep their positions: the left
-    // half reuses p1 and the right half reuses p2. This changes the resulting
-    // shape (unlike a full de Casteljau split), which is intended. Both
-    // handles around the cutpoint keep the tangent of the original curve at
-    // the cutpoint and share the same length: the shorter of the two
-    // parameter-scaled lengths.
     const dx = this.getDerivative(x).times(1 / 3);
     const common = Math.min(x, 1 - x);
     const handleLength = dx.length() * common;
@@ -416,45 +284,27 @@ export class Curve {
   }
 }
 
-// -------------------------------------------------------------------------
-// Closest-point-on-curve algorithm
-// -------------------------------------------------------------------------
-// Port of the classic "Graphics Gems" solver by Philip J. Schneider
-// ("Solving the Nearest-Point-on-Curve Problem", 1990). The squared distance
-// to a cubic Bezier is a 5th-degree polynomial in the curve parameter, so the
-// problem is converted to a 5th-degree Bezier form and its roots are isolated
-// by recursively subdividing the control polygon until each root is bracketed
-// by a flat enough segment. This avoids any fixed sampling density.
-
-/** Degree of the cubic Bezier curve. */
 const DEGREE = 3;
-/** Degree of the squared-distance polynomial. */
-const W_DEGREE = 5;
-/** Maximum recursion depth for root finding. */
-const MAXDEPTH = 64;
-/** Flatness threshold: the width of the bracket that is considered a root. */
-const EPSILON = Math.pow(2, -(MAXDEPTH + 1));
+const W_DEGREE = 5; // degree of the squared-distance polynomial
+const MAXDEPTH = 64; // maximum recursion depth
+const EPSILON = Math.pow(2, -(MAXDEPTH + 1)); // flatness threshold for a root bracket
 
 type BezierPoint = Vector<2>;
 
-/** Build the control points of the 5th-degree squared-distance equation. */
 function convertToBezierForm(P: BezierPoint, V: BezierPoint[]): BezierPoint[] {
-  // Precomputed "z" for cubics (dot-product distribution over the skew diagonal).
+  // precomputed "z" distribution table for cubics
   const z = [
     [1.0, 0.6, 0.3, 0.1],
     [0.4, 0.6, 0.6, 0.4],
     [0.1, 0.3, 0.6, 1.0],
   ];
 
-  // c[i] = V[i] - P
   const c: BezierPoint[] = V.map((v) => v.minus(P));
-  // d[i] = 3 * (V[i+1] - V[i])
   const d: BezierPoint[] = [];
   for (let i = 0; i < DEGREE; i++) {
     d.push(V[i + 1]!.minus(V[i]!).times(3));
   }
 
-  // Dot products of c and d.
   const cdTable: number[][] = [];
   for (let row = 0; row < DEGREE; row++) {
     cdTable[row] = [];
@@ -463,8 +313,6 @@ function convertToBezierForm(P: BezierPoint, V: BezierPoint[]): BezierPoint[] {
     }
   }
 
-  // The x coordinates set the parameter values, the y coordinate accumulates
-  // the polynomial value at that parameter.
   const w: BezierPoint[] = [];
   for (let i = 0; i <= W_DEGREE; i++) {
     w.push(new Vector<2>(i / W_DEGREE, 0));
@@ -484,19 +332,14 @@ function convertToBezierForm(P: BezierPoint, V: BezierPoint[]): BezierPoint[] {
   return w;
 }
 
-/**
- * Find all roots of a Bezier-form polynomial in [0, 1].
- * Returns the number of roots found and writes them to `t`.
- */
 function findRoots(w: BezierPoint[], degree: number, t: number[], depth: number): number {
   const crossings = crossingCount(w, degree);
 
   if (crossings === 0) {
-    return 0; // No root in this interval.
+    return 0;
   }
 
   if (crossings === 1) {
-    // Unique root: stop when the tree is deep enough or the segment is flat.
     if (depth >= MAXDEPTH) {
       t[0] = (w[0]!.x + w[W_DEGREE]!.x) / 2;
       return 1;
@@ -507,7 +350,6 @@ function findRoots(w: BezierPoint[], degree: number, t: number[], depth: number)
     }
   }
 
-  // Otherwise subdivide and solve the two halves recursively.
   const [left, right] = bezierSplit(w, degree, 0.5);
   const leftT = new Array<number>(W_DEGREE);
   const rightT = new Array<number>(W_DEGREE);
@@ -520,7 +362,6 @@ function findRoots(w: BezierPoint[], degree: number, t: number[], depth: number)
   return count;
 }
 
-/** Count sign changes of the polynomial over its control points (lower bound on roots). */
 function crossingCount(V: BezierPoint[], degree: number): number {
   let nCrossings = 0;
   let oldSign = signOf(V[0]!.y);
@@ -536,14 +377,7 @@ function signOf(x: number): number {
   return x < 0 ? -1 : x > 0 ? 1 : 0;
 }
 
-/**
- * Whether the control polygon is flat enough that its chord is a good enough
- * approximation of the curve to extract the root. Uses the corrected version
- * by James Walker of the original Graphics Gems implementation.
- */
 function controlPolygonFlatEnough(V: BezierPoint[], degree: number): boolean {
-  // Implicit equation of the line through the first and last control points:
-  // a*x + b*y + c = 0
   const a = V[0]!.y - V[degree]!.y;
   const b = V[degree]!.x - V[0]!.x;
   const c = V[0]!.x * V[degree]!.y - V[degree]!.x * V[0]!.y;
@@ -556,12 +390,10 @@ function controlPolygonFlatEnough(V: BezierPoint[], degree: number): boolean {
     else if (value < maxDistanceBelow) maxDistanceBelow = value;
   }
 
-  // Implicit equation of a horizontal line (y = 0).
   const a1 = 0;
   const b1 = 1;
   const c1 = 0;
 
-  // Bracket the polynomial roots with the "above" and "below" lines.
   const intercept1 = lineIntersectX(a1, b1, c1, a, b, c - maxDistanceAbove);
   const intercept2 = lineIntersectX(a1, b1, c1, a, b, c - maxDistanceBelow);
   if (intercept1 == null || intercept2 == null) return false;
@@ -571,15 +403,13 @@ function controlPolygonFlatEnough(V: BezierPoint[], degree: number): boolean {
   return right - left < EPSILON;
 }
 
-/** x coordinate where two implicit lines (a*x + b*y + c = 0) intersect, or null if parallel. */
 function lineIntersectX(a1: number, b1: number, c1: number, a2: number, b2: number, c2: number): number | null {
   const det = a1 * b2 - a2 * b1;
-  if (det === 0) return null; // Parallel lines: no unique intercept.
+  if (det === 0) return null;
   const dInv = 1 / det;
   return (b1 * c2 - b2 * c1) * dInv;
 }
 
-/** x where the chord between the first and last control points crosses y = 0. */
 function computeXIntercept(V: BezierPoint[], degree: number): number {
   const xNm = V[degree]!.x - V[0]!.x;
   const yNm = V[degree]!.y - V[0]!.y;
@@ -592,10 +422,6 @@ function computeXIntercept(V: BezierPoint[], degree: number): number {
   return s;
 }
 
-/**
- * Evaluate a Bezier-form polynomial and split it into left and right halves
- * using de Casteljau's algorithm at parameter `t`.
- */
 function bezierSplit(V: BezierPoint[], degree: number, t: number): [BezierPoint[], BezierPoint[]] {
   const Vtemp: BezierPoint[][] = [];
   for (let j = 0; j <= degree; j++) {

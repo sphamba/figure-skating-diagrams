@@ -1,6 +1,3 @@
-/* Loops: a full turn on one foot, with 8 left/forward/inside variants
- * generated from side, direction and edge flags. */
-
 import { bladeLength } from "../constants.js";
 import type { PathCoordinate } from "../coordinates.js";
 import { FootKeyframe, type FootData, HipsKeyframe } from "../keyframe.js";
@@ -9,18 +6,10 @@ import { Vector } from "../vector.js";
 import { OneFootTurn } from "./oneFootTurn.js";
 import type { FootKey } from "../sequence.js";
 
-/** Constructor type of a generated loop variant. */
 export type LoopConstructor = new (footKey: FootKey, start: PathCoordinate, end: PathCoordinate) => Loop;
 
-// Hardcoded loop shift: to have the loop length equal 1.5 * bladeLength
-const defaultLoopShift = (bladeLength * 1.5) as PathCoordinate;
+const defaultLoopShift = (bladeLength * 1.5) as PathCoordinate; // keeps the loop length at 1.5 x bladeLength
 
-/**
- * A Loop is a full turn on one foot: the on-ice foot rotates a whole turn
- * around a point of the centerline at the center of the element. The foot
- * shifts sideways in the middle of the turn and comes back to the centerline
- * at both ends of the element.
- */
 export abstract class Loop extends OneFootTurn {
   protected get initialAngle(): number {
     return this.forward ? 0 : Math.PI;
@@ -34,8 +23,6 @@ export abstract class Loop extends OneFootTurn {
     return this.forward ? 0 : 1;
   }
 
-  /** Hips keyframes: the hips rotate the whole turn of the loop, like the
-   * on-ice foot, at the start, the center and the end of the element. */
   protected createHipsKeyframes(start: PathCoordinate, end: PathCoordinate): HipsKeyframe[] {
     const pathCoordinate = ((start + end) / 2) as PathCoordinate;
     const coordinates = [start, pathCoordinate, end];
@@ -51,7 +38,6 @@ export abstract class Loop extends OneFootTurn {
       const keyframe = new HipsKeyframe(
         coordinates[i]!,
         keyframeData,
-        // Hardcoded smooth entry and exit in and out of the turn
         i != 1 ? "smooth" : "linear",
         i != 1 ? "smooth" : "linear",
       );
@@ -71,8 +57,6 @@ export abstract class Loop extends OneFootTurn {
       (pathCoordinateShift) => (pathCoordinate + pathCoordinateShift) as PathCoordinate,
     );
     const contactPoints = [0.5, this.contactPointTurn, 0.5];
-    // No shift relative to the centerline at the start and the end of the
-    // turn; the shift happens in the middle of the turn only.
     const positions = [
       new Vector<3>(0, 0, 0),
       new Vector<3>((0.5 - this.contactPointTurn) * bladeLength, lateralShift, 0),
@@ -94,7 +78,6 @@ export abstract class Loop extends OneFootTurn {
       const keyframe = new FootKeyframe(
         pathCoordinate,
         keyframeData,
-        // Hardcoded smooth entry and exit in and out of the turn
         i != 1 ? "smooth" : "linear",
         i != 1 ? "smooth" : "linear",
       );
@@ -105,11 +88,8 @@ export abstract class Loop extends OneFootTurn {
   }
 }
 
-/** Map a loop type name to its constructor, for the turn registry. */
 export const loopConstructorsByType: Record<string, LoopConstructor> = {};
 
-/** Define one loop variant class: the flags close over the subclass, which
- * registers itself into the type registry. */
 function defineLoop(
   type: string,
   shortName: string,
@@ -132,7 +112,6 @@ function defineLoop(
   return Variant;
 }
 
-/** The side, direction and edge words of each variant name, with their flag. */
 const turnSides = [
   ["Left", true],
   ["Right", false],
@@ -146,10 +125,8 @@ const turnEdges = [
   ["Outside", false],
 ] as const;
 
-/** Human-readable label for each available loop kind. */
 export const loopKindChoices: { type: string; label: string }[] = [];
 
-/** Construct the left/forward/inside variants from the name flags. */
 for (const [side, left] of turnSides) {
   for (const [direction, forward] of turnDirections) {
     for (const [edge, inside] of turnEdges) {
@@ -161,7 +138,6 @@ for (const [side, left] of turnSides) {
   }
 }
 
-/** Named constructors kept for use outside the registry (sequences, tests). */
 export const LeftForwardInsideLoop = loopConstructorsByType["LeftForwardInsideLoop"]!;
 export const LeftForwardOutsideLoop = loopConstructorsByType["LeftForwardOutsideLoop"]!;
 export const LeftBackwardInsideLoop = loopConstructorsByType["LeftBackwardInsideLoop"]!;

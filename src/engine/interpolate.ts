@@ -27,12 +27,6 @@ function interpolateVector<Size extends number>(a: Vector<Size>, b: Vector<Size>
   return a.times(1 - s).plus(b.times(s));
 }
 
-/** Interpolate along the shorter arc, per the Quaternion double cover: q
- * and -q are the same rotation. Take the change with the smaller angle so a
- * change that passes the 180/-180 degree wrap stays on the wrap (for
- * example -170 to 170 degrees goes through +/-180, not through 0). A
- * change of a whole turn (360 degrees: real = -1) has no angle at all: the
- * value jumps instead of rotating through 0 on a broken rotation. */
 function interpolateQuaternion(a: Quaternion, b: Quaternion, s: number): Quaternion {
   const change = a.inverse().times(b);
   const closer = change.real < 0 ? change.times(-1) : change;

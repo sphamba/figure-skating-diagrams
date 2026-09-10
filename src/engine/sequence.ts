@@ -22,16 +22,13 @@ type PartKey = keyof SequenceKeyframes;
 export type FootKey = "footL" | "footR";
 type KeyframeType = SequenceKeyframes[PartKey][number];
 
-/** Keyframes an element contributes for each body part. */
 type ElementKeyframes = {
   footL: FootKeyframe[];
   footR: FootKeyframe[];
   hips: HipsKeyframe[];
 };
-/** Part layers that elements can contribute keyframes to. */
 type FootOrHipsKey = "footL" | "footR" | "hips";
 
-/** JSON shape of a sequence, used for (de)serialization. */
 export interface SequenceJSON {
   path: ReturnType<Path["toJSON"]>;
   keyframes: {
@@ -43,32 +40,17 @@ export interface SequenceJSON {
   elements: (FootTurnJSON | { type: string; start: number; end: number })[];
 }
 
-/** Relative coordinate between two keyframes, from 0 to 1 */
 type Relative = number & { readonly __tag: unique symbol };
 
-/** Path coordinate increment for drawing */
-const drawIncrement = 0.02;
+const drawIncrement = 0.02; // path coordinate increment for drawing traces, in meters
 const traceWidth = 0.004;
 const skidWidth = 0.03;
 const defaultPathColor = "black";
 const traceColorL = "rgb(48, 48, 210)";
 const traceColorR = "rgb(156, 0, 0)";
 
-/** Path coordinate gap, in metres, kept between the end keyframe of one
- * element and the start keyframe of the next: boundary keyframes never
- * overlap, not even when element spans are scaled about their middles. */
-const boundaryDelta = 0.001;
+const boundaryDelta = 0.001; // m gap kept between consecutive element keyframes
 
-/**
- * Fixed boundary keyframe coordinates for two consecutive elements: the end
- * keyframe coordinate of the first element and the start keyframe coordinate
- * of the second. When the two overlap (the start is less than the delta
- * after the end), they move to their midpoint, the end at the midpoint and
- * the start delta after it. A zero-size element (its start equals its end)
- * cannot withstand a delta: its
- * own keyframe keeps its coordinate and only the keyframe of the other
- * element moves, to the closest order-keeping coordinate.
- */
 function boundaryCoordinates(
   end: number,
   start: number,
@@ -88,20 +70,8 @@ export class Sequence {
   keyframes: SequenceKeyframes;
   elements: Element[];
 
-  /**
-   * Keyframes each element currently contributes into the sequence's keyframe
-   * arrays, keyed by element. Used to refresh a trace when an element's start
-   * or end path coordinate changes.
-   */
   private elementKeyframes = new WeakMap<Element, ElementKeyframes>();
 
-  /**
-   * A sequence is a 2D path with no time. Time is a separate clock layer.
-   *
-   * Body part keyframes (foot and hips) sit on the path coordinate axis u.
-   * The time keyframes form the clock: they map time t to the path
-   * coordinate u, so any path point can be given a time.
-   */
   constructor(path: Path) {
     this.path = path;
     this.keyframes = {
@@ -131,10 +101,6 @@ export class Sequence {
     this.refreshElementKeyframes(element);
   }
 
-  /**
-   * Remove an element from the sequence. The keyframes it contributed to the
-   * foot and hips parts are dropped too, so the timeline stays in sync.
-   */
   removeElement(element: Element) {
     this.elements = this.elements.filter((candidate) => candidate !== element);
     const previous = this.elementKeyframes.get(element);
@@ -146,11 +112,6 @@ export class Sequence {
     this.elementKeyframes.delete(element);
   }
 
-  /**
-   * Replace one element with another in-place, keeping its position in the
-   * array and rebuilding the keyframe contribution. The old element's
-   * keyframes are dropped and the new element's are inserted.
-   */
   replaceElement(oldElement: Element, newElement: Element) {
     const index = this.elements.indexOf(oldElement);
     if (index === -1) return;
@@ -165,12 +126,6 @@ export class Sequence {
     this.refreshElementKeyframes(newElement);
   }
 
-  /**
-   * Recompute the keyframes an element contributes into the sequence's
-   * keyframe arrays from the element's current start and end, replacing its
-   * previous contribution. This is what keeps the blade traces in sync when an
-   * element's start or end is edited.
-   */
   updateElementKeyframes(element: Element) {
     const previous = this.elementKeyframes.get(element);
     if (previous) {
@@ -181,7 +136,6 @@ export class Sequence {
     this.refreshElementKeyframes(element);
   }
 
-  /** Compute an element's keyframes, insert them and remember the contribution. */
   private refreshElementKeyframes(element: Element) {
     const footL = element.getLeftFootKeyframes();
     const footR = element.getRightFootKeyframes();
@@ -193,14 +147,6 @@ export class Sequence {
     this.constrainElementKeyframes();
   }
 
-  /**
-   * Make sure the end keyframe of one element and the start keyframe of the
-   * next never overlap: when they do, they move to their midpoint, with a
-   * 0.001 m delta between them keeping the order. Zero-size elements cannot
-   * withstand a delta: their own keyframe stays put and only the keyframe of
-   * the other element moves. Applied to the foot and hips keyframes of every
-   * pair of consecutive elements.
-   */
   private constrainElementKeyframes() {
     const elements = [...this.elements].sort((a, b) => (a.start as number) - (b.start as number));
     for (const part of ["footL", "footR", "hips"] as const) {
@@ -224,24 +170,17 @@ export class Sequence {
         startKeyframe.coordinate = start as PathCoordinate;
       }
     }
-    // The boundary coordinates changed, so the part arrays are sorted again.
     this.keyframes.footL.sort((a, b) => a.coordinate - b.coordinate);
     this.keyframes.footR.sort((a, b) => a.coordinate - b.coordinate);
     this.keyframes.hips.sort((a, b) => a.coordinate - b.coordinate);
   }
 
-  /** Remove a set of keyframe objects (by identity) from a part keyframe array. */
   private removeElementKeyframes<Key extends FootOrHipsKey>(partKey: Key, toRemove: KeyframeType[]) {
     const removeSet = new Set<KeyframeType>(toRemove);
     const arr = this.keyframes[partKey] as KeyframeType[];
     this.keyframes[partKey] = arr.filter((keyframe) => !removeSet.has(keyframe)) as SequenceKeyframes[Key];
   }
 
-  /**
-   * After deserialization the element contributions are rebuilt so they can be
-   * refreshed later: baked keyframes matching a freshly computed element
-   * keyframe are replaced by the fresh ones, which are then tracked per element.
-   */
   private registerLoadedElementKeyframes(element: Element) {
     const fresh: ElementKeyframes = {
       footL: element.getLeftFootKeyframes(),
@@ -258,7 +197,6 @@ export class Sequence {
     this.constrainElementKeyframes();
   }
 
-  /** Drop baked keyframes that structure-equal any freshly computed element keyframe. */
   private removeMatchingKeyframes<Key extends FootOrHipsKey>(partKey: Key, computed: KeyframeType[]) {
     const computedJson = new Set(computed.map((keyframe) => JSON.stringify(keyframe.toJSON())));
     const arr = this.keyframes[partKey] as KeyframeType[];
@@ -267,9 +205,6 @@ export class Sequence {
     ) as SequenceKeyframes[Key];
   }
 
-  /** Serialize this sequence to a plain JSON object. Only the clock (time
-   * keyframes) is exported. The body part keyframes are not exported: on
-   * load they are computed from the elements. */
   toJSON(): SequenceJSON {
     return {
       path: this.path.toJSON(),
@@ -283,7 +218,6 @@ export class Sequence {
     };
   }
 
-  /** Reconstruct a sequence from serialized data, delegating to each class. */
   static fromJSON(json: SequenceJSON): Sequence {
     const sequence = new Sequence(Path.fromJSON(json.path));
     sequence.keyframes = {
@@ -301,7 +235,6 @@ export class Sequence {
     return sequence;
   }
 
-  /** Draw path and traces over a range of path coordinates. */
   draw(
     ctx: CanvasRenderingContext2DSized,
     pathWidth: number = traceWidth,
@@ -319,9 +252,6 @@ export class Sequence {
     this.drawFootTraces(ctx, uStart, uEnd, minTraceWidth, minBladeLength, minDrawIncrement, viewport);
   }
 
-  /** Draw only the foot traces (no path line), from the start to the end of
-   * the path. Element scaling applies through minBladeLength. An optional
-   * viewport limits the trace to the visible curve ranges. */
   drawTraces(
     ctx: CanvasRenderingContext2DSized,
     minTraceWidth?: number,
@@ -340,19 +270,10 @@ export class Sequence {
     );
   }
 
-  /**
-   * Get the path coordinate u at a given time t using the clock.
-   * @param time - Time in seconds.
-   */
   getPathCoordinateFromTime(time: Time): PathCoordinate {
     return this.getInterpolatedValue("time", "pathCoordinate", time);
   }
 
-  /**
-   * Get the time t at a given path coordinate u using the clock.
-   * This is the inverse of the time keyframes.
-   * @param pathCoordinate - Uniform path coordinate u.
-   */
   getTimeFromPathCoordinate(pathCoordinate: PathCoordinate): Time {
     const timeKeyframes = this.keyframes.time;
     if (timeKeyframes.length === 0) {
@@ -420,37 +341,18 @@ export class Sequence {
     this.drawFootTrace(ctx, "footR", uStart, uEnd, minTraceWidth, minBladeLength, minDrawIncrement, viewport);
   }
 
-  /**
-   * The blade length in metres used to trace the feet: the real blade length,
-   * or the given minimum when it is larger.
-   */
   private getDrawBladeLength(minBladeLength?: number): number {
     return minBladeLength === undefined ? bladeLength : Math.max(bladeLength, minBladeLength);
   }
 
-  /** Scale factor between the drawn blade and the real blade. */
   getBladeLengthScale(minBladeLength?: number): number {
     return this.getDrawBladeLength(minBladeLength) / bladeLength;
   }
 
-  /**
-   * Foot keyframes used for drawing. When a blade length scale is active
-   * (zoomed out), the keyframes each scalable element (the turns)
-   * contributes are fetched with their coordinates re-based onto the
-   * element's scaled span: the trace then renders as if the element really
-   * spanned the scaled range. The lateral shift of the foot positions of
-   * every element (glides, strokes, and turns) is scaled by the same
-   * factor. The stored keyframes of the sequence are not touched.
-   */
   getDrawFootKeyframes(footKey: FootKey, scale: number): FootKeyframe[] {
     if (scale === 1) {
       return this.keyframes[footKey];
     }
-    // Each element's keyframes are re-based onto its scaled span. Scaling can
-    // make the end keyframe of one element and the start keyframe of the next
-    // overlap (zoomed out, the spans scale up about their middles), so each
-    // boundary pair is fixed the same way as the stored keyframes: at their
-    // midpoint with a 0.001 m delta keeping the order.
     const elements = [...this.elements].sort((a, b) => (a.start as number) - (b.start as number));
     const keyframes: FootKeyframe[] = [];
     let endElement: Element | undefined;
@@ -496,11 +398,6 @@ export class Sequence {
     if (this.keyframes[footKey].length == 0) {
       return;
     }
-    // A foot trace needs the foot's position, orientation and contact point at
-    // every point along the path. If the keyframes do not define all three,
-    // there is nothing meaningful to trace, so skip it. (Production timelines
-    // always define all three, so this only affects freshly built or partial
-    // timelines, e.g. a sequence with no elements.)
     const hasData = (property: keyof FootData) =>
       this.keyframes[footKey].some((keyframe) => keyframe.data[property] !== undefined);
     if (!hasData("position") || !hasData("orientation") || !hasData("contactPoint")) {
@@ -509,29 +406,15 @@ export class Sequence {
 
     let previousContactPosition: Vector<2> | undefined;
     const drawBladeLength = this.getDrawBladeLength(minBladeLength);
-    // When the blade is scaled, the keyframes are fetched with their
-    // coordinates re-based onto the scaled element spans, so the trace follows
-    // the moved element ends.
     const drawKeyframes =
       minBladeLength === undefined
         ? undefined
         : this.getDrawFootKeyframes(footKey, this.getBladeLengthScale(minBladeLength));
 
-    // Path coordinate step between drawn points: the default 0.02 m, or a
-    // larger minimum given by the caller so each drawn segment never advances
-    // less than one screen pixel when zoomed out.
     const step = Math.max(drawIncrement, minDrawIncrement ?? 0);
-    // The trace is drawn only inside the path-coordinate ranges of curves
-    // that reach the viewport (see getVisibleTraceRanges). Without a viewport
-    // the whole range is one range, exactly as before. A new range that does
-    // not continue the previous one (a culled curve between them) starts
-    // without a previous contact position, so no segment is drawn across the
-    // culled gap. Contiguous ranges keep it, so a fully visible scene draws
-    // exactly the same segments as before, with no seam at curve boundaries.
     const visibleRanges = this.getVisibleTraceRanges(uStart, uEnd, viewport, minBladeLength);
     let previousRangeEnd: number | undefined;
     for (const [rangeStart, rangeEnd] of visibleRanges) {
-      // Reset the previous contact position only across a real gap.
       if (previousRangeEnd !== undefined && Math.abs(rangeStart - previousRangeEnd) > 1e-9) {
         previousContactPosition = undefined;
       }
@@ -580,7 +463,6 @@ export class Sequence {
 
         const onGround = contactRelativePosition.z <= 0;
         if (!onGround) {
-          // The foot is off the ice: no trace is drawn for it.
           previousContactPosition = contactPosition;
           continue;
         }
@@ -607,15 +489,6 @@ export class Sequence {
     }
   }
 
-  /**
-   * The path-coordinate ranges to trace: every curve whose control-point
-   * bounding box expanded by the rendered blade length reaches the given
-   * viewport, as a range clipped to [uStart, uEnd]. Curves are contiguous
-   * along the uniform axis (curve i ends where curve i + 1 starts), so per
-   * curve the range starts at its cumulated length. Without a viewport, or
-   * with no curves, the whole [uStart, uEnd] range is returned as one range
-   * and nothing is culled.
-   */
   private getVisibleTraceRanges(
     uStart: PathCoordinate,
     uEnd: PathCoordinate,
@@ -626,8 +499,6 @@ export class Sequence {
     if (!viewport || curves.length === 0) {
       return [[uStart, uEnd]];
     }
-    // The rendered blade length is the margin: a contact point centered on
-    // the path can still reach this far sideways and along the blade.
     const margin = this.getDrawBladeLength(minBladeLength);
     const ranges: Array<[PathCoordinate, PathCoordinate]> = [];
     let curveStart = 0;
@@ -670,13 +541,10 @@ export class Sequence {
   ): [KeyframeType, KeyframeType, Relative] {
     let list = keyframes;
     let filtered = list.filter((keyframe) => keyframe.data[property as keyof typeof keyframe.data] !== undefined);
-    // When a custom (e.g. scale-aware) list has no keyframe for this property,
-    // fall back to the stored part keyframes so interpolation still works.
     if (filtered.length === 0 && list !== this.keyframes[partKey]) {
       list = this.keyframes[partKey] as KeyframeType[];
       filtered = list.filter((keyframe) => keyframe.data[property as keyof typeof keyframe.data] !== undefined);
       if (filtered.length === 0) {
-        // Nothing anywhere carries this property; callers guard beforehand.
         throw new Error(`No keyframe data for property: ${String(property)}`);
       }
     }

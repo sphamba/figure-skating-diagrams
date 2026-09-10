@@ -33,7 +33,6 @@ export function test() {
     for (const coord of coords) {
       const id = coord + (i + 1).toString();
 
-      // slider
       const sliderDom = document.createElement("input");
       sliderDom.type = "range";
       const range = coord == "x" ? ctx.width : ctx.height;
@@ -52,12 +51,10 @@ export function test() {
 
       point[coord] = parseFloat(sliderDom.value);
 
-      // description
       const descDom = document.createElement("span");
       descDom.innerText = id;
       controlsDom?.appendChild(descDom);
 
-      // line break
       if (coord === "x") continue;
       controlsDom?.appendChild(document.createElement("br"));
     }
@@ -72,7 +69,6 @@ export function test() {
   path.addCurveEnd(curve1);
   path.addCurveEnd(curve2);
 
-  // Add keyframes
   sequence.addKeyframe(
     "footL",
     new FootKeyframe(0 as PathCoordinate, {
@@ -82,7 +78,6 @@ export function test() {
     }),
   );
 
-  // Turn
   sequence.addKeyframe(
     "footL",
     new FootKeyframe((path.length / 2) as PathCoordinate, {
@@ -156,8 +151,6 @@ export function test() {
 
     ctx.lineWidth = interfaceLineWidth;
     drawControlPoints();
-    // drawBezierPath();
-    // drawBladeSize();
   }
 
   function drawControlPoints() {
@@ -166,7 +159,6 @@ export function test() {
     ctx.strokeStyle = "black";
     ctx.font = `${fontSize}px sans-serif`;
     ctx.textBaseline = "top";
-    // control points
     for (let i = 0; i < slidersDom.length / 2; i++) {
       const [x, y] = getControlPointCoordinates(i);
 
@@ -182,7 +174,6 @@ export function test() {
       ctx.fillText(String(i + 1), x + textHorizontalOffset, -y + textVerticalOffset);
     }
 
-    // lines to contol points
     const invertY = (x: number, y: number) => [x, -y] as [number, number];
     ctx.setLineDash([0.02, 0.04]);
     for (let i = 0; i < 2; i++) {

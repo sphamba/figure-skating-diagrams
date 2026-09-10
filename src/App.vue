@@ -1,13 +1,10 @@
-<script setup lang="ts">
-// Root component. Routes render inside MainLayout (see src/router/index.ts).
-</script>
+<script setup lang="ts"></script>
 
 <template>
   <router-view />
 </template>
 
 <style>
-/* Global base styles. OpenVue components inherit the font from the application. */
 :root,
 html,
 body {

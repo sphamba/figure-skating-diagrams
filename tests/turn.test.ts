@@ -56,9 +56,8 @@ test("Element keyframes are routed to the correct foot layer", () => {
 		),
 	);
 
-	// The turn is on the right foot: footR has the 3 turn keyframes.
 	expect(sequence.keyframes.footR).toHaveLength(3);
-	// The left foot is the free foot: it has the minimal 2 end keyframes.
+
 	expect(sequence.keyframes.footL).toHaveLength(2);
 });
 
@@ -73,8 +72,6 @@ test("Element keyframes are recomputed when its start/end change", () => {
 	);
 	sequence.addElement(element);
 
-	// The element spans [length/4, 3*length/4]; its 3 keyframes (entry, center,
-	// exit) sit within that range.
 	const coordsBefore = sequence.keyframes.footR
 		.map((keyframe) => keyframe.coordinate)
 		.slice()
@@ -82,15 +79,12 @@ test("Element keyframes are recomputed when its start/end change", () => {
 	expect(coordsBefore[0]).toBeGreaterThanOrEqual(length / 4);
 	expect(coordsBefore[coordsBefore.length - 1]).toBeLessThanOrEqual((3 * length) / 4);
 
-	// Move the element to [length/8, 5*length/8] and refresh its keyframes.
 	element.start = (length / 8) as PathCoordinate;
 	element.end = ((5 * length) / 8) as PathCoordinate;
 	sequence.updateElementKeyframes(element);
 
 	const footR = sequence.keyframes.footR.map((keyframe) => keyframe.coordinate).sort((a, b) => a - b);
-	// Still exactly 3 keyframes (no duplicates from the old span).
 	expect(footR).toHaveLength(3);
-	// Now the keyframes fall inside the new span.
 	expect(footR[0]).toBeGreaterThanOrEqual(length / 8);
 	expect(footR[footR.length - 1]).toBeLessThanOrEqual((5 * length) / 8);
 });
@@ -108,7 +102,6 @@ test("changeFootTurnType converts an element's kind and derives the foot from th
 });
 
 test("footTurnKindChoices lists all sixteen turn kinds and all glide kinds", () => {
-	// 16 turns, 14 static glides and 24 crossed/normal dynamic glides.
 	expect(footTurnKindChoices).toHaveLength(54);
 	const types = footTurnKindChoices.map((choice) => choice.type);
 	expect(types).toContain("LeftForwardInsideThreeTurn");
@@ -127,8 +120,6 @@ test("A glide round-trips and keeps its pose keyframes", () => {
 	});
 
 	expect(glide).toBeInstanceOf(LeftForwardInsideGlide);
-	// The pose keyframes keep the same shape as the renamed glide kinds: two
-	// keyframes per foot axis, the off-ice foot lifted and shifted to its side.
 	expect(glide.getLeftFootKeyframes()).toHaveLength(2);
 	expect(glide.getRightFootKeyframes()).toHaveLength(2);
 	expect(glide.getHipsKeyframes()).toHaveLength(2);
@@ -138,7 +129,6 @@ test("A glide round-trips and keeps its pose keyframes", () => {
 	const free = glide.getRightFootKeyframes()[0]!.data;
 	expect(free.position!.y).toBeCloseTo(-0.15, 5);
 	expect(free.position!.z).toBeCloseTo(0.2, 5);
-	// A two-foot glide round-trips with no edge.
 	const both = changeElementType("BothBackwardGlide", { type: "LeftForwardGlide", start, end });
 	expect(both.toJSON().type).toBe("BothBackwardGlide");
 });
@@ -148,20 +138,15 @@ test("A turn gives keyframes to the on-ice foot, the free foot and the hips", ()
 	const end = 0.75 as PathCoordinate;
 	const turn = new LeftForwardInsideThreeTurn("footL", start, end);
 
-	// The on-ice foot gets the detailed turn keyframes.
 	expect(turn.getLeftFootKeyframes()).toHaveLength(3);
-	// The free foot gets just the minimal 2 keyframes at both ends.
 	const free = turn.getRightFootKeyframes();
 	expect(free).toHaveLength(2);
 	expect(free[0]!.coordinate).toBe(start);
 	expect(free[1]!.coordinate).toBe(end);
-	// The free foot is shifted like the off-ice foot of the glide elements:
-	// half the foot spacing to its side, lifted off the ice, facing forward.
 	expect(free[0]!.data.position!.x).toBe(0);
 	expect(free[0]!.data.position!.y).toBeCloseTo(-0.15, 5);
 	expect(free[0]!.data.position!.z).toBeCloseTo(0.2, 5);
 	expect(free[0]!.data.contactPoint).toBe(0.5);
-	// The hips get keyframes at both ends.
 	expect(turn.getHipsKeyframes().length).toBeGreaterThanOrEqual(2);
 });
 
@@ -196,11 +181,8 @@ test("changeElementType derives the foot from the Left/Right type prefix", () =>
 });
 
 test("Backward turns rotate the reverse way of forward turns on the same edge", () => {
-	// Forward: a left turn on an inside edge rotates clockwise.
 	expect(new LeftForwardInsideThreeTurn("footL", 0.2 as PathCoordinate, 0.8 as PathCoordinate).clockwise).toBe(true);
-	// Backward: the same edge rotates the reverse way.
 	expect(new LeftBackwardInsideLoop("footL", 0.2 as PathCoordinate, 0.8 as PathCoordinate).clockwise).toBe(false);
-	// Backward: the other edge rotates the other way.
 	expect(new LeftBackwardOutsideThreeTurn("footL", 0.2 as PathCoordinate, 0.8 as PathCoordinate).clockwise).toBe(true);
 });
 
@@ -212,7 +194,6 @@ test("Loop hips make a full turn at the start, the center and the end", () => {
 	expect(hips[0]!.coordinate).toBe(0.2 as PathCoordinate);
 	expect(hips[1]!.coordinate).toBe(0.5 as PathCoordinate);
 	expect(hips[2]!.coordinate).toBe(0.8 as PathCoordinate);
-	// A left loop is counterclockwise: the angles are 0, 180 and 360 degrees.
 	const angles = hips.map((keyframe) => keyframe.data.orientation!.angle);
 	expect(angles[0]).toBeCloseTo(0, 10);
 	expect(angles[1]).toBeCloseTo(Math.PI, 10);

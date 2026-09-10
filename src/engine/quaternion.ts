@@ -17,12 +17,10 @@ export class Quaternion {
     return new Quaternion(this.real, this.vector.copy());
   }
 
-  /** Serialize to a plain JSON object. */
   toJSON(): { real: number; vector: { data: number[] } } {
     return { real: this.real, vector: this.vector.toJSON() };
   }
 
-  /** Reconstruct a Quaternion from serialized data. */
   static fromJSON(json: { real: number; vector: { data: number[] } }): Quaternion {
     return new Quaternion(json.real, Vector.fromJSON(json.vector) as Vector<3>);
   }
@@ -39,7 +37,6 @@ export class Quaternion {
     if (typeof other === "number") {
       return new Quaternion(this.real * other, this.vector.times(other));
     } else {
-      // instanceof Quaternion
       return new Quaternion(
         this.real * other.real - this.vector.dot(other.vector),
         this.vector.times(other.real).plus(other.vector.times(this.real)).plus(this.vector.cross(other.vector)),
@@ -63,7 +60,6 @@ export class Quaternion {
     return new Quaternion(this.real, this.vector.times(-1));
   }
 
-  /** Compute inverse. If the Quaternion is unitary, take the conjugate instead. */
   inverse(): Quaternion {
     return this.conjugate().times(1 / this.normSquared());
   }
@@ -73,7 +69,6 @@ export class Quaternion {
   }
 }
 
-/** Get a Quaternion from an angle and an axis. Default axis is vertical. */
 export function getQuaternionFromAngleAxis(angle: number, axis?: Vector<3>): Quaternion {
   axis ??= new Vector<3>(0, 0, 1);
   const cos = Math.cos(angle / 2);

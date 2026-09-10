@@ -2,9 +2,7 @@ import { expect, test } from "vitest";
 import { Curve, Curvilinear } from "../src/engine/curve";
 import { Vector } from "../src/engine/vector";
 
-
 test("isPointInBoundingBox checks the box enclosing all 4 control points", () => {
-  // Bounding box: x in [0, 4], y in [0, 2].
   const curve = new Curve(new Vector(0, 0), new Vector(1, 2), new Vector(3, 2), new Vector(4, 0));
 
   expect(curve.isPointInBoundingBox(new Vector(2, 1))).toBe(true);
@@ -12,7 +10,6 @@ test("isPointInBoundingBox checks the box enclosing all 4 control points", () =>
   expect(curve.isPointInBoundingBox(new Vector(-1, 1))).toBe(false);
   expect(curve.isPointInBoundingBox(new Vector(2, 3))).toBe(false);
 
-  // Tolerance expands the box on every side.
   expect(curve.isPointInBoundingBox(new Vector(2, 3), 1)).toBe(true);
   expect(curve.isPointInBoundingBox(new Vector(-1, 1), 1.1)).toBe(true);
   expect(curve.isPointInBoundingBox(new Vector(-3, 1), 1)).toBe(false);
@@ -21,19 +18,16 @@ test("isPointInBoundingBox checks the box enclosing all 4 control points", () =>
 test("getClosestPoint on a straight line", () => {
   const curve = new Curve(new Vector(0, 0), new Vector(2 / 3, 0), new Vector(4 / 3, 0), new Vector(2, 0));
 
-  // Interior point projects perpendicularly onto the line.
   const interior = curve.getClosestPoint(new Vector(1, 0.5));
   expect(interior.distance).toBeCloseTo(0.5, 10);
   expect(interior.point.x).toBeCloseTo(1, 10);
   expect(interior.point.y).toBeCloseTo(0, 10);
 
-  // Before the start: the closest point is the start endpoint.
   const start = curve.getClosestPoint(new Vector(-1, 0));
   expect(start.t).toBeCloseTo(0, 10);
   expect(start.point.x).toBeCloseTo(0, 10);
   expect(start.distance).toBeCloseTo(1, 10);
 
-  // After the end: the closest point is the end endpoint.
   const end = curve.getClosestPoint(new Vector(3, 0));
   expect(end.t).toBeCloseTo(1, 10);
   expect(end.point.x).toBeCloseTo(2, 10);
@@ -53,9 +47,7 @@ test("getClosestPoint agrees with brute-force sampling", () => {
   }
 
   const result = curve.getClosestPoint(query);
-  // The analytic minimum is at least as good as the best sampled point.
   expect(result.distance).toBeLessThanOrEqual(Math.sqrt(bestDistance) + 1e-9);
-  // The returned point really lies on the curve.
   expect(result.point.minus(curve.getPosition(result.t)).length()).toBeLessThan(1e-9);
 });
 
@@ -70,7 +62,6 @@ test("getClosestPoint returns near-zero distance for points on the curve", () =>
   }
 });
 
-
 test("Get length", () => {
 	const p1 = new Vector<2>(0, 0);
 	const p2 = new Vector<2>(0.5, 0);
@@ -80,7 +71,6 @@ test("Get length", () => {
 
 	expect(curve.length).toBeCloseTo(1.5, 2);
 });
-
 
 test("Get position and derivatives", () => {
 	const p1 = new Vector<2>(0, 0);
@@ -104,7 +94,6 @@ test("Get position and derivatives", () => {
 	expect(secondDerivative.x).toBeCloseTo(-1.8, precision);
 	expect(secondDerivative.y).toBeCloseTo(3.6, precision);
 });
-
 
 test("Create curve intersecting points", () => {
 	const p1 = new Vector<2>(0, 0);
@@ -133,15 +122,10 @@ test("Create curve intersecting points", () => {
 	expect(position.y).toBeCloseTo(1, precision);
 });
 
-
 test("alignEnd keeps the end handle aligned with the following curve's start handle and conserves its distance to the joint", () => {
-  // Simulate dragging p1 of curve B (start handle): the previous curve A's
-  // end handle (p2) is aligned via A.alignEnd(B).
   const joint = new Vector<2>(0, 0);
 
-  // Previous curve A, joint is A.p3.
   const A = new Curve(new Vector(2, 1), new Vector(3, 2), new Vector(1, 0.5), joint.copy());
-  // Following (dragged) curve B, joint is B.p0.
   const B = new Curve(joint.copy(), new Vector(2, -1), new Vector(3, -2), new Vector(4, -3));
 
   const distanceBefore = A.p3.minus(A.p2).length();
@@ -149,68 +133,50 @@ test("alignEnd keeps the end handle aligned with the following curve's start han
 
   A.alignEnd(B);
 
-  // A.p2 and B.p1 are on opposite rays from the joint (collinear).
   const toA2 = A.p2.minus(joint);
   const toB1 = B.p1.minus(joint);
   const cross = toA2.x * toB1.y - toA2.y * toB1.x;
   expect(Math.abs(cross)).toBeCloseTo(0, 10);
-  // Opposite direction.
   expect(toA2.x * toB1.x + toA2.y * toB1.y).toBeLessThan(0);
 
-  // Distance from the joint is conserved.
   expect(A.p2.minus(joint).length()).toBeCloseTo(distanceBefore, 10);
 });
 
 test("alignStart keeps the start handle aligned with the preceding curve's end handle and conserves its distance to the joint", () => {
-  // Simulate dragging p3 (end anchor) of curve B: the next curve C's start
-  // handle (p1) is aligned via C.alignStart(B).
   const joint = new Vector<2>(0, 0);
 
-  // Preceding (dragged) curve B, joint is B.p3.
   const B = new Curve(new Vector(-3, -2), new Vector(-2, -1), new Vector(-1, -0.5), joint.copy());
-  // Next curve C, joint is C.p0.
   const C = new Curve(joint.copy(), new Vector(1, 0.5), new Vector(2, 1.5), new Vector(3, 2));
 
   const distanceBefore = C.p1.minus(C.p0).length();
 
   C.alignStart(B);
 
-  // C.p1 and B.p2 are on opposite rays from the joint (collinear).
   const toC1 = C.p1.minus(joint);
   const toB2 = B.p2.minus(joint);
   const cross = toC1.x * toB2.y - toC1.y * toB2.x;
   expect(Math.abs(cross)).toBeCloseTo(0, 10);
-  // Opposite direction.
   expect(toC1.x * toB2.x + toC1.y * toB2.y).toBeLessThan(0);
 
-  // Distance from the joint is conserved.
   expect(C.p1.minus(joint).length()).toBeCloseTo(distanceBefore, 10);
 });
 
-
 test("translating an anchor (p0/p3) with its flanking handles by the same delta keeps the joint derivative continuous", () => {
-  // Two connected curves sharing the joint (curve0.p3 = curve1.p0).
   const c0 = new Curve(new Vector(0, 0), new Vector(1, 0.5), new Vector(1.5, 0.5), new Vector(2, 0));
   const c1 = new Curve(new Vector(2, 0), new Vector(2.5, -0.5), new Vector(3, -0.5), new Vector(4, 0));
 
-  // Before: derivative is already continuous at the joint.
   expect(c0.getDerivative(1 as Curvilinear).x).toBeCloseTo(c1.getDerivative(0 as Curvilinear).x, 12);
   expect(c0.getDerivative(1 as Curvilinear).y).toBeCloseTo(c1.getDerivative(0 as Curvilinear).y, 12);
 
   const beforeIn = c0.getDerivative(1 as Curvilinear);
   const beforeOut = c1.getDerivative(0 as Curvilinear);
 
-  // Editor behavior when dragging the p3 anchor of the first curve: the
-  // anchor and both flanking handles move by the same delta (this curve's p2
-  // and the next curve's p1).
   const delta = new Vector(0.7, -0.3);
   c0.p3 = c0.p3.plus(delta);
-  c1.p0 = c1.p0.plus(delta); // the shared joint
+  c1.p0 = c1.p0.plus(delta);
   c0.p2 = c0.p2.plus(delta);
   c1.p1 = c1.p1.plus(delta);
 
-  // Pure translation: the derivatives at the joint are unchanged, so
-  // continuity is preserved exactly.
   const afterIn = c0.getDerivative(1 as Curvilinear);
   const afterOut = c1.getDerivative(0 as Curvilinear);
   expect(afterIn.x).toBeCloseTo(beforeIn.x, 12);
@@ -220,8 +186,6 @@ test("translating an anchor (p0/p3) with its flanking handles by the same delta 
   expect(afterIn.x).toBeCloseTo(afterOut.x, 12);
   expect(afterIn.y).toBeCloseTo(afterOut.y, 12);
 });
-
-
 
 test("Cut curve", () => {
 	const p1 = new Vector<2>(0, 0);
@@ -235,8 +199,6 @@ test("Cut curve", () => {
 	const dx = curve.getDerivative(0.2 as Curvilinear).times(1 / 3);
 	const precision = 15; // decimal places
 
-	// The original p1 and p2 keep their positions: the left half reuses p1
-	// and the right half reuses p2 (the resulting shape changes, intended).
 	expect(newCurve1.p0.x).toBeCloseTo(p1.x, precision);
 	expect(newCurve1.p0.y).toBeCloseTo(p1.y, precision);
 	expect(newCurve1.p1.x).toBeCloseTo(p2.x, precision);
@@ -246,15 +208,11 @@ test("Cut curve", () => {
 	expect(newCurve2.p3.x).toBeCloseTo(p4.x, precision);
 	expect(newCurve2.p3.y).toBeCloseTo(p4.y, precision);
 
-	// Both halves meet at the cutpoint.
 	expect(newCurve1.p3.x).toBeCloseTo(px.x, precision);
 	expect(newCurve1.p3.y).toBeCloseTo(px.y, precision);
 	expect(newCurve2.p0.x).toBeCloseTo(px.x, precision);
 	expect(newCurve2.p0.y).toBeCloseTo(px.y, precision);
 
-	// The handles around the cutpoint keep the tangent of the original curve
-	// at the cutpoint and share the same length: the shorter of the two
-	// parameter-scaled lengths.
 	const common = Math.min(0.2, 0.8);
 	const handle1 = px.minus(dx.normalized().times(dx.length() * common));
 	const handle2 = px.plus(dx.normalized().times(dx.length() * common));
@@ -263,13 +221,11 @@ test("Cut curve", () => {
 	expect(newCurve2.p1.x).toBeCloseTo(handle2.x, precision);
 	expect(newCurve2.p1.y).toBeCloseTo(handle2.y, precision);
 
-	// The two handles on the new joint have the same lengths.
 	expect(newCurve1.p3.minus(newCurve1.p2).length()).toBeCloseTo(
 		newCurve2.p1.minus(newCurve2.p0).length(),
 		precision,
 	);
 
-	// The start and end derivatives of the original curve are kept.
 	const derivativeScales = [
 		[curve.getDerivative(0 as Curvilinear), newCurve1.getDerivative(0 as Curvilinear)],
 		[curve.getDerivative(1 as Curvilinear), newCurve2.getDerivative(1 as Curvilinear)],

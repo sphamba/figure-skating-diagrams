@@ -9,7 +9,6 @@ import { LeftForwardInsideThreeTurn } from "../src/engine/element/threeTurn.js";
 import { LeftForwardInsideLoop } from "../src/engine/element/loop.js";
 import { Vector } from "../src/engine/vector.js";
 
-/** A straight 1 m path, long enough for the test element ranges. */
 function makePath(): Path {
   const path = new Path();
   path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
@@ -20,7 +19,6 @@ function footLCoordinates(sequence: Sequence): number[] {
   return sequence.keyframes.footL.map((keyframe) => keyframe.coordinate);
 }
 
-/** The span scaled about its middle by the given factor. */
 function scaledSpan(start: number, end: number, factor: number): number[] {
   const middle = (start + end) / 2;
   return [middle + (start - middle) * factor, middle + (end - middle) * factor];
@@ -43,11 +41,9 @@ test("a glide keeps the real span under a span scale", () => {
   sequence.addElement(new LeftForwardInsideGlide(0.3 as PathCoordinate, 0.7 as PathCoordinate));
 
   const glide = sequence.elements[0];
-  // Direct keyframe getters ignore the span scale.
   expect(glide!.getLeftFootKeyframes(2).map((keyframe) => keyframe.coordinate)).toEqual([0.3, 0.7]);
   expect(glide!.getHipsKeyframes(2).map((keyframe) => keyframe.coordinate)).toEqual([0.3, 0.7]);
 
-  // The draw keyframes keep the real span too.
   expect(sequence.getDrawFootKeyframes("footL", 2).map((keyframe) => keyframe.coordinate)).toEqual([0.3, 0.7]);
 });
 
@@ -55,7 +51,6 @@ test("a dynamic glide (stroke) keeps the real span under a span scale", () => {
   const sequence = new Sequence(makePath());
   sequence.addElement(new LeftNormalForwardInsideGlide(0.2 as PathCoordinate, 0.8 as PathCoordinate));
 
-  // The 95% keyframe stays on the real span, not re-based either.
   expect(sequence.getDrawFootKeyframes("footL", 2).map((keyframe) => keyframe.coordinate)).toEqual([0.2, 0.77, 0.8]);
 });
 
@@ -69,11 +64,9 @@ test("a turn re-bases its keyframes onto the scaled span", () => {
   const [scaledStart, scaledEnd] = scaledSpan(start, end, factor);
 
   const turn = sequence.elements[0]!;
-  // The on-ice foot spans the scaled range.
   const turnFootKeyframes = turn.getLeftFootKeyframes(factor);
   expect(turnFootKeyframes[0]!.coordinate).toBeCloseTo(scaledStart as number, 10);
   expect(turnFootKeyframes[turnFootKeyframes.length - 1]!.coordinate).toBeCloseTo(scaledEnd as number, 10);
-  // The hips follow the scaled span too.
   const hipsKeyframes = turn.getHipsKeyframes(factor);
   expect(hipsKeyframes[0]!.coordinate).toBeCloseTo(scaledStart as number, 10);
   expect(hipsKeyframes[hipsKeyframes.length - 1]!.coordinate).toBeCloseTo(scaledEnd as number, 10);
@@ -88,9 +81,7 @@ test("draw keyframes mix a real-span glide with a scaled turn", () => {
   const drawKeyframes = sequence.getDrawFootKeyframes("footL", factor);
   const coordinates = drawKeyframes.map((keyframe) => Number(keyframe.coordinate.toFixed(10)));
 
-  // The glide keyframes stay on the real span...
   expect(coordinates.slice(0, 2)).toEqual([0.05, 0.25]);
-  // ...and the turn keyframes are re-based onto the scaled span.
   const [scaledStart, scaledEnd] = scaledSpan(0.6, 0.9, factor);
   expect(coordinates).toContain(Number(scaledStart.toFixed(10)));
   expect(coordinates).toContain(Number(scaledEnd.toFixed(10)));

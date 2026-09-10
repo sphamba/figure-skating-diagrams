@@ -1,6 +1,3 @@
-/* Three-turns: a half turn on one foot, with 8 left/forward/inside variants
- * generated from side, direction and edge flags. */
-
 import type { PathCoordinate } from "../coordinates.js";
 import { FootKeyframe } from "../keyframe.js";
 import { getQuaternionFromAngleAxis } from "../quaternion.js";
@@ -8,11 +5,6 @@ import { Vector } from "../vector.js";
 import type { FootKey } from "../sequence.js";
 import { OneFootTurn } from "./oneFootTurn.js";
 
-/**
- * A ThreeTurn is a half turn on one foot: the on-ice foot rotates by a
- * quarter turn at the center of the element and swaps its edge (an inside
- * edge becomes an outside edge and the other way round).
- */
 export abstract class ThreeTurn extends OneFootTurn {
   protected get initialAngle(): number {
     return this.forward ? 0 : Math.PI;
@@ -41,7 +33,6 @@ export abstract class ThreeTurn extends OneFootTurn {
       const angle = this.initialAngle + i * this.angleIncrement;
       const contactPoint = i == 1 ? this.contactPointTurn : 0.5;
 
-      // No shift relative to the centerline, including at the turn center.
       const keyframeData = {
         position: new Vector<3>(0, 0, 0),
         orientation: getQuaternionFromAngleAxis(angle),
@@ -51,9 +42,7 @@ export abstract class ThreeTurn extends OneFootTurn {
       const keyframe = new FootKeyframe(
         pathCoordinate,
         keyframeData,
-        // Hardcoded smooth exit out of the turn
         i == 2 ? "smooth" : "linear",
-        // Hardcoded smooth entry into the turn
         i == 0 ? "smooth" : "linear",
       );
 
@@ -63,14 +52,10 @@ export abstract class ThreeTurn extends OneFootTurn {
   }
 }
 
-/** Constructor type of a generated three-turn variant. */
 export type ThreeTurnConstructor = new (footKey: FootKey, start: PathCoordinate, end: PathCoordinate) => ThreeTurn;
 
-/** Map a three-turn type name to its constructor, for the turn registry. */
 export const threeTurnConstructorsByType: Record<string, ThreeTurnConstructor> = {};
 
-/** Define one three-turn variant class: the flags close over the subclass,
- * which registers itself into the type registry. */
 function defineThreeTurn(
   type: string,
   shortName: string,
@@ -93,7 +78,6 @@ function defineThreeTurn(
   return Variant;
 }
 
-/** The side, direction and edge words of each variant name, with their flag. */
 const turnSides = [
   ["Left", true],
   ["Right", false],
@@ -107,10 +91,8 @@ const turnEdges = [
   ["Outside", false],
 ] as const;
 
-/** Human-readable label for each available three-turn kind. */
 export const threeTurnKindChoices: { type: string; label: string }[] = [];
 
-/** Construct the left/forward/inside variants from the name flags. */
 for (const [side, left] of turnSides) {
   for (const [direction, forward] of turnDirections) {
     for (const [edge, inside] of turnEdges) {
@@ -125,7 +107,6 @@ for (const [side, left] of turnSides) {
   }
 }
 
-/** Named constructors kept for use outside the registry (sequences, tests). */
 export const LeftForwardInsideThreeTurn = threeTurnConstructorsByType["LeftForwardInsideThreeTurn"]!;
 export const LeftForwardOutsideThreeTurn = threeTurnConstructorsByType["LeftForwardOutsideThreeTurn"]!;
 export const LeftBackwardInsideThreeTurn = threeTurnConstructorsByType["LeftBackwardInsideThreeTurn"]!;
