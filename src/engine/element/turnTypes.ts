@@ -4,6 +4,8 @@ import "./stroke.js";
 import { threeTurnConstructorsByType, threeTurnKindChoices, LeftForwardInsideThreeTurn } from "./threeTurn.js";
 import { loopConstructorsByType, loopKindChoices } from "./loop.js";
 import { bracketConstructorsByType, bracketKindChoices } from "./bracket.js";
+import { rockerConstructorsByType, rockerKindChoices } from "./rocker.js";
+import { counterConstructorsByType, counterKindChoices } from "./counter.js";
 import type { Element } from "./element.js";
 import { footTurnConstructorsByType, changeFootTurnType } from "./turn.js";
 import type { FootTurnJSON } from "./turn.js";
@@ -14,11 +16,15 @@ Object.assign(
   threeTurnConstructorsByType,
   loopConstructorsByType,
   bracketConstructorsByType,
+  rockerConstructorsByType,
+  counterConstructorsByType,
 );
 
 export const footTurnKindChoices: { type: string; label: string }[] = [
   ...threeTurnKindChoices,
   ...bracketKindChoices,
+  ...rockerKindChoices,
+  ...counterKindChoices,
   ...loopKindChoices,
   ...glideKindChoices,
 ];

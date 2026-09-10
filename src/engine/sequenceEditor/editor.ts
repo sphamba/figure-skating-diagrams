@@ -460,7 +460,7 @@ export class Editor {
 
   private drawCurvatureWarnings() {
     const checks = checkSequenceTurnCurvatures(this.sequence, this.provisionalElement ? [this.provisionalElement] : []);
-    for (const [, check] of checks) {
+    for (const check of checks) {
       if (!check.invalid) continue;
       this.drawWarningTriangle(check.point, WARNING_TRIANGLE_COLOR);
     }

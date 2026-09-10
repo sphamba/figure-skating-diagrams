@@ -53,9 +53,10 @@ test("A clockwise turn on a clockwise path is valid", () => {
   );
   sequence.addElement(element);
 
-  const check = checkTurnCurvature(sequence, element);
-  expect(check.expectedSign).toBe(-1);
-  expect(check.invalid).toBe(false);
+  const checks = checkTurnCurvature(sequence, element);
+  expect(checks.length).toBe(1);
+  expect(checks[0].expectedSign).toBe(-1);
+  expect(checks[0].invalid).toBe(false);
 });
 
 test("A counterclockwise turn on a clockwise path is invalid", () => {
@@ -68,9 +69,10 @@ test("A counterclockwise turn on a clockwise path is invalid", () => {
   );
   sequence.addElement(element);
 
-  const check = checkTurnCurvature(sequence, element);
-  expect(check.expectedSign).toBe(1);
-  expect(check.invalid).toBe(true);
+  const checks = checkTurnCurvature(sequence, element);
+  expect(checks.length).toBe(1);
+  expect(checks[0].expectedSign).toBe(1);
+  expect(checks[0].invalid).toBe(true);
 });
 
 test("A counterclockwise turn on a counterclockwise path is valid", () => {
@@ -83,7 +85,7 @@ test("A counterclockwise turn on a counterclockwise path is valid", () => {
   );
   sequence.addElement(element);
 
-  expect(checkTurnCurvature(sequence, element).invalid).toBe(false);
+  expect(checkTurnCurvature(sequence, element)[0].invalid).toBe(false);
 });
 
 test("Only one-foot turn elements are checked", () => {
@@ -95,8 +97,7 @@ test("Only one-foot turn elements are checked", () => {
   sequence.addElement(glide);
 
   const checks = checkSequenceTurnCurvatures(sequence, []);
-  expect(checks.has(turn)).toBe(true);
-  expect(checks.size).toBe(1);
+  expect(checks.length).toBe(1);
   expect(isTurnElement(glide)).toBe(false);
   expect(isTurnElement(turn)).toBe(true);
 });

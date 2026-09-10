@@ -81,6 +81,8 @@ const turnLevelOptions: { label: string; value: string }[][] = [
   [
     { label: "Three-turn", value: "ThreeTurn" },
     { label: "Bracket", value: "Bracket" },
+    { label: "Rocker", value: "Rocker" },
+    { label: "Counter", value: "Counter" },
     { label: "Loop", value: "Loop" },
   ],
   [
