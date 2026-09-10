@@ -64,15 +64,15 @@ export abstract class OneFootTurn extends FootTurn {
   ): FootKeyframe[];
 }
 
-const turnSides = [
+export const turnSides = [
   ["Left", true],
   ["Right", false],
 ] as const;
-const turnDirections = [
+export const turnDirections = [
   ["Forward", true],
   ["Backward", false],
 ] as const;
-const turnEdges = [
+export const turnEdges = [
   ["Inside", true],
   ["Outside", false],
 ] as const;

@@ -5,6 +5,7 @@ import { Path } from "../src/engine/path";
 import { Sequence } from "../src/engine/sequence";
 import { Vector, getUnitVectorFromAngle } from "../src/engine/vector";
 import { LeftForwardInsideThreeTurn, LeftForwardOutsideThreeTurn } from "../src/engine/element/threeTurn";
+import { twizzleConstructorsByType } from "../src/engine/element/twizzle";
 import {
   checkGlideCurvature,
   checkSequenceCurvatures,
@@ -90,6 +91,58 @@ test("A counterclockwise turn on a counterclockwise path is valid", () => {
   sequence.addElement(element);
 
   expect(checkTurnCurvature(sequence, element)[0].invalid).toBe(false);
+});
+
+test("A twizzle gets only one curvature check, at the start of the element", () => {
+  const path = clockwisePath();
+  const sequence = new Sequence(path);
+  const element = new twizzleConstructorsByType["LeftForwardInsideTwizzle1.5"]!(
+    "footL",
+    (path.length / 4) as PathCoordinate,
+    ((3 * path.length) / 4) as PathCoordinate,
+  );
+  sequence.addElement(element);
+
+  const checks = checkTurnCurvature(sequence, element);
+  expect(checks.length).toBe(1);
+  expect(checks[0].expectedSign).toBe(-1);
+  expect(checks[0].invalid).toBe(false);
+  const [curve, curvilinear] = path.getCurveAndCurvilinearCoord(element.start as PathCoordinate);
+  const expectedPoint = curve.getPosition(curvilinear);
+  expect(checks[0].point.x).toBeCloseTo(expectedPoint.x, 10);
+  expect(checks[0].point.y).toBeCloseTo(expectedPoint.y, 10);
+});
+
+test("A twizzle on the wrong edge direction is invalid", () => {
+  const path = clockwisePath();
+  const sequence = new Sequence(path);
+  const element = new twizzleConstructorsByType["LeftForwardOutsideTwizzle1.5"]!(
+    "footL",
+    (path.length / 4) as PathCoordinate,
+    ((3 * path.length) / 4) as PathCoordinate,
+  );
+  sequence.addElement(element);
+
+  const checks = checkTurnCurvature(sequence, element);
+  expect(checks.length).toBe(1);
+  expect(checks[0].expectedSign).toBe(1);
+  expect(checks[0].invalid).toBe(true);
+});
+
+test("A twizzle on a counterclockwise path with a matching edge is valid", () => {
+  const path = counterclockwisePath();
+  const sequence = new Sequence(path);
+  const element = new twizzleConstructorsByType["LeftForwardOutsideTwizzle1.5"]!(
+    "footL",
+    (path.length / 4) as PathCoordinate,
+    ((3 * path.length) / 4) as PathCoordinate,
+  );
+  sequence.addElement(element);
+
+  const checks = checkTurnCurvature(sequence, element);
+  expect(checks.length).toBe(1);
+  expect(checks[0].expectedSign).toBe(1);
+  expect(checks[0].invalid).toBe(false);
 });
 
 test("Turn, stroke, and glide elements are checked", () => {
@@ -266,10 +319,7 @@ test("A glide is checked only at its middle point", () => {
   path.addCurveEnd(getArcCurve(new Vector(0, 3 * radius), radius, (3 * Math.PI) / 2, Math.PI / 2));
   path.addCurveEnd(getArcCurve(new Vector(0, 5 * radius), radius, -Math.PI / 2, Math.PI / 2));
   const sequence = new Sequence(path);
-  const glide = new LeftForwardInsideGlide(
-    (path.length / 4) as PathCoordinate,
-    ((0.95 * path.length) as PathCoordinate),
-  );
+  const glide = new LeftForwardInsideGlide((path.length / 4) as PathCoordinate, (0.95 * path.length) as PathCoordinate);
   sequence.addElement(glide);
 
   const checks = checkSequenceCurvatures(sequence);

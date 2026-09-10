@@ -3,6 +3,7 @@ import type { Element } from "../element/element.js";
 import { OneFootTurn } from "../element/oneFootTurn.js";
 import { Rocker } from "../element/rocker.js";
 import { Counter } from "../element/counter.js";
+import { Twizzle } from "../element/twizzle.js";
 import { Glide } from "../element/glide.js";
 import { DynamicGlide } from "../element/stroke.js";
 import type { Sequence } from "../sequence.js";
@@ -38,6 +39,9 @@ export function checkTurnCurvature(sequence: Sequence, element: OneFootTurn): Cu
       checkAtCurvilinear(sequence, element.start as PathCoordinate, baseExpectedSign),
       checkAtCurvilinear(sequence, element.end as PathCoordinate, -baseExpectedSign as number),
     ];
+  }
+  if (element instanceof Twizzle) {
+    return [checkAtCurvilinear(sequence, element.start as PathCoordinate, baseExpectedSign)];
   }
   return [checkAtCurvilinear(sequence, midpointU(element.start, element.end), baseExpectedSign)];
 }

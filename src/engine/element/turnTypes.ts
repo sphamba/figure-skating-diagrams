@@ -3,6 +3,7 @@ import { glideConstructorsByType, glideKindChoices } from "./glide.js";
 import "./stroke.js";
 import { threeTurnConstructorsByType, threeTurnKindChoices, LeftForwardInsideThreeTurn } from "./threeTurn.js";
 import { loopConstructorsByType, loopKindChoices } from "./loop.js";
+import { twizzleConstructorsByType, twizzleKindChoices } from "./twizzle.js";
 import { bracketConstructorsByType, bracketKindChoices } from "./bracket.js";
 import { rockerConstructorsByType, rockerKindChoices } from "./rocker.js";
 import { counterConstructorsByType, counterKindChoices } from "./counter.js";
@@ -15,6 +16,7 @@ Object.assign(
   footTurnConstructorsByType,
   threeTurnConstructorsByType,
   loopConstructorsByType,
+  twizzleConstructorsByType,
   bracketConstructorsByType,
   rockerConstructorsByType,
   counterConstructorsByType,
@@ -26,6 +28,7 @@ export const footTurnKindChoices: { type: string; label: string }[] = [
   ...rockerKindChoices,
   ...counterKindChoices,
   ...loopKindChoices,
+  ...twizzleKindChoices,
   ...glideKindChoices,
 ];
 

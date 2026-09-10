@@ -83,31 +83,71 @@ const strokeLevelOptions: { label: string; value: string }[][] = [
   ],
 ];
 
-const turnLevelOptions: { label: string; value: string }[][] = [
-  [
-    { label: "Three-turn", value: "ThreeTurn" },
-    { label: "Bracket", value: "Bracket" },
-    { label: "Rocker", value: "Rocker" },
-    { label: "Counter", value: "Counter" },
-    { label: "Loop", value: "Loop" },
-  ],
-  [
-    { label: "Left", value: "Left" },
-    { label: "Right", value: "Right" },
-  ],
-  [
-    { label: "Forward", value: "Forward" },
-    { label: "Backward", value: "Backward" },
-  ],
-  [
-    { label: "Inside", value: "Inside" },
-    { label: "Outside", value: "Outside" },
-  ],
+const turnGroupOptions = [
+  { label: "Three-turn", value: "ThreeTurn" },
+  { label: "Bracket", value: "Bracket" },
+  { label: "Rocker", value: "Rocker" },
+  { label: "Counter", value: "Counter" },
+  { label: "Loop", value: "Loop" },
+  { label: "Twizzle", value: "Twizzle" },
 ];
 
-const turnStepFinal = computed(() => turnPath.value.length >= turnLevelOptions.length);
+const turnSideLevelOptions = [
+  { label: "Left", value: "Left" },
+  { label: "Right", value: "Right" },
+];
 
-const currentTurnOptions = computed(() => (turnStepFinal.value ? [] : turnLevelOptions[turnPath.value.length]));
+const turnDirectionLevelOptions = [
+  { label: "Forward", value: "Forward" },
+  { label: "Backward", value: "Backward" },
+];
+
+const turnEdgeLevelOptions = [
+  { label: "Inside", value: "Inside" },
+  { label: "Outside", value: "Outside" },
+];
+
+const twizzleTurnsLevelOptions = [
+  { label: "1/2 turn", value: "0.5" },
+  { label: "1 turn", value: "1" },
+  { label: "1-1/2 turns", value: "1.5" },
+  { label: "2 turns", value: "2" },
+  { label: "2-1/2 turns", value: "2.5" },
+  { label: "3 turns", value: "3" },
+  { label: "3-1/2 turns", value: "3.5" },
+  { label: "4 turns", value: "4" },
+  { label: "4-1/2 turns", value: "4.5" },
+  { label: "5 turns", value: "5" },
+  { label: "5-1/2 turns", value: "5.5" },
+];
+
+const turnLevelOptionsByGroup: { [group: string]: { label: string; value: string }[][] } = {
+  ThreeTurn: [turnSideLevelOptions, turnDirectionLevelOptions, turnEdgeLevelOptions],
+  Bracket: [turnSideLevelOptions, turnDirectionLevelOptions, turnEdgeLevelOptions],
+  Rocker: [turnSideLevelOptions, turnDirectionLevelOptions, turnEdgeLevelOptions],
+  Counter: [turnSideLevelOptions, turnDirectionLevelOptions, turnEdgeLevelOptions],
+  Loop: [turnSideLevelOptions, turnDirectionLevelOptions, turnEdgeLevelOptions],
+  Twizzle: [turnSideLevelOptions, turnDirectionLevelOptions, turnEdgeLevelOptions, twizzleTurnsLevelOptions],
+};
+
+const turnStepCounts: { [group: string]: number } = {
+  ThreeTurn: 4,
+  Bracket: 4,
+  Rocker: 4,
+  Counter: 4,
+  Loop: 4,
+  Twizzle: 5,
+};
+
+const turnGroup = computed(() => turnPath.value[0] ?? "");
+
+const turnStepFinal = computed(() => turnPath.value.length >= (turnStepCounts[turnGroup.value] ?? 1));
+
+const currentTurnOptions = computed(() => {
+  if (turnStepFinal.value) return [];
+  if (turnPath.value.length === 0) return turnGroupOptions;
+  return turnLevelOptionsByGroup[turnGroup.value]?.[turnPath.value.length - 1] ?? [];
+});
 
 const glideSideTwoFoot = computed(() => glidePath.value[0] === "TwoFoot");
 const glideStepFinal = computed(() => glidePath.value.length >= (glideSideTwoFoot.value ? 2 : 3));
@@ -138,7 +178,9 @@ const chosenLabels = computed<string[]>(() => {
   }
   const labels = ["One-foot turn"];
   turnPath.value.forEach((value, level) => {
-    const option = turnLevelOptions[level]?.find((choice) => choice.value === value);
+    const options: { label: string; value: string }[] | undefined =
+      level === 0 ? turnGroupOptions : turnLevelOptionsByGroup[turnGroup.value]?.[level - 1];
+    const option = options?.find((choice) => choice.value === value);
     if (option) labels.push(option.label);
   });
   return labels;
@@ -386,12 +428,17 @@ function onStrokeChange(value: string) {
 
 function onTurnChange(value: string) {
   const next = [...turnPath.value, value];
-  if (next.length < turnLevelOptions.length) {
+  if (next.length < (turnStepCounts[next[0] ?? ""] ?? 1)) {
     turnPath.value = next;
     return;
   }
-  const [group, side, direction, edge] = next;
-  changeElementKind(`${side}${direction}${edge}${group}`);
+  if (next[0] === "Twizzle") {
+    const [, side, direction, edge, turns] = next;
+    changeElementKind(`${side}${direction}${edge}Twizzle${turns}`);
+  } else {
+    const [group, side, direction, edge] = next;
+    changeElementKind(`${side}${direction}${edge}${group}`);
+  }
   closeElementChange();
 }
 
