@@ -136,11 +136,18 @@ export class Editor {
   private lastDragDelta = new Vector<2>(0, 0);
   private lastPanX = 0;
   private lastPanY = 0;
+  private touchMode: "none" | "one" | "two" = "none";
+  private lastPinchDist = 0;
+  private lastPinchMidX = 0;
+  private lastPinchMidY = 0;
 
   private onWheel = (event: WheelEvent) => this.handleWheel(event);
   private onMouseDown = (event: MouseEvent) => this.handleMouseDown(event);
-  private onMouseMove = (event: MouseEvent) => this.handleMouseMove(event);
+  private onMouseMove = (event: MouseEvent) => this.handleMove(...this.screenPosition(event));
   private onMouseUp = () => this.handleMouseUp();
+  private onTouchStart = (event: TouchEvent) => this.handleTouchStart(event);
+  private onTouchMove = (event: TouchEvent) => this.handleTouchMove(event);
+  private onTouchEnd = (event: TouchEvent) => this.handleTouchEnd(event);
   private onKeyDown = (event: KeyboardEvent) => this.handleKeyDown(event);
   private onContextMenu = (event: MouseEvent) => event.preventDefault();
   private onWindowResize = () => this.resize();
@@ -167,6 +174,10 @@ export class Editor {
 
     canvas.addEventListener("wheel", this.onWheel, { passive: false });
     canvas.addEventListener("mousedown", this.onMouseDown);
+    canvas.addEventListener("touchstart", this.onTouchStart, { passive: false });
+    canvas.addEventListener("touchmove", this.onTouchMove, { passive: false });
+    canvas.addEventListener("touchend", this.onTouchEnd);
+    canvas.addEventListener("touchcancel", this.onTouchEnd);
     window.addEventListener("mousemove", this.onMouseMove);
     window.addEventListener("mouseup", this.onMouseUp);
     window.addEventListener("keydown", this.onKeyDown);
@@ -179,6 +190,10 @@ export class Editor {
   destroy() {
     this.canvas.removeEventListener("wheel", this.onWheel);
     this.canvas.removeEventListener("mousedown", this.onMouseDown);
+    this.canvas.removeEventListener("touchstart", this.onTouchStart);
+    this.canvas.removeEventListener("touchmove", this.onTouchMove);
+    this.canvas.removeEventListener("touchend", this.onTouchEnd);
+    this.canvas.removeEventListener("touchcancel", this.onTouchEnd);
     window.removeEventListener("mousemove", this.onMouseMove);
     window.removeEventListener("mouseup", this.onMouseUp);
     window.removeEventListener("keydown", this.onKeyDown);
@@ -201,6 +216,7 @@ export class Editor {
     this.isCreatingProvisional = false;
     this.dragSequence = null;
     this.dragElement = null;
+    this.touchMode = "none";
     this.draw();
   }
 
@@ -1463,183 +1479,275 @@ export class Editor {
   private handleMouseDown(event: MouseEvent) {
     event.preventDefault();
 
+    const [screenX, screenY] = this.screenPosition(event);
     if (event.button === 2) {
-      this.isPanning = true;
-      const [screenX, screenY] = this.screenPosition(event);
-      this.lastPanX = screenX;
-      this.lastPanY = screenY;
+      this.handleSecondaryDown(screenX, screenY);
+      return;
+    }
+    if (event.button === 0) this.handlePrimaryDown(screenX, screenY, event.ctrlKey);
+  }
+
+  private handleTouchStart(event: TouchEvent) {
+    event.preventDefault();
+    if (event.touches.length >= 2) {
+      if (this.touchMode === "one") this.handleMouseUp(); // a second finger breaks off the one-finger action
+      this.touchMode = "two";
+      this.startPinch(event.touches);
+      return;
+    }
+    if (this.touchMode !== "none") return; // leftover finger after a two-finger gesture does nothing
+    const touch = event.touches[0];
+    if (!touch) return;
+    this.touchMode = "one";
+    this.handlePrimaryDown(...this.touchPosition(touch), false);
+  }
+
+  private handleTouchMove(event: TouchEvent) {
+    if (this.touchMode === "two" && event.touches.length >= 2) {
+      event.preventDefault();
+      this.pinchZoomAndPan(event.touches);
+      return;
+    }
+    if (this.touchMode === "one" && event.touches.length === 1) {
+      event.preventDefault();
+      const touch = event.touches[0];
+      if (!touch) return;
+      this.handleMove(...this.touchPosition(touch));
+    }
+  }
+
+  private handleTouchEnd(event: TouchEvent) {
+    if (this.touchMode === "one" && event.touches.length === 0) {
+      this.handleMouseUp();
+      this.touchMode = "none";
+      return;
+    }
+    if (this.touchMode === "two" && event.touches.length < 2) {
+      this.touchMode = "none";
+      event.preventDefault();
+      this.handleMouseUp();
+    }
+  }
+
+  private touchPosition(touch: Touch): [number, number] {
+    const rect = this.canvas.getBoundingClientRect();
+    return [touch.clientX - rect.left, touch.clientY - rect.top];
+  }
+
+  private startPinch(touches: TouchList) {
+    const [a, b] = [touches[0], touches[1]];
+    if (!a || !b) return;
+    const [ax, ay] = this.touchPosition(a);
+    const [bx, by] = this.touchPosition(b);
+    this.lastPinchDist = Math.hypot(bx - ax, by - ay);
+    this.lastPinchMidX = (ax + bx) / 2;
+    this.lastPinchMidY = (ay + by) / 2;
+  }
+
+  private pinchZoomAndPan(touches: TouchList) {
+    const [a, b] = [touches[0], touches[1]];
+    if (!a || !b) return;
+    const [ax, ay] = this.touchPosition(a);
+    const [bx, by] = this.touchPosition(b);
+    const dist = Math.hypot(bx - ax, by - ay);
+    const midX = (ax + bx) / 2;
+    const midY = (ay + by) / 2;
+    if (this.lastPinchDist <= 0) {
+      this.lastPinchDist = dist;
+      this.lastPinchMidX = midX;
+      this.lastPinchMidY = midY;
       return;
     }
 
-    if (event.button === 0) {
-      const [screenX, screenY] = this.screenPosition(event);
+    const worldUnderMid = this.screenToWorld(this.lastPinchMidX, this.lastPinchMidY);
+    this.view.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, this.view.zoom * (dist / this.lastPinchDist)));
+    // The world point under the previous midpoint stays under the current midpoint.
+    this.view.center = new Vector<2>(
+      worldUnderMid.x - (midX - this.width / 2) / this.view.zoom,
+      worldUnderMid.y + (midY - this.height / 2) / this.view.zoom,
+    );
 
-      if (this.mode === "view") return;
+    this.lastPinchDist = dist;
+    this.lastPinchMidX = midX;
+    this.lastPinchMidY = midY;
+    this.draw();
+  }
 
-      if (this.mode !== "path") {
-        const provisionalHit = this.hitProvisionalAddButton(screenX, screenY);
-        if (provisionalHit) {
-          this.addProvisionalElement(provisionalHit);
-          return;
-        }
-        if (this.hitElementCogButton(screenX, screenY) && this.onElementChangeRequest) {
-          const element = this.getElementDeleteButtonElement();
-          if (element) this.onElementChangeRequest(element);
-          return;
-        }
-        if (this.hitElementDeleteButton(screenX, screenY)) {
-          const element = this.getElementDeleteButtonElement();
-          if (element) {
-            const sequence = this.getSequenceOfElement(element);
-            if (sequence) sequence.removeElement(element);
-            this.selectedElements.delete(element);
-            this.notifySequenceChange();
-            this.draw();
-          }
-          return;
-        }
-        const element = this.pickElement(screenX, screenY);
+  private handleSecondaryDown(screenX: number, screenY: number) {
+    this.isPanning = true;
+    this.lastPanX = screenX;
+    this.lastPanY = screenY;
+  }
+
+  private handlePrimaryDown(screenX: number, screenY: number, ctrlKey: boolean) {
+    if (this.mode === "view") return;
+
+    if (this.mode !== "path") {
+      const provisionalHit = this.hitProvisionalAddButton(screenX, screenY);
+      if (provisionalHit) {
+        this.addProvisionalElement(provisionalHit);
+        return;
+      }
+      if (this.hitElementCogButton(screenX, screenY) && this.onElementChangeRequest) {
+        const element = this.getElementDeleteButtonElement();
+        if (element) this.onElementChangeRequest(element);
+        return;
+      }
+      if (this.hitElementDeleteButton(screenX, screenY)) {
+        const element = this.getElementDeleteButtonElement();
         if (element) {
-          const isProvisional = this.isProvisionalElement(element);
-          if (!isProvisional) {
-            const owner = this.getSequenceOfElement(element);
-            if (owner) this.provisionalElements.delete(owner);
-            this.selectElement(element, event.ctrlKey);
-          }
-          const pointHit = this.pickElementControlPoint(screenX, screenY);
-          if (pointHit?.element === element) {
-            this.isDraggingElementPoint = true;
-            this.dragElement = element;
-            this.dragElementPointIsStart = pointHit.isStart;
-          } else {
-            this.startElementSegmentDrag(element, screenX, screenY);
-          }
-        } else {
-          const pathHit = this.pickPathCoordinate(screenX, screenY);
-          if (pathHit) {
-            this.startProvisionalCreation(pathHit.sequence, pathHit.u);
-          } else {
-            this.isSelectingRect = true;
-            this.rectDidMove = false;
-            this.rectTargetsElements = true;
-            this.rectAddToSelection = event.ctrlKey;
-            this.rectStartX = screenX;
-            this.rectStartY = screenY;
-            this.rectEndX = screenX;
-            this.rectEndY = screenY;
-          }
-          this.draw();
-          return;
-        }
-        this.draw();
-        return;
-      }
-
-      const deleteHit = this.hitDeleteButton(screenX, screenY);
-      if (deleteHit) {
-        const sequence = deleteHit.sequence;
-        const removable = deleteHit.removable;
-        if (removable.isStart) {
-          sequence.path.removeStartCurve();
-        } else if (removable.isEnd) {
-          sequence.path.removeEndCurve();
-        } else {
-          const [curveBefore] = sequence.path.getCurvesAroundPoint(removable.point);
-          this.jointDeletionSnapshot = this.makeJointDeletionSnapshot(
-            sequence,
-            sequence.path.curves.indexOf(curveBefore),
-          );
-          sequence.path.removePoint(removable.point);
-          this.remapElementsAfterCurveRemoval();
-        }
-        this.selectedPoints.delete(sequence);
-        this.notifySequenceChange();
-        this.draw();
-        return;
-      }
-      const addHit = this.hitAddButton(screenX, screenY);
-      if (addHit) {
-        this.addSegmentEnd(addHit);
-        return;
-      }
-      const splitHit = this.hitSplitButton(screenX, screenY);
-      if (splitHit) {
-        const sequence = splitHit.sequence;
-        const curve = sequence.path.curves[splitHit.curveIndex];
-        if (curve) {
-          const mid = curve.getHalfLengthCoordinate();
-          sequence.path.cut(splitHit.curveIndex, mid);
-          const remapFrom = this.selectedCurves.get(sequence) ?? [];
-          const newSelected = new Set<number>();
-          for (const idx of remapFrom) {
-            if (idx < splitHit.curveIndex) newSelected.add(idx);
-            else if (idx > splitHit.curveIndex) newSelected.add(idx + 1);
-          }
-          newSelected.add(splitHit.curveIndex);
-          newSelected.add(splitHit.curveIndex + 1);
-          this.selectedCurves.set(sequence, newSelected);
+          const sequence = this.getSequenceOfElement(element);
+          if (sequence) sequence.removeElement(element);
+          this.selectedElements.delete(element);
           this.notifySequenceChange();
           this.draw();
         }
         return;
       }
-      const picked = this.pickControlPoint(screenX, screenY);
-      if (picked) {
-        const sequence = picked.sequence;
-        const key = this.keyOf(picked.curveIndex, picked.pointKey);
-        const selected = this.getSelectedPointsFor(sequence);
-        if (event.ctrlKey) {
-          if (selected.has(key)) selected.delete(key);
-          else selected.add(key);
-        } else if (!selected.has(key)) {
-          // Plain click on an unselected point: select only that point and drop the
-          // selections of the other sequences so the drag moves it alone.
-          this.selectedPoints = new Map([[sequence, new Set([key])]]);
+      const element = this.pickElement(screenX, screenY);
+      if (element) {
+        const isProvisional = this.isProvisionalElement(element);
+        if (!isProvisional) {
+          const owner = this.getSequenceOfElement(element);
+          if (owner) this.provisionalElements.delete(owner);
+          this.selectElement(element, ctrlKey);
         }
-        if ((this.selectedPoints.get(sequence)?.size ?? 0) > 0) this.selectedCurves.delete(sequence);
-        // Deselecting with ctrl does not start a drag. A plain click on a point ends
-        // with that point selected (fresh or kept), so the drag starts at once.
-        if (this.selectedPoints.get(sequence)?.has(key) ?? false) {
-          this.isDraggingPoint = true;
-          this.dragSequence = sequence;
-          this.dragOrigin = sequence.path.curves[picked.curveIndex]?.[picked.pointKey].copy() ?? null;
-          this.lastDragDelta = new Vector<2>(0, 0);
-          this.jointMoveSnapshot =
-            picked.pointKey === "p0" || picked.pointKey === "p3"
-              ? this.makeJointMoveSnapshot(sequence, picked.curveIndex, picked.pointKey)
-              : null;
+        const pointHit = this.pickElementControlPoint(screenX, screenY);
+        if (pointHit?.element === element) {
+          this.isDraggingElementPoint = true;
+          this.dragElement = element;
+          this.dragElementPointIsStart = pointHit.isStart;
+        } else {
+          this.startElementSegmentDrag(element, screenX, screenY);
         }
       } else {
-        const curveHit = this.pickCurve(screenX, screenY);
-        if (curveHit) {
-          const sequence = curveHit.sequence;
-          this.handleCurveSelection(sequence, curveHit.curveIndex, event.ctrlKey);
-          if (this.selectedCurves.get(sequence)?.has(curveHit.curveIndex)) {
-            this.isDraggingCurve = true;
-            this.dragSequence = sequence;
-            this.dragOrigin = this.screenToWorld(screenX, screenY);
-            this.lastDragDelta = new Vector<2>(0, 0);
-          }
+        const pathHit = this.pickPathCoordinate(screenX, screenY);
+        if (pathHit) {
+          this.startProvisionalCreation(pathHit.sequence, pathHit.u);
         } else {
           this.isSelectingRect = true;
           this.rectDidMove = false;
-          this.rectTargetsElements = false;
-          this.rectAddToSelection = event.ctrlKey;
+          this.rectTargetsElements = true;
+          this.rectAddToSelection = ctrlKey;
           this.rectStartX = screenX;
           this.rectStartY = screenY;
           this.rectEndX = screenX;
           this.rectEndY = screenY;
-          if (!event.ctrlKey) this.selectedPoints.clear();
-          this.selectedCurves.clear();
         }
+        this.draw();
+        return;
       }
       this.draw();
+      return;
     }
+
+    const deleteHit = this.hitDeleteButton(screenX, screenY);
+    if (deleteHit) {
+      const sequence = deleteHit.sequence;
+      const removable = deleteHit.removable;
+      if (removable.isStart) {
+        sequence.path.removeStartCurve();
+      } else if (removable.isEnd) {
+        sequence.path.removeEndCurve();
+      } else {
+        const [curveBefore] = sequence.path.getCurvesAroundPoint(removable.point);
+        this.jointDeletionSnapshot = this.makeJointDeletionSnapshot(
+          sequence,
+          sequence.path.curves.indexOf(curveBefore),
+        );
+        sequence.path.removePoint(removable.point);
+        this.remapElementsAfterCurveRemoval();
+      }
+      this.selectedPoints.delete(sequence);
+      this.notifySequenceChange();
+      this.draw();
+      return;
+    }
+    const addHit = this.hitAddButton(screenX, screenY);
+    if (addHit) {
+      this.addSegmentEnd(addHit);
+      return;
+    }
+    const splitHit = this.hitSplitButton(screenX, screenY);
+    if (splitHit) {
+      const sequence = splitHit.sequence;
+      const curve = sequence.path.curves[splitHit.curveIndex];
+      if (curve) {
+        const mid = curve.getHalfLengthCoordinate();
+        sequence.path.cut(splitHit.curveIndex, mid);
+        const remapFrom = this.selectedCurves.get(sequence) ?? [];
+        const newSelected = new Set<number>();
+        for (const idx of remapFrom) {
+          if (idx < splitHit.curveIndex) newSelected.add(idx);
+          else if (idx > splitHit.curveIndex) newSelected.add(idx + 1);
+        }
+        newSelected.add(splitHit.curveIndex);
+        newSelected.add(splitHit.curveIndex + 1);
+        this.selectedCurves.set(sequence, newSelected);
+        this.notifySequenceChange();
+        this.draw();
+      }
+      return;
+    }
+    const picked = this.pickControlPoint(screenX, screenY);
+    if (picked) {
+      const sequence = picked.sequence;
+      const key = this.keyOf(picked.curveIndex, picked.pointKey);
+      const selected = this.getSelectedPointsFor(sequence);
+      if (ctrlKey) {
+        if (selected.has(key)) selected.delete(key);
+        else selected.add(key);
+      } else if (!selected.has(key)) {
+        // Plain click on an unselected point: select only that point and drop the
+        // selections of the other sequences so the drag moves it alone.
+        this.selectedPoints = new Map([[sequence, new Set([key])]]);
+      }
+      if ((this.selectedPoints.get(sequence)?.size ?? 0) > 0) this.selectedCurves.delete(sequence);
+      // Deselecting with ctrl does not start a drag. A plain click on a point ends
+      // with that point selected (fresh or kept), so the drag starts at once.
+      if (this.selectedPoints.get(sequence)?.has(key) ?? false) {
+        this.isDraggingPoint = true;
+        this.dragSequence = sequence;
+        this.dragOrigin = sequence.path.curves[picked.curveIndex]?.[picked.pointKey].copy() ?? null;
+        this.lastDragDelta = new Vector<2>(0, 0);
+        this.jointMoveSnapshot =
+          picked.pointKey === "p0" || picked.pointKey === "p3"
+            ? this.makeJointMoveSnapshot(sequence, picked.curveIndex, picked.pointKey)
+            : null;
+      }
+    } else {
+      const curveHit = this.pickCurve(screenX, screenY);
+      if (curveHit) {
+        const sequence = curveHit.sequence;
+        this.handleCurveSelection(sequence, curveHit.curveIndex, ctrlKey);
+        if (this.selectedCurves.get(sequence)?.has(curveHit.curveIndex)) {
+          this.isDraggingCurve = true;
+          this.dragSequence = sequence;
+          this.dragOrigin = this.screenToWorld(screenX, screenY);
+          this.lastDragDelta = new Vector<2>(0, 0);
+        }
+      } else {
+        this.isSelectingRect = true;
+        this.rectDidMove = false;
+        this.rectTargetsElements = false;
+        this.rectAddToSelection = ctrlKey;
+        this.rectStartX = screenX;
+        this.rectStartY = screenY;
+        this.rectEndX = screenX;
+        this.rectEndY = screenY;
+        if (!ctrlKey) this.selectedPoints.clear();
+        this.selectedCurves.clear();
+      }
+    }
+    this.draw();
   }
 
   private handleMouseMove(event: MouseEvent) {
+    this.handleMove(...this.screenPosition(event));
+  }
+
+  private handleMove(screenX: number, screenY: number) {
     if (this.isPanning) {
-      const [screenX, screenY] = this.screenPosition(event);
       const deltaX = screenX - this.lastPanX;
       const deltaY = screenY - this.lastPanY;
       this.lastPanX = screenX;
@@ -1651,7 +1759,6 @@ export class Editor {
     }
 
     if (this.isSelectingRect) {
-      const [screenX, screenY] = this.screenPosition(event);
       if (
         Math.abs(screenX - this.rectStartX) > RECT_CLICK_THRESHOLD ||
         Math.abs(screenY - this.rectStartY) > RECT_CLICK_THRESHOLD
@@ -1665,13 +1772,11 @@ export class Editor {
     }
 
     if (this.isCreatingProvisional) {
-      const [screenX, screenY] = this.screenPosition(event);
       this.updateProvisionalCreation(this.screenToWorld(screenX, screenY));
       return;
     }
 
     if (this.isDraggingElementPoint) {
-      const [screenX, screenY] = this.screenPosition(event);
       if (!this.dragElement) return;
       const world = this.screenToWorld(screenX, screenY);
       const u = this.snapElementPointToPath(this.dragElement, this.dragElementPointIsStart, world);
@@ -1686,7 +1791,6 @@ export class Editor {
     }
 
     if (this.isDraggingElementSegment) {
-      const [screenX, screenY] = this.screenPosition(event);
       const dragSequence = this.dragElement ? this.getSequenceOfElement(this.dragElement) : null;
       if (!dragSequence) return;
       const world = this.screenToWorld(screenX, screenY);
@@ -1714,7 +1818,6 @@ export class Editor {
     }
 
     if (this.isDraggingCurve) {
-      const [screenX, screenY] = this.screenPosition(event);
       if (!this.dragOrigin) return;
       const world = this.screenToWorld(screenX, screenY);
       const delta = world.minus(this.dragOrigin);
@@ -1725,7 +1828,6 @@ export class Editor {
     }
 
     if (this.isDraggingPoint) {
-      const [screenX, screenY] = this.screenPosition(event);
       const sequence = this.dragSequence;
       const selected = sequence ? this.selectedPoints.get(sequence) : undefined;
       if (sequence && selected && selected.size === 1) {

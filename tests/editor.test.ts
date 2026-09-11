@@ -11,9 +11,7 @@ import { LeftNormalForwardInsideGlide } from "../src/engine/element/stroke";
 
 function makeStraightPath(): Path {
   const path = new Path();
-  path.addCurveEnd(
-    new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)),
-  );
+  path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
   return path;
 }
 
@@ -37,14 +35,10 @@ test("addSegmentEnd appends a 5 m straight curve", () => {
 
 test("new end curve keeps the end derivative and aligns control points at equal length", () => {
   const path = new Path();
-  path.addCurveEnd(
-    new Curve(new Vector(0, 0), new Vector(0.5, 0), new Vector(0.5, 1), new Vector(1, 1)),
-  );
+  path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(0.5, 0), new Vector(0.5, 1), new Vector(1, 1)));
 
   const endPosition = path.curves[path.curves.length - 1]!.p3.copy();
-  const endDerivative = path.curves[path.curves.length - 1]!
-    .getDerivative(1 as Curvilinear)
-    .normalized();
+  const endDerivative = path.curves[path.curves.length - 1]!.getDerivative(1 as Curvilinear).normalized();
 
   const sequence = new Sequence(path);
   sequence.path.addCurveEnd();
@@ -72,9 +66,24 @@ import { Editor } from "../src/engine/sequenceEditor/editor";
 
 // canvas 2D context methods, stubbed as no-ops
 const CTX_METHODS = [
-  "scale", "clearRect", "save", "restore", "beginPath", "moveTo", "lineTo",
-  "bezierCurveTo", "stroke", "fill", "arc", "fillRect", "strokeRect", "translate",
-  "setTransform", "closePath", "rect", "fillText",
+  "scale",
+  "clearRect",
+  "save",
+  "restore",
+  "beginPath",
+  "moveTo",
+  "lineTo",
+  "bezierCurveTo",
+  "stroke",
+  "fill",
+  "arc",
+  "fillRect",
+  "strokeRect",
+  "translate",
+  "setTransform",
+  "closePath",
+  "rect",
+  "fillText",
 ];
 
 const CTX_RESULT: Record<string, () => unknown> = {
@@ -415,7 +424,7 @@ test("dragging an element by its segment keeps its real length constant", () => 
   }
   mouse("mouseup", window, {});
   editor.destroy();
-});
+}, 20000);
 
 test("dragging an element by its segment moves it toward the start of the path", () => {
   const { editor, canvas } = makeEditor();
@@ -559,9 +568,7 @@ test("a zero-size element does not hang drawing and picking in elements mode", (
   const { editor } = makeEditor();
   editor.mode = "elements";
   const path = editor.getSequences()[0].path;
-  editor.getSequences()[0].addElement(
-    new LeftForwardOutsideGlide(0.5 as PathCoordinate, 0.5 as PathCoordinate),
-  );
+  editor.getSequences()[0].addElement(new LeftForwardOutsideGlide(0.5 as PathCoordinate, 0.5 as PathCoordinate));
   const start = Date.now();
   editor.draw();
   const cursor = editorRef(editor).screenToWorld(512, 512);

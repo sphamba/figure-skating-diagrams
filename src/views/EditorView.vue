@@ -196,11 +196,17 @@ const chosenLabels = computed<string[]>(() => {
 
 type HelpItem = { keys: string[]; description: string };
 
+const touchHelpItems: HelpItem[] = [
+  { keys: ["two fingers"], description: "pinch to zoom and drag to move the view" },
+  { keys: ["one finger"], description: "same as a left click" },
+];
+
 const helpItems = computed<HelpItem[]>(() =>
   editMode.value === "view"
     ? [
         { keys: ["wheel"], description: "zoom" },
         { keys: ["right drag"], description: "move the view" },
+        ...touchHelpItems,
       ]
     : editMode.value === "elements"
       ? [
@@ -211,6 +217,7 @@ const helpItems = computed<HelpItem[]>(() =>
           { keys: ["left drag"], description: "on the path: create a provisional element over the dragged range" },
           { keys: ["drag"], description: "a provisional element: move it or its ends" },
           { keys: ["+"], description: "on the provisional element: add it to the sequence" },
+          ...touchHelpItems,
         ]
       : [
           { keys: ["wheel"], description: "zoom" },
@@ -225,6 +232,7 @@ const helpItems = computed<HelpItem[]>(() =>
           { keys: ["+"], description: "button near the end of the path: add a segment" },
           { keys: ["+"], description: "button at the midpoint of a selected curve: split it" },
           { keys: ["−"], description: "button beside a selected point: remove that point" },
+          ...touchHelpItems,
         ],
 );
 
@@ -836,6 +844,7 @@ function closeElementChange() {
   width: 100%;
   height: 100%;
   cursor: default;
+  touch-action: none;
 }
 
 .editor-view__element-kind {
