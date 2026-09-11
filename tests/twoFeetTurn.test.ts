@@ -26,30 +26,34 @@ const start = 0.25 as PathCoordinate;
 const end = 0.75 as PathCoordinate;
 const spacing = halfFeetSpacing;
 
-// The angle property of a quaternion is 2*acos(real) and loses the rotation sign.
-function signedAngle(quaternion: Quaternion): number {
-  return 2 * Math.atan2(quaternion.vector.z, quaternion.real);
+// The angle property of a quaternion is 2*acos(real) and loses the rotation sign,
+// so orientations are compared through their real and vector components.
+function expectOrientation(keyframe: { data: { orientation?: Quaternion } }, angle: number) {
+  const expected = getQuaternionFromAngleAxis(angle);
+  expect(keyframe.data.orientation!.real).toBeCloseTo(expected.real, 10);
+  expect(keyframe.data.orientation!.vector.z).toBeCloseTo(expected.vector.z, 10);
 }
 
-function worldOffset(position: Vector<3>, angle: number): Vector<2> {
-  return position.rotate(getQuaternionFromAngleAxis(angle)) as unknown as Vector<2>;
+// Rotates the local foot placement into the world frame with the foot orientation.
+function worldOffset(position: Vector<3>, orientation: Quaternion): Vector<2> {
+  return position.rotate(orientation) as unknown as Vector<2>;
 }
 
 test("Mohawk and choctaw variants have types and short names", () => {
   const mohawk = new LeftForwardOpenMohawk("footL", start, end);
   expect(mohawk.type).toBe("LeftForwardOpenMohawk");
-  expect(mohawk.shortName).toBe("MO");
+  expect(mohawk.shortName).toBe("opMo");
 
   const closedMohawk = new LeftForwardClosedMohawk("footL", start, end);
   expect(closedMohawk.shortName).toBe("MO");
 
   const openChoctaw = new RightBackwardOpenChoctaw("footR", start, end);
   expect(openChoctaw.type).toBe("RightBackwardOpenChoctaw");
-  expect(openChoctaw.shortName).toBe("opCHO");
+  expect(openChoctaw.shortName).toBe("opCho");
 
   const closedChoctaw = new LeftBackwardClosedChoctaw("footL", start, end);
   expect(closedChoctaw.type).toBe("LeftBackwardClosedChoctaw");
-  expect(closedChoctaw.shortName).toBe("clCHO");
+  expect(closedChoctaw.shortName).toBe("clCho");
 });
 
 test("A mohawk keeps the contact point at the middle of both feet", () => {
@@ -80,16 +84,14 @@ test("A left forward open mohawk places both feet on the path line at the midpoi
   expect(footB[0]!.data.orientation!.angle).toBeCloseTo(0, 10);
 
   // Midpoint: foot A ahead on the path line, foot B behind, 90 degrees apart
-  const footAMid = worldOffset(footA[1]!.data.position!, signedAngle(footA[1]!.data.orientation!));
-  const footBMid = worldOffset(footB[1]!.data.position!, signedAngle(footB[1]!.data.orientation!));
-  expect(footAMid.x).toBeCloseTo(spacing, 10);
-  expect(footAMid.y).toBeCloseTo(0, 10);
-  expect(footBMid.x).toBeCloseTo(-spacing, 10);
-  expect(footBMid.y).toBeCloseTo(0, 10);
-  expect(footA[1]!.data.orientation!.angle).toBeCloseTo(0, 10);
-  const footBOrientation = footB[1]!.data.orientation!;
-  expect(footBOrientation.angle).toBeCloseTo(Math.PI / 2, 10);
-  expect(footBOrientation.vector.z).toBeLessThan(0);
+  const footAMid = worldOffset(footA[1]!.data.position!, footA[1]!.data.orientation!);
+  const footBMid = worldOffset(footB[1]!.data.position!, footB[1]!.data.orientation!);
+  expect(footAMid.x).toBeCloseTo(spacing / Math.SQRT2, 10);
+  expect(footAMid.y).toBeCloseTo(-spacing / Math.SQRT2, 10);
+  expect(footBMid.x).toBeCloseTo(-spacing / Math.SQRT2, 10);
+  expect(footBMid.y).toBeCloseTo(-spacing / Math.SQRT2, 10);
+  expectOrientation(footA[1], -Math.PI / 4);
+  expectOrientation(footB[1], (-3 * Math.PI) / 4);
   expect(footA[1]!.data.position!.z).toBe(0);
   expect(footB[1]!.data.position!.z).toBe(0);
 
@@ -107,11 +109,9 @@ test("A left forward open mohawk places both feet on the path line at the midpoi
   expect(hips[0]!.coordinate).toBe(start);
   expect(hips[1]!.coordinate).toBe(0.5 as PathCoordinate);
   expect(hips[2]!.coordinate).toBe(end);
-  expect(hips[0]!.data.orientation!.angle).toBeCloseTo(0, 10);
-  expect(hips[1]!.data.orientation!.angle).toBeCloseTo(Math.PI / 2, 10);
-  expect(hips[1]!.data.orientation!.vector.z).toBeLessThan(0);
-  expect(hips[2]!.data.orientation!.angle).toBeCloseTo(Math.PI, 10);
-  expect(hips[2]!.data.orientation!.vector.z).toBeLessThan(0);
+  expectOrientation(hips[0], 0);
+  expectOrientation(hips[1], -Math.PI / 2);
+  expectOrientation(hips[2], -Math.PI);
 });
 
 test("A right forward mohawk rotates opposite to a left forward mohawk", () => {
@@ -119,19 +119,15 @@ test("A right forward mohawk rotates opposite to a left forward mohawk", () => {
   const footA = mohawk.getRightFootKeyframes();
   const footB = mohawk.getLeftFootKeyframes();
 
-  const footAMid = worldOffset(footA[1]!.data.position!, signedAngle(footA[1]!.data.orientation!));
-  const footBMid = worldOffset(footB[1]!.data.position!, signedAngle(footB[1]!.data.orientation!));
-  expect(footAMid.x).toBeCloseTo(spacing, 10);
-  expect(footBMid.x).toBeCloseTo(-spacing, 10);
-  const footBOrientation = footB[1]!.data.orientation!;
-  expect(footBOrientation.angle).toBeCloseTo(Math.PI / 2, 10);
-  expect(footBOrientation.vector.z).toBeGreaterThan(0);
+  const footAMid = worldOffset(footA[1]!.data.position!, footA[1]!.data.orientation!);
+  const footBMid = worldOffset(footB[1]!.data.position!, footB[1]!.data.orientation!);
+  expect(footAMid.x).toBeCloseTo(spacing / Math.SQRT2, 10);
+  expect(footBMid.x).toBeCloseTo(-spacing / Math.SQRT2, 10);
+  expectOrientation(footB[1], (3 * Math.PI) / 4);
 
   const hips = mohawk.getHipsKeyframes();
-  expect(hips[1]!.data.orientation!.angle).toBeCloseTo(Math.PI / 2, 10);
-  expect(hips[1]!.data.orientation!.vector.z).toBeGreaterThan(0);
-  expect(hips[2]!.data.orientation!.angle).toBeCloseTo(Math.PI, 10);
-  expect(hips[2]!.data.orientation!.vector.z).toBeGreaterThan(0);
+  expectOrientation(hips[1], Math.PI / 2);
+  expectOrientation(hips[2], Math.PI);
 });
 
 test("An open choctaw places foot B behind foot A at the midpoint", () => {
@@ -141,14 +137,12 @@ test("An open choctaw places foot B behind foot A at the midpoint", () => {
 
   expect(footA).toHaveLength(3);
   expect(footB).toHaveLength(3);
-  const footAMid = worldOffset(footA[1]!.data.position!, signedAngle(footA[1]!.data.orientation!));
-  const footBMid = worldOffset(footB[1]!.data.position!, signedAngle(footB[1]!.data.orientation!));
-  expect(footAMid.x).toBeCloseTo(spacing, 10);
-  expect(footAMid.y).toBeCloseTo(0, 10);
-  expect(footBMid.x).toBeCloseTo(-spacing, 10);
-  expect(footBMid.y).toBeCloseTo(0, 10);
-  expect(footA[1]!.data.orientation!.angle).toBeCloseTo(0, 10);
-  expect(footB[1]!.data.orientation!.angle).toBeCloseTo(Math.PI, 10);
+  const footAMid = worldOffset(footA[1]!.data.position!, footA[1]!.data.orientation!);
+  const footBMid = worldOffset(footB[1]!.data.position!, footB[1]!.data.orientation!);
+  expect(footAMid.y).toBeCloseTo(spacing, 10);
+  expect(footBMid.y).toBeCloseTo(-spacing, 10);
+  expectOrientation(footA[1], 0);
+  expectOrientation(footB[1], Math.PI);
   expect(footA[1]!.data.position!.z).toBe(0);
   expect(footB[1]!.data.position!.z).toBe(0);
 });
@@ -158,12 +152,12 @@ test("A closed choctaw places foot B in front of foot A at the midpoint", () => 
   const footA = choctaw.getLeftFootKeyframes();
   const footB = choctaw.getRightFootKeyframes();
 
-  const footAMid = worldOffset(footA[1]!.data.position!, signedAngle(footA[1]!.data.orientation!));
-  const footBMid = worldOffset(footB[1]!.data.position!, signedAngle(footB[1]!.data.orientation!));
-  expect(footAMid.x).toBeCloseTo(-spacing, 10);
-  expect(footBMid.x).toBeCloseTo(spacing, 10);
-  expect(footA[1]!.data.orientation!.angle).toBeCloseTo(0, 10);
-  expect(footB[1]!.data.orientation!.angle).toBeCloseTo(Math.PI, 10);
+  const footAMid = worldOffset(footA[1]!.data.position!, footA[1]!.data.orientation!);
+  const footBMid = worldOffset(footB[1]!.data.position!, footB[1]!.data.orientation!);
+  expect(footAMid.y).toBeCloseTo(-spacing, 10);
+  expect(footBMid.y).toBeCloseTo(spacing, 10);
+  expectOrientation(footA[1], 0);
+  expectOrientation(footB[1], Math.PI);
 });
 
 test("A backward choctaw keeps the same midpoint foot placement rule", () => {
@@ -171,20 +165,18 @@ test("A backward choctaw keeps the same midpoint foot placement rule", () => {
   const footA = choctaw.getLeftFootKeyframes();
   const footB = choctaw.getRightFootKeyframes();
 
-  const footAMid = worldOffset(footA[1]!.data.position!, signedAngle(footA[1]!.data.orientation!));
-  const footBMid = worldOffset(footB[1]!.data.position!, signedAngle(footB[1]!.data.orientation!));
-  expect(footAMid.x).toBeCloseTo(spacing, 10);
-  expect(footBMid.x).toBeCloseTo(-spacing, 10);
-  expect(footA[1]!.data.orientation!.angle).toBeCloseTo(Math.PI, 10);
+  const footAMid = worldOffset(footA[1]!.data.position!, footA[1]!.data.orientation!);
+  const footBMid = worldOffset(footB[1]!.data.position!, footB[1]!.data.orientation!);
+  expect(footAMid.y).toBeCloseTo(spacing, 10);
+  expect(footBMid.y).toBeCloseTo(-spacing, 10);
+  expectOrientation(footA[1], Math.PI);
   // Foot B points forward (the opposite of foot A): an identity rotation.
-  expect(Math.abs(footB[1]!.data.orientation!.real)).toBeCloseTo(1, 10);
+  expectOrientation(footB[1], 2 * Math.PI);
 
   const hips = choctaw.getHipsKeyframes();
-  expect(hips[0]!.data.orientation!.angle).toBeCloseTo(Math.PI, 10);
-  expect(hips[1]!.data.orientation!.angle).toBeCloseTo((3 * Math.PI) / 2, 10);
-  expect(hips[1]!.data.orientation!.vector.z).toBeGreaterThan(0);
-  expect(hips[2]!.data.orientation!.angle).toBeCloseTo(2 * Math.PI, 10);
-  expect(hips[2]!.data.orientation!.vector.z).toBeGreaterThan(0);
+  expectOrientation(hips[0], Math.PI);
+  expectOrientation(hips[1], (3 * Math.PI) / 2);
+  expectOrientation(hips[2], 2 * Math.PI);
 });
 
 test("A backward mohawk places the entry foot behind and the free foot ahead at the midpoint", () => {
@@ -192,22 +184,19 @@ test("A backward mohawk places the entry foot behind and the free foot ahead at 
   const footA = mohawk.getLeftFootKeyframes();
   const footB = mohawk.getRightFootKeyframes();
 
-  const footAMid = worldOffset(footA[1]!.data.position!, signedAngle(footA[1]!.data.orientation!));
-  const footBMid = worldOffset(footB[1]!.data.position!, signedAngle(footB[1]!.data.orientation!));
-  expect(footAMid.x).toBeCloseTo(spacing, 10);
+  const footAMid = worldOffset(footA[1]!.data.position!, footA[1]!.data.orientation!);
+  const footBMid = worldOffset(footB[1]!.data.position!, footB[1]!.data.orientation!);
+  expect(footAMid.x).toBeCloseTo(-spacing, 10);
   expect(footAMid.y).toBeCloseTo(0, 10);
-  expect(footBMid.x).toBeCloseTo(-spacing, 10);
+  expect(footBMid.x).toBeCloseTo(spacing, 10);
   expect(footBMid.y).toBeCloseTo(0, 10);
-  const footBOrientation = footB[1]!.data.orientation!;
-  expect(footBOrientation.angle).toBeCloseTo((3 * Math.PI) / 2, 10);
-  expect(footBOrientation.vector.z).toBeGreaterThan(0);
+  expectOrientation(footA[1], Math.PI);
+  expectOrientation(footB[1], 2 * Math.PI);
 
   const hips = mohawk.getHipsKeyframes();
-  expect(hips[0]!.data.orientation!.angle).toBeCloseTo(Math.PI, 10);
-  expect(hips[1]!.data.orientation!.angle).toBeCloseTo((3 * Math.PI) / 2, 10);
-  expect(hips[1]!.data.orientation!.vector.z).toBeGreaterThan(0);
-  expect(hips[2]!.data.orientation!.angle).toBeCloseTo(2 * Math.PI, 10);
-  expect(hips[2]!.data.orientation!.vector.z).toBeGreaterThan(0);
+  expectOrientation(hips[0], Math.PI);
+  expectOrientation(hips[1], (3 * Math.PI) / 2);
+  expectOrientation(hips[2], 2 * Math.PI);
 });
 
 test("Mohawk and choctaw modules list eight variants each", () => {

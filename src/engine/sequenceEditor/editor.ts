@@ -29,6 +29,7 @@ const MIN_DRAW_INCREMENT = 2; // px
 const ELEMENTS_PATH_COLOR = "#000";
 const LABEL_FONT_SIZE = 14; // px
 const LABEL_OFFSET = 15; // px
+const CROSS_LABEL_FONT_SIZE = 12; // px
 const ELEMENT_DRAW_INCREMENT = 0.02; // m
 const NODE_SIZE = 10; // px
 const POLYGON_ALPHA = 0.25;
@@ -557,7 +558,11 @@ export class Editor {
     const anchorU = isStrokeElement(element)
       ? this.getStrokeLabelAnchor(sequence, element)
       : this.getSpanMidpoint(element);
-    const { point, tangent, curvature } = this.getLabelFrame(path, anchorU);
+    return this.getLabelGeometryAt(path, anchorU);
+  }
+
+  private getLabelGeometryAt(path: Path, u: PathCoordinate): { point: Vector<2>; outside: Vector<2> } {
+    const { point, tangent, curvature } = this.getLabelFrame(path, u);
     const sign = curvature > 0 ? -1 : 1;
     const outside = tangent.getOrthogonal().times(sign);
     return { point, outside };
@@ -633,14 +638,37 @@ export class Editor {
       const geometry = this.getElementLabelGeometry(sequence, element);
       if (!geometry) continue;
       this.drawShiftedLabel(element.shortName, geometry.point, geometry.outside);
+      if (isStrokeElement(element) && element.crossed) {
+        const text = this.crossedLabel(sequence, element);
+        if (text) {
+          const crossedGeometry = this.getLabelGeometryAt(sequence.path, this.getSpanMidpoint(element));
+          this.drawShiftedLabel(text, crossedGeometry.point, crossedGeometry.outside.times(-1), CROSS_LABEL_FONT_SIZE);
+        }
+      }
     }
   }
 
-  private drawShiftedLabel(text: string, point: Vector<2>, outside: Vector<2>) {
+  private crossedLabel(sequence: Sequence, element: DynamicGlide): string | null {
+    const backward = !element.forward;
+    if (element.crossedBack) {
+      return backward && this.hasStrokeCurvatureSignChange(sequence, element) ? "XS" : "XB";
+    }
+    if (backward) return "XF";
+    return this.hasStrokeCurvatureSignChange(sequence, element) ? "XS" : null;
+  }
+
+  private hasStrokeCurvatureSignChange(sequence: Sequence, element: DynamicGlide): boolean {
+    const path = sequence.path;
+    const [startCurve, startU] = path.getCurveAndCurvilinearCoord(element.start);
+    const [endCurve, endU] = path.getCurveAndCurvilinearCoord(element.end);
+    return startCurve.getCurvature(startU) * endCurve.getCurvature(endU) < 0;
+  }
+
+  private drawShiftedLabel(text: string, point: Vector<2>, outside: Vector<2>, fontSize = LABEL_FONT_SIZE) {
     const ctx = this.ctx;
     const offset = (LABEL_OFFSET * CANVAS_SCALE) / this.view.zoom; // px -> canvas units
 
-    ctx.font = `${(LABEL_FONT_SIZE * CANVAS_SCALE) / this.view.zoom}px sans-serif`;
+    ctx.font = `${(fontSize * CANVAS_SCALE) / this.view.zoom}px sans-serif`;
     ctx.fillStyle = "#000";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";

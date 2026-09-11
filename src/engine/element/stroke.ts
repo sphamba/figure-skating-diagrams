@@ -16,15 +16,21 @@ import { getQuaternionFromAngleAxis } from "../quaternion.js";
 import { Vector } from "../vector.js";
 
 export abstract class DynamicGlide extends Glide {
-  private readonly strokeConfig: { left: boolean; crossed: boolean };
+  private readonly strokeConfig: { left: boolean; crossed: boolean; crossedBack: boolean };
 
   constructor(
-    config: { forward: boolean; left: boolean; crossed: boolean; edge: "inside" | "outside" | "neither" },
+    config: {
+      forward: boolean;
+      left: boolean;
+      crossed: boolean;
+      crossedBack?: boolean;
+      edge: "inside" | "outside" | "neither";
+    },
     start: PathCoordinate,
     end: PathCoordinate,
   ) {
     super({ forward: config.forward, leftOnIce: config.left, rightOnIce: !config.left, edge: config.edge }, start, end);
-    this.strokeConfig = { left: config.left, crossed: config.crossed };
+    this.strokeConfig = { left: config.left, crossed: config.crossed, crossedBack: config.crossedBack ?? false };
   }
 
   get left(): boolean {
@@ -33,6 +39,10 @@ export abstract class DynamicGlide extends Glide {
 
   get crossed(): boolean {
     return this.strokeConfig.crossed;
+  }
+
+  get crossedBack(): boolean {
+    return this.strokeConfig.crossedBack;
   }
 
   getLeftFootKeyframes(_spanScale?: number, lateralScale?: number): FootKeyframe[] {
@@ -102,23 +112,24 @@ function defineDynamicGlide(
 }
 
 const glideStrokes = [
-  ["Normal", false],
-  ["Crossed", true],
+  ["Normal", false, "normal", false],
+  ["Crossed", true, "crossed", false],
+  ["CrossedBack", true, "crossed back", true],
 ] as const;
 
 for (const [side, left] of glideSides) {
-  for (const [strokeName, crossed] of glideStrokes) {
+  for (const [strokeName, crossed, strokeLabel, crossedBack] of glideStrokes) {
     for (const [direction, forward] of glideDirections) {
       for (const [edgeName, edge] of glideEdges) {
         const type = `${side}${strokeName}${direction}${edgeName}Glide`;
-        const config = { forward, left, crossed, edge };
+        const config = { forward, left, crossed, crossedBack, edge };
         const shortName = `${side[0]}${direction[0]}${edgeLetter(edge)}`;
         if (!glideConstructorsByType[type]) {
           defineDynamicGlide(type, shortName, config);
         }
         glideKindChoices.push({
           type,
-          label: `${side} ${strokeName.toLowerCase()} ${direction.toLowerCase()} ${edge === "neither" ? "" : edge + " "}glide`,
+          label: `${side} ${strokeLabel} ${direction.toLowerCase()} ${edge === "neither" ? "" : edge + " "}glide`,
         });
       }
     }

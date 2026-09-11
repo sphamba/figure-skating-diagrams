@@ -102,7 +102,7 @@ test("changeFootTurnType converts an element's kind and derives the foot from th
 });
 
 test("footTurnKindChoices lists all turn kinds and all glide kinds", () => {
-  expect(footTurnKindChoices).toHaveLength(182);
+  expect(footTurnKindChoices).toHaveLength(194);
   const types = footTurnKindChoices.map((choice) => choice.type);
   expect(types).toContain("LeftForwardInsideThreeTurn");
   expect(types).toContain("LeftBackwardOutsideLoop");

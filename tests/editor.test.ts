@@ -6,7 +6,7 @@ import { Sequence } from "../src/engine/sequence";
 import type { PathCoordinate } from "../src/engine/coordinates";
 import { Vector } from "../src/engine/vector";
 import { LeftForwardOutsideThreeTurn } from "../src/engine/element/threeTurn";
-import { LeftForwardOutsideGlide } from "../src/engine/element/glide";
+import { glideConstructorsByType, LeftForwardOutsideGlide } from "../src/engine/element/glide";
 import { LeftNormalForwardInsideGlide } from "../src/engine/element/stroke";
 
 function makeStraightPath(): Path {
@@ -543,6 +543,124 @@ test("a stroke with no following element anchors its label at the path end", () 
   expect(geometry.point.x).toBeGreaterThan(stroke.end as number);
   expect(geometry.point.x).toBeLessThan(path.length);
   expect(geometry.point.x).toBeGreaterThan(0.4);
+
+  editor.destroy();
+});
+
+test("a crossed stroke draws a second 12px label anchored to the element middle, shifted inside", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const ctx = canvas.getContext() as unknown as Record<string, unknown>;
+  const drawn: { text: string; x: number; y: number; font: string }[] = [];
+  ctx.fillText = (text: string, x: number, y: number) => {
+    drawn.push({ text, x, y, font: String(ctx.font) });
+  };
+
+  const sequence = editor.getSequences()[0];
+  const crossed = new (glideConstructorsByType["LeftCrossedBackwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => LeftNormalForwardInsideGlide)(0.2 as PathCoordinate, 0.6 as PathCoordinate);
+  const crossedBack = new (glideConstructorsByType["LeftCrossedBackBackwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => LeftNormalForwardInsideGlide)(0.7 as PathCoordinate, 1.0 as PathCoordinate);
+  sequence.addElement(crossed);
+  sequence.addElement(crossedBack);
+  editor.draw();
+
+  const crossedLabels = drawn.filter((label) => label.text === "XF" || label.text === "XB");
+  expect(crossedLabels.map((label) => label.text)).toEqual(["XF", "XB"]);
+
+  const mainLabels = drawn.filter((label) => label.text === "LBI");
+  expect(mainLabels.length).toBe(2);
+  const px = (font: string) => Number(font.replace("px sans-serif", ""));
+  expect(px(crossedLabels[0]!.font) * 14).toBeCloseTo(px(mainLabels[0]!.font) * 12, 9);
+
+  // Anchors sit on the path line, so the inside shift mirrors the main label:
+  // the crossed label is on the opposite side of the path.
+  expect(crossedLabels[0]!.x).toBeCloseTo(0.4 * 20, 6);
+  expect(crossedLabels.map((label) => label.y)).toEqual(mainLabels.map((label) => -label.y));
+
+  editor.destroy();
+});
+
+test("a forward crossed stroke draws no cross label when the curvature keeps its sign", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const ctx = canvas.getContext() as unknown as Record<string, unknown>;
+  const drawn: { text: string; x: number; y: number; font: string }[] = [];
+  ctx.fillText = (text: string, x: number, y: number) => {
+    drawn.push({ text, x, y, font: String(ctx.font) });
+  };
+
+  const sequence = editor.getSequences()[0];
+  const forward = new (glideConstructorsByType["LeftCrossedForwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => LeftNormalForwardInsideGlide)(0.2 as PathCoordinate, 0.4 as PathCoordinate);
+  const forwardBack = new (glideConstructorsByType["LeftCrossedBackForwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => LeftNormalForwardInsideGlide)(0.45 as PathCoordinate, 0.65 as PathCoordinate);
+  const backward = new (glideConstructorsByType["LeftCrossedBackwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => LeftNormalForwardInsideGlide)(0.7 as PathCoordinate, 0.9 as PathCoordinate);
+  sequence.addElement(forward);
+  sequence.addElement(forwardBack);
+  sequence.addElement(backward);
+  editor.draw();
+
+  const crossedLabels = drawn.filter((label) => ["XF", "XB", "XS"].includes(label.text));
+  expect(crossedLabels.map((label) => label.text)).toEqual(["XB", "XF"]);
+
+  editor.destroy();
+});
+
+test("a curvature sign change draws XS for forward crossed strokes and replaces XB for backward crossed-back ones", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const ctx = canvas.getContext() as unknown as Record<string, unknown>;
+  const drawn: { text: string; x: number; y: number; font: string }[] = [];
+  ctx.fillText = (text: string, x: number, y: number) => {
+    drawn.push({ text, x, y, font: String(ctx.font) });
+  };
+
+  const sequence = editor.getSequences()[0];
+  const curve = sequence.path.curves[0]!;
+  curve.p1 = new Vector(1 / 3, 0.3);
+  curve.p2 = new Vector(2 / 3, 0.3);
+  sequence.path.updateLength();
+  sequence.path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(4 / 3, -0.3), new Vector(5 / 3, -0.3), new Vector(2, 0)));
+  const firstCurve = sequence.path.curves[0]!;
+  const secondCurve = sequence.path.curves[1]!;
+  const endU = (firstCurve.length + secondCurve.length / 2) as PathCoordinate;
+
+  const forward = new (glideConstructorsByType["LeftCrossedForwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => LeftNormalForwardInsideGlide)(0.2 as PathCoordinate, endU);
+  const backwardBack = new (glideConstructorsByType["LeftCrossedBackBackwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => LeftNormalForwardInsideGlide)(0.2 as PathCoordinate, endU);
+  const backward = new (glideConstructorsByType["LeftCrossedBackwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => LeftNormalForwardInsideGlide)(0.2 as PathCoordinate, endU);
+  const forwardBack = new (glideConstructorsByType["LeftCrossedBackForwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => LeftNormalForwardInsideGlide)(0.2 as PathCoordinate, endU);
+  sequence.addElement(forward);
+  sequence.addElement(backwardBack);
+  sequence.addElement(backward);
+  sequence.addElement(forwardBack);
+  editor.draw();
+
+  const crossedLabels = drawn.filter((label) => ["XF", "XB", "XS"].includes(label.text));
+  expect(crossedLabels.map((label) => label.text)).toEqual(["XS", "XS", "XF", "XB"]);
 
   editor.destroy();
 });

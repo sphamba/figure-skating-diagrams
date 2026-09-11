@@ -27,10 +27,11 @@ function glide(typeName: string): DynamicGlide {
 }
 
 test("glide registry lists all static and dynamic glide kinds", () => {
-	expect(Object.keys(glideConstructorsByType)).toHaveLength(38);
-	expect(glideKindChoices).toHaveLength(38);
+	expect(Object.keys(glideConstructorsByType)).toHaveLength(50);
+	expect(glideKindChoices).toHaveLength(50);
 	expect(Object.keys(glideConstructorsByType)).toContain("LeftCrossedForwardInsideGlide");
 	expect(Object.keys(glideConstructorsByType)).toContain("RightNormalBackwardOutsideGlide");
+	expect(Object.keys(glideConstructorsByType)).toContain("LeftCrossedBackForwardInsideGlide");
 });
 
 test("a normal forward left glide starts on two feet and lifts the right foot at the end", () => {
@@ -76,6 +77,28 @@ test("a crossed backwards glide swaps the sides like a crossed forward one", () 
 	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 0, start), 0, SPACING, 0);
 	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 1, T95), FREE_OFFSET, 2 * SPACING, 0);
 	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 2, end), FREE_OFFSET, 2 * SPACING, 0.2);
+});
+
+test("a crossed back glide has the same geometry as a crossed one", () => {
+	for (const typeName of ["LeftCrossedBackForwardInsideGlide", "RightCrossedBackBackwardOutsideGlide"]) {
+		const g = glide(typeName);
+		const crossed = glide(typeName.replace("CrossedBack", "Crossed"));
+		expect(g.getLeftFootKeyframes()).toEqual(crossed.getLeftFootKeyframes());
+		expect(g.getRightFootKeyframes()).toEqual(crossed.getRightFootKeyframes());
+	}
+});
+
+test("a crossed back glide keeps the crossed flag and reports itself", () => {
+	const crossed = glide("LeftCrossedForwardInsideGlide");
+	const crossedBack = glide("LeftCrossedBackForwardInsideGlide");
+	const normal = glide("LeftNormalForwardInsideGlide");
+
+	expect(crossed.crossed).toBe(true);
+	expect(crossed.crossedBack).toBe(false);
+	expect(crossedBack.crossed).toBe(true);
+	expect(crossedBack.crossedBack).toBe(true);
+	expect(normal.crossed).toBe(false);
+	expect(normal.crossedBack).toBe(false);
 });
 
 test("glide types round-trip through JSON", () => {

@@ -90,6 +90,7 @@ const strokeLevelOptions: { label: string; value: string }[][] = [
   [
     { label: "Normal", value: "Normal" },
     { label: "Crossed", value: "Crossed" },
+    { label: "Crossed back", value: "CrossedBack" },
   ],
 ];
 
