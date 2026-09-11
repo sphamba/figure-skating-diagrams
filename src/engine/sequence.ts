@@ -50,6 +50,7 @@ const skidWidth = 0.03;
 const defaultPathColor = "black";
 const traceColorL = "rgb(48, 48, 210)";
 const traceColorR = "rgb(156, 0, 0)";
+const traceOpacityForward = 0.7;
 
 const boundaryDelta = 0.001; // m gap kept between consecutive element keyframes
 
@@ -418,6 +419,7 @@ export class Sequence {
     }
 
     let previousContactPosition: Vector<2> | undefined;
+    let backwardSegmentCount = 0;
     const drawBladeLength = this.getDrawBladeLength(minBladeLength);
     const drawKeyframes =
       minBladeLength === undefined
@@ -484,18 +486,35 @@ export class Sequence {
         } else {
           ctx.strokeStyle = traceColorR;
         }
-        const lineWidth = getTraceWidth(
+        const traceIncrement = contactPosition.minus(previousContactPosition);
+        const { width: lineWidth, alignment } = getTraceWidth(
           footDirection,
-          contactPosition.minus(previousContactPosition),
+          traceIncrement,
           traceWidth,
           skidWidth,
         );
+        const backward = alignment < 0;
+        if (backward) {
+          backwardSegmentCount++;
+          if (backwardSegmentCount % 2 === 0) {
+            previousContactPosition = contactPosition;
+            continue;
+          }
+        } else {
+          backwardSegmentCount = 0;
+        }
+
         ctx.lineWidth = minTraceWidth === undefined ? lineWidth : Math.max(lineWidth, minTraceWidth);
+
+        const previousAlpha = ctx.globalAlpha;
+        ctx.globalAlpha = backward ? previousAlpha : previousAlpha * traceOpacityForward;
 
         ctx.beginPath();
         ctx.moveTo(previousContactPosition.x, -previousContactPosition.y);
         ctx.lineTo(contactPosition.x, -contactPosition.y);
         ctx.stroke();
+
+        ctx.globalAlpha = previousAlpha;
 
         previousContactPosition = contactPosition;
       }
@@ -633,11 +652,11 @@ function getTraceWidth(
   traceIncrement: Vector<2>,
   traceWidth: number,
   skidWidth: number,
-): number {
+): { width: number; alignment: number } {
   const footDirection2d = new Vector<2>(foodDirection.x, foodDirection.y);
   const alignment = traceIncrement.normalized().dot(footDirection2d);
   const s = alignment ** 2;
-  return s * traceWidth + (1 - s) * skidWidth;
+  return { width: s * traceWidth + (1 - s) * skidWidth, alignment };
 }
 
 export function getOppositeFootKey(footKey: FootKey): FootKey {
