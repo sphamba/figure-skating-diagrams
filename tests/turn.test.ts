@@ -102,7 +102,7 @@ test("changeFootTurnType converts an element's kind and derives the foot from th
 });
 
 test("footTurnKindChoices lists all turn kinds and all glide kinds", () => {
-  expect(footTurnKindChoices).toHaveLength(166);
+  expect(footTurnKindChoices).toHaveLength(182);
   const types = footTurnKindChoices.map((choice) => choice.type);
   expect(types).toContain("LeftForwardInsideThreeTurn");
   expect(types).toContain("LeftBackwardOutsideLoop");
@@ -111,6 +111,8 @@ test("footTurnKindChoices lists all turn kinds and all glide kinds", () => {
   expect(types).toContain("LeftForwardInsideTwizzle1.5");
   expect(types).toContain("LeftForwardInsideGlide");
   expect(types).toContain("BothForwardGlide");
+  expect(types).toContain("LeftForwardOpenMohawk");
+  expect(types).toContain("RightBackwardClosedChoctaw");
 });
 
 test("A bracket instantiates with the right type and short name", () => {

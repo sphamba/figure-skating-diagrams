@@ -43,15 +43,17 @@ watch(isMobile, (mobile) => {
 
 const elementChangeOpen = ref(false);
 const elementToChange = shallowRef<Element | null>(null);
-const elementChangeBranch = ref<"glide" | "stroke" | "turn" | null>(null);
+const elementChangeBranch = ref<"glide" | "stroke" | "turn" | "twoFeetTurn" | null>(null);
 const glidePath = ref<string[]>([]);
 const strokePath = ref<string[]>([]);
 const turnPath = ref<string[]>([]);
+const twoFeetPath = ref<string[]>([]);
 
 const elementKindGroupOptions = [
   { label: "Glide", value: "glide" },
   { label: "Stroke", value: "stroke" },
   { label: "One-foot turn", value: "turn" },
+  { label: "Two-feet turn", value: "twoFeetTurn" },
 ];
 
 const glideLevelOptions: { label: string; value: string }[][] = [
@@ -115,6 +117,26 @@ const turnEdgeLevelOptions = [
   { label: "Outside", value: "Outside" },
 ];
 
+const twoFeetTurnGroupOptions = [
+  { label: "Mohawk", value: "Mohawk" },
+  { label: "Choctaw", value: "Choctaw" },
+];
+
+const twoFeetTurnOpennessLevelOptions = [
+  { label: "Open", value: "Open" },
+  { label: "Closed", value: "Closed" },
+];
+
+const twoFeetTurnLevelOptionsByGroup: { [group: string]: { label: string; value: string }[][] } = {
+  Mohawk: [turnSideLevelOptions, turnDirectionLevelOptions, twoFeetTurnOpennessLevelOptions],
+  Choctaw: [turnSideLevelOptions, turnDirectionLevelOptions, twoFeetTurnOpennessLevelOptions],
+};
+
+const twoFeetTurnStepCounts: { [group: string]: number } = {
+  Mohawk: 4,
+  Choctaw: 4,
+};
+
 const twizzleTurnsLevelOptions = [
   { label: "1/2 turn", value: "0.5" },
   { label: "1 turn", value: "1" },
@@ -157,6 +179,16 @@ const currentTurnOptions = computed(() => {
   return turnLevelOptionsByGroup[turnGroup.value]?.[turnPath.value.length - 1] ?? [];
 });
 
+const twoFeetTurnGroup = computed(() => twoFeetPath.value[0] ?? "");
+
+const twoFeetTurnStepFinal = computed(() => twoFeetPath.value.length >= (twoFeetTurnStepCounts[twoFeetTurnGroup.value] ?? 1));
+
+const currentTwoFeetTurnOptions = computed(() => {
+  if (twoFeetTurnStepFinal.value) return [];
+  if (twoFeetPath.value.length === 0) return twoFeetTurnGroupOptions;
+  return twoFeetTurnLevelOptionsByGroup[twoFeetTurnGroup.value]?.[twoFeetPath.value.length - 1] ?? [];
+});
+
 const glideSideTwoFoot = computed(() => glidePath.value[0] === "TwoFoot");
 const glideStepFinal = computed(() => glidePath.value.length >= (glideSideTwoFoot.value ? 2 : 3));
 
@@ -168,6 +200,16 @@ const currentStrokeOptions = computed(() => (strokeStepFinal.value ? [] : stroke
 
 const chosenLabels = computed<string[]>(() => {
   if (!elementChangeBranch.value) return [];
+  if (elementChangeBranch.value === "twoFeetTurn") {
+    const labels = ["Two-feet turn"];
+    twoFeetPath.value.forEach((value, level) => {
+      const options: { label: string; value: string }[] | undefined =
+        level === 0 ? twoFeetTurnGroupOptions : twoFeetTurnLevelOptionsByGroup[twoFeetTurnGroup.value]?.[level - 1];
+      const option = options?.find((choice) => choice.value === value);
+      if (option) labels.push(option.label);
+    });
+    return labels;
+  }
   if (elementChangeBranch.value === "glide") {
     const labels = ["Glide"];
     glidePath.value.forEach((value, level) => {
@@ -332,6 +374,7 @@ onMounted(() => {
     elementChangeBranch.value = null;
     glidePath.value = [];
     turnPath.value = [];
+    twoFeetPath.value = [];
     elementChangeOpen.value = true;
   };
   editor.onSequenceChange = () => store.saveToStorage();
@@ -411,11 +454,12 @@ function closeClear() {
   clearOpen.value = false;
 }
 
-function chooseElementBranch(branch: "glide" | "stroke" | "turn") {
+function chooseElementBranch(branch: "glide" | "stroke" | "turn" | "twoFeetTurn") {
   elementChangeBranch.value = branch;
   glidePath.value = [];
   strokePath.value = [];
   turnPath.value = [];
+  twoFeetPath.value = [];
 }
 
 function onGlideChange(value: string) {
@@ -458,6 +502,17 @@ function onTurnChange(value: string) {
   closeElementChange();
 }
 
+function onTwoFeetTurnChange(value: string) {
+  const next = [...twoFeetPath.value, value];
+  if (next.length < 4) {
+    twoFeetPath.value = next;
+    return;
+  }
+  const [group, side, direction, openness] = next;
+  changeElementKind(`${side}${direction}${openness}${group}`);
+  closeElementChange();
+}
+
 function previousElementChangeStep() {
   if (elementChangeBranch.value === "glide" && glidePath.value.length > 0) {
     glidePath.value = glidePath.value.slice(0, -1);
@@ -469,6 +524,10 @@ function previousElementChangeStep() {
   }
   if (elementChangeBranch.value === "turn" && turnPath.value.length > 0) {
     turnPath.value = turnPath.value.slice(0, -1);
+    return;
+  }
+  if (elementChangeBranch.value === "twoFeetTurn" && twoFeetPath.value.length > 0) {
+    twoFeetPath.value = twoFeetPath.value.slice(0, -1);
     return;
   }
   elementChangeBranch.value = null;
@@ -655,7 +714,7 @@ function closeElementChange() {
         />
 
         <Listbox
-          v-else
+          v-else-if="elementChangeBranch === 'turn'"
           :model-value="null"
           :options="currentTurnOptions"
           option-label="label"
@@ -663,6 +722,17 @@ function closeElementChange() {
           scroll-height=""
           class="w-full"
           @change="(event) => onTurnChange(event.value)"
+        />
+
+        <Listbox
+          v-else
+          :model-value="null"
+          :options="currentTwoFeetTurnOptions"
+          option-label="label"
+          option-value="value"
+          scroll-height=""
+          class="w-full"
+          @change="(event) => onTwoFeetTurnChange(event.value)"
         />
       </template>
 

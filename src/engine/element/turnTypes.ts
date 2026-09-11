@@ -7,6 +7,8 @@ import { twizzleConstructorsByType, twizzleKindChoices } from "./twizzle.js";
 import { bracketConstructorsByType, bracketKindChoices } from "./bracket.js";
 import { rockerConstructorsByType, rockerKindChoices } from "./rocker.js";
 import { counterConstructorsByType, counterKindChoices } from "./counter.js";
+import { mohawkConstructorsByType, mohawkKindChoices } from "./mohawk.js";
+import { choctawConstructorsByType, choctawKindChoices } from "./choctaw.js";
 import type { Element } from "./element.js";
 import { footTurnConstructorsByType, changeFootTurnType } from "./turn.js";
 import type { FootTurnJSON } from "./turn.js";
@@ -20,6 +22,8 @@ Object.assign(
   bracketConstructorsByType,
   rockerConstructorsByType,
   counterConstructorsByType,
+  mohawkConstructorsByType,
+  choctawConstructorsByType,
 );
 
 export const footTurnKindChoices: { type: string; label: string }[] = [
@@ -29,6 +33,8 @@ export const footTurnKindChoices: { type: string; label: string }[] = [
   ...counterKindChoices,
   ...loopKindChoices,
   ...twizzleKindChoices,
+  ...mohawkKindChoices,
+  ...choctawKindChoices,
   ...glideKindChoices,
 ];
 
