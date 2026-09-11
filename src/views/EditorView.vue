@@ -581,6 +581,7 @@ function closeElementChange() {
           :options="elementKindGroupOptions"
           option-label="label"
           option-value="value"
+          scroll-height=""
           class="w-full"
           @change="(event) => chooseElementBranch(event.value)"
         />
@@ -597,6 +598,7 @@ function closeElementChange() {
           :options="currentGlideOptions"
           option-label="label"
           option-value="value"
+          scroll-height=""
           class="w-full"
           @change="(event) => onGlideChange(event.value)"
         />
@@ -607,6 +609,7 @@ function closeElementChange() {
           :options="currentStrokeOptions"
           option-label="label"
           option-value="value"
+          scroll-height=""
           class="w-full"
           @change="(event) => onStrokeChange(event.value)"
         />
@@ -617,6 +620,7 @@ function closeElementChange() {
           :options="currentTurnOptions"
           option-label="label"
           option-value="value"
+          scroll-height=""
           class="w-full"
           @change="(event) => onTurnChange(event.value)"
         />
@@ -761,16 +765,39 @@ function closeElementChange() {
   cursor: default;
 }
 
-.editor-view__element-dialog {
-  width: 320px;
-}
-
-.editor-view__clear-dialog {
-  width: 320px;
-}
-
 .editor-view__element-kind {
   display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
   margin-bottom: 0.5rem;
+}
+</style>
+
+<!-- Dialog root teleports to body, scoped attributes never reach it -->
+<style lang="scss">
+.editor-view__element-dialog {
+  width: 320px;
+  max-width: 90vw;
+  min-width: 0;
+  height: 400px;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-view__element-dialog .p-dialog-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-view__element-dialog .p-listbox {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.editor-view__element-dialog .p-listbox-list-container {
+  flex: 1;
+  min-height: 0;
 }
 </style>
