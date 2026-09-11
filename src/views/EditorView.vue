@@ -21,6 +21,7 @@ import type { Element } from "@/engine/element/element";
 import type { PatternJSON } from "@/engine/pattern";
 import type { DiagramJSON } from "@/engine/diagram";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
+import { useMediaQuery } from "@/composables/useMediaQuery";
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -32,6 +33,13 @@ const editModeOptions = [
 ];
 const editMode = ref<EditMode>("view");
 const scaleElements = ref(true);
+
+const isMobile = useMediaQuery("(max-width: 767.98px)");
+const sidebarOpen = ref(true);
+
+watch(isMobile, (mobile) => {
+  sidebarOpen.value = !mobile;
+});
 
 const elementChangeOpen = ref(false);
 const elementToChange = shallowRef<Element | null>(null);
@@ -465,21 +473,26 @@ function closeElementChange() {
 
 <template>
   <div class="editor-view">
-    <aside class="editor-view__sidebar">
+    <aside v-if="!isMobile || sidebarOpen" class="editor-view__sidebar">
       <Card class="editor-view__panel">
-        <template #title>Sequence editor</template>
-        <template #content>
-          <div class="editor-view__actions">
-            <label class="editor-view__mode-label">Edit mode</label>
-            <SelectButton
-              v-model="editMode"
-              :options="editModeOptions"
-              option-label="label"
-              option-value="value"
-              :allow-empty="false"
-              class="w-full"
+        <template #title>
+          <div class="editor-view__panel-title">
+            <span>Sequence editor</span>
+            <Button
+              v-if="isMobile"
+              icon="pi pi-times"
+              aria-label="Close panel"
+              severity="secondary"
+              text
+              rounded
+              size="small"
+              @click="sidebarOpen = false"
             />
-            <div v-if="editMode !== 'elements'" class="editor-view__scale-checkbox">
+          </div>
+        </template>
+        <template #content>
+          <div v-if="editMode !== 'elements'" class="editor-view__actions">
+            <div class="editor-view__scale-checkbox">
               <Checkbox v-model="scaleElements" binary input-id="scale-elements" />
               <label for="scale-elements">Scale elements</label>
             </div>
@@ -564,7 +577,26 @@ function closeElementChange() {
       </Card>
     </aside>
 
+    <div v-if="isMobile && sidebarOpen" class="editor-view__backdrop" @click="sidebarOpen = false"></div>
+
     <div class="editor-view__canvas">
+      <div class="editor-view__floating">
+        <Button
+          v-if="isMobile && !sidebarOpen"
+          icon="pi pi-bars"
+          aria-label="Open panel"
+          severity="secondary"
+          rounded
+          @click="sidebarOpen = true"
+        />
+        <SelectButton
+          v-model="editMode"
+          :options="editModeOptions"
+          option-label="label"
+          option-value="value"
+          :allow-empty="false"
+        />
+      </div>
       <canvas ref="canvasRef" class="editor-view__canvas-element"></canvas>
     </div>
 
@@ -662,6 +694,7 @@ function closeElementChange() {
   flex: 1;
   min-height: 0;
   width: 100%;
+  position: relative;
 }
 
 .editor-view__sidebar {
@@ -674,6 +707,13 @@ function closeElementChange() {
 .editor-view__panel {
   border-radius: 0;
   height: 100%;
+}
+
+.editor-view__panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 
 .editor-view__actions {
@@ -756,9 +796,42 @@ function closeElementChange() {
   flex: 1 1 auto;
   min-width: 0;
   height: 100%;
+  position: relative;
+}
+
+.editor-view__floating {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 30;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.editor-view__backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+@media (max-width: 767.98px) {
+  .editor-view__sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 40;
+    flex: none;
+    width: min(360px, 85vw);
+    box-shadow: 0.5rem 0 1.5rem rgba(0, 0, 0, 0.2);
+  }
 }
 
 .editor-view__canvas-element {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
