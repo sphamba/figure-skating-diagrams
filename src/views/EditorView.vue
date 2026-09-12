@@ -920,7 +920,7 @@ function closeElementChange() {
           </div>
 
           <div class="editor-view__actions">
-            <label class="editor-view__mode-label">Diagram</label>
+            <label class="editor-view__mode-label">Diagram name</label>
             <InputText v-model="diagramName" class="w-full" />
             <label class="editor-view__mode-label" for="diagram-bpm">BPM</label>
             <InputNumber id="diagram-bpm" v-model="diagramBpm" :min="1" :step="1" :use-grouping="false" fluid />
@@ -1304,6 +1304,7 @@ function closeElementChange() {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 .editor-view__actions {
@@ -1334,6 +1335,16 @@ function closeElementChange() {
 
 .editor-view__sequence-name {
   flex: 1;
+  min-width: 0;
+}
+
+.editor-view__sequence-name :deep(.p-inplace-content) {
+  width: 100%;
+  min-width: 0;
+}
+
+.editor-view__sequence-name :deep(.p-inplace-content .p-inputtext) {
+  width: 100%;
   min-width: 0;
 }
 
@@ -1434,7 +1445,7 @@ function closeElementChange() {
   position: absolute;
   top: 1rem;
   left: 1rem;
-  z-index: 30;
+  z-index: 5;
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
