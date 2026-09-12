@@ -1,6 +1,7 @@
 import { shallowRef, triggerRef } from "vue";
 import { defineStore } from "pinia";
 import { BothForwardGlide } from "@/engine/element/glide";
+import { DEFAULT_START_ELEMENT_LENGTH } from "@/engine/sequenceEditor/editor";
 import { Curve } from "@/engine/curve";
 import { Diagram, type DiagramJSON } from "@/engine/diagram";
 import { Path } from "@/engine/path";
@@ -16,7 +17,8 @@ function defaultSequence(): Sequence {
   path.curves.push(new Curve(new Vector(-2.5, 0), new Vector(-0.5, 0), new Vector(0.5, 0), new Vector(2.5, 0)));
   path.updateLength();
   const sequence = new Sequence(path);
-  sequence.addElement(new BothForwardGlide(0 as PathCoordinate, 0 as PathCoordinate));
+  const half = DEFAULT_START_ELEMENT_LENGTH / 2;
+  sequence.addElement(new BothForwardGlide(-half as PathCoordinate, half as PathCoordinate));
   return sequence;
 }
 

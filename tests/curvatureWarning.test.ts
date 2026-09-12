@@ -8,12 +8,14 @@ import { LeftForwardInsideThreeTurn, LeftForwardOutsideThreeTurn } from "../src/
 import { twizzleConstructorsByType } from "../src/engine/element/twizzle";
 import {
   checkGlideCurvature,
+  checkJumpCurvature,
   checkSequenceCurvatures,
   checkTurnCurvature,
   isGlideElement,
   isStrokeElement,
   isTurnElement,
 } from "../src/engine/sequenceEditor/curvatureWarning";
+import { jumpConstructorsByType } from "../src/engine/element/jump";
 import { type Glide, glideConstructorsByType, LeftForwardInsideGlide } from "../src/engine/element/glide";
 import { DynamicGlide, LeftNormalForwardInsideGlide } from "../src/engine/element/stroke";
 import { Element } from "../src/engine/element/element";
@@ -332,4 +334,59 @@ test("A glide is checked only at its middle point", () => {
   const expectedPoint = curve.getPosition(curvilinear);
   expect(checks[0].point.x).toBeCloseTo(expectedPoint.x, 10);
   expect(checks[0].point.y).toBeCloseTo(expectedPoint.y, 10);
+});
+
+test("A jump on a matching path is valid", () => {
+  const path = counterclockwisePath();
+  const sequence = new Sequence(path);
+  // Right-handed ToeLoop1: take-off foot footR, backward, outside edge.
+  // left === inside, forward false, so not clockwise and the expected sign is +1.
+  const element = new (jumpConstructorsByType["ToeLoop1"]!)(
+    (path.length / 4) as PathCoordinate,
+    ((3 * path.length) / 4) as PathCoordinate,
+  );
+  sequence.addElement(element);
+
+  const checks = checkJumpCurvature(sequence, element);
+  expect(checks.length).toBe(1);
+  expect(checks[0].expectedSign).toBe(1);
+  expect(checks[0].invalid).toBe(false);
+});
+
+test("A jump on the wrong edge shows a triangle at the element start", () => {
+  const path = clockwisePath();
+  const sequence = new Sequence(path);
+  const element = new (jumpConstructorsByType["ToeLoop1"]!)(
+    (path.length / 4) as PathCoordinate,
+    ((3 * path.length) / 4) as PathCoordinate,
+  );
+  sequence.addElement(element);
+
+  const checks = checkSequenceCurvatures(sequence);
+  expect(checks.length).toBe(1);
+  expect(checks[0].expectedSign).toBe(1);
+  expect(checks[0].invalid).toBe(true);
+  const [curve, curvilinear] = path.getCurveAndCurvilinearCoord(element.start as PathCoordinate);
+  const expectedPoint = curve.getPosition(curvilinear);
+  expect(checks[0].point.x).toBeCloseTo(expectedPoint.x, 10);
+  expect(checks[0].point.y).toBeCloseTo(expectedPoint.y, 10);
+});
+
+test("A left-handed jump with the same take-off edge flips the expected sign", () => {
+  const path = clockwisePath();
+  const sequence = new Sequence(path);
+  // Left-handed: the take-off foot mirrors to footL, so left !== inside and the
+  // jump becomes clockwise with expected sign -1.
+  const element = new (jumpConstructorsByType["ToeLoop1"]!)(
+    (path.length / 4) as PathCoordinate,
+    ((3 * path.length) / 4) as PathCoordinate,
+    true,
+  );
+  expect(element.takeOffFoot).toBe("footL");
+  sequence.addElement(element);
+
+  const checks = checkJumpCurvature(sequence, element);
+  expect(checks.length).toBe(1);
+  expect(checks[0].expectedSign).toBe(-1);
+  expect(checks[0].invalid).toBe(false);
 });

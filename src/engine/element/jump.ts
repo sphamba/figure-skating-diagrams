@@ -347,3 +347,7 @@ export function parseJumpType(type: string): { jump: string; revolutions: number
   if (!revolutions.includes(revs)) return undefined;
   return { jump: base, revolutions: revs };
 }
+
+export function getJumpBaseConfig(name: string): Omit<JumpConfig, "rotations"> | undefined {
+  return jumpBases.find((base) => base.name === name)?.config;
+}

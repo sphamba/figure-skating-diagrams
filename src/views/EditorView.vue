@@ -21,6 +21,7 @@ import { Editor, formatTimingLabel, type EditMode } from "@/engine/sequenceEdito
 import { TimingKeyframe, type TimingKind } from "@/engine/keyframe";
 import type { Sequence, SequenceJSON, FootKey } from "@/engine/sequence";
 import { changeElementType, isJumpType, jumpTypeChoices, parseJumpType } from "@/engine/element/turnTypes";
+import { getJumpBaseConfig } from "@/engine/element/jump";
 import type { Jump } from "@/engine/element/jump";
 import { parseVariantFlags, type VariantFlags } from "@/engine/element/variantFlags";
 import { checkTurnVariantValidity, type TurnVariantValidity } from "@/engine/sequenceEditor/variantValidation";
@@ -280,6 +281,24 @@ function validFlagAt(branch: ElementKind, level: number, value: string): boolean
   if (level === 2) return v.forward !== null && value === (v.forward ? "Forward" : "Backward");
   if (branch === "turn" && level === 3) return v.inside !== null && value === (v.inside ? "Inside" : "Outside");
   return false;
+}
+
+// Marks the jump type names the geometry computes as valid for the take-off
+// foot at the element start point. The foot and direction gate like the turn
+// branches; the edge check only applies on a curved path. The take-off foot
+// mirrors by handedness like the jump getters.
+function jumpTypeValid(name: string): boolean {
+  const v = validVariant.value;
+  if (!v) return false;
+  const config = getJumpBaseConfig(name);
+  if (!config) return false;
+  if (v.left === null || v.forward === null) return false;
+  const leftHanded = jumpPath.value[0] === "Left";
+  const mirroredFoot = leftHanded ? (config.takeOffFoot === "footL" ? "footR" : "footL") : config.takeOffFoot;
+  if (mirroredFoot !== (v.left ? "footL" : "footR")) return false;
+  if (config.takeOffForward !== v.forward) return false;
+  if (v.inside !== null && config.takeOffEdge !== (v.inside ? "inside" : "outside")) return false;
+  return true;
 }
 
 const chosenLabels = computed<string[]>(() => {
@@ -1288,8 +1307,15 @@ function closeElementChange() {
           @change="(event) => onJumpChange(event.value)"
         >
           <template #option="{ option }">
-            <span :class="{ 'editor-view__option-old': oldValueAt('jump', jumpPath.length, option.value) }">
-              {{ option.label }}
+            <span class="editor-view__option-row">
+              <span :class="{ 'editor-view__option-old': oldValueAt('jump', jumpPath.length, option.value) }">
+                {{ option.label }}
+              </span>
+              <i
+                v-if="jumpPath.length === 1 && jumpTypeValid(option.value)"
+                class="pi pi-check-circle editor-view__valid-check"
+                aria-label="Valid jump type"
+              ></i>
             </span>
           </template>
         </Listbox>

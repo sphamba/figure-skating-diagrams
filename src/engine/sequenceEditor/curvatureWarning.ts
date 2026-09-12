@@ -6,6 +6,7 @@ import { Counter } from "../element/counter.js";
 import { Twizzle } from "../element/twizzle.js";
 import { Glide } from "../element/glide.js";
 import { DynamicGlide } from "../element/stroke.js";
+import { Jump } from "../element/jump.js";
 import type { Sequence } from "../sequence.js";
 import { Vector } from "../vector.js";
 
@@ -60,6 +61,20 @@ export function isGlideElement(element: Element): element is Glide {
   return element instanceof Glide && !(element instanceof DynamicGlide);
 }
 
+export function isJumpElement(element: Element): element is Jump {
+  return element instanceof Jump;
+}
+
+// Same clockwise/edge/curvature relation as checkTurnVariantValidity, solved for
+// the expected curvature sign from the take-off foot, direction and edge.
+export function checkJumpCurvature(sequence: Sequence, element: Jump): CurvatureCheck[] {
+  const left = element.takeOffFoot === "footL";
+  const inside = element.takeOffEdge === "inside";
+  const clockwise = (left === inside) === element.takeOffForward;
+  const expectedSign = clockwise ? -1 : 1;
+  return [checkAtCurvilinear(sequence, element.start as PathCoordinate, expectedSign)];
+}
+
 export function checkGlideCurvature(sequence: Sequence, element: Glide): CurvatureCheck[] {
   if (element.edge === "neither") return [];
   const expectedSign = (element.clockwise ? -1 : 1) as number;
@@ -78,6 +93,7 @@ export function checkSequenceCurvatures(sequence: Sequence, extraElements: Eleme
     if (isTurnElement(element)) checks.push(...checkTurnCurvature(sequence, element));
     if (isStrokeElement(element)) checks.push(...checkStrokeCurvature(sequence, element));
     if (isGlideElement(element)) checks.push(...checkGlideCurvature(sequence, element));
+    if (isJumpElement(element)) checks.push(...checkJumpCurvature(sequence, element));
   }
   return checks;
 }
