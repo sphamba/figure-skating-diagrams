@@ -8,6 +8,7 @@ import { Vector } from "../src/engine/vector";
 import { LeftForwardOutsideThreeTurn } from "../src/engine/element/threeTurn";
 import { glideConstructorsByType, LeftForwardOutsideGlide } from "../src/engine/element/glide";
 import { LeftNormalForwardInsideGlide } from "../src/engine/element/stroke";
+import { TimingKeyframe } from "../src/engine/keyframe";
 
 function makeStraightPath(): Path {
   const path = new Path();
@@ -837,5 +838,98 @@ test("a zero-size element does not hang drawing and picking in elements mode", (
   expect(cursor).not.toBeNull();
   expect(Date.now() - start).toBeLessThan(5000);
   expect(path.length).toBeCloseTo(1);
+  editor.destroy();
+});
+
+test("dragging a p1 control point keeps elements fixed relative to the curve", () => {
+  const { editor, canvas } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  const glide = new LeftForwardOutsideGlide(0.2 as PathCoordinate, 0.8 as PathCoordinate);
+  sequence.addElement(glide);
+  const curve = path.curves[0]!;
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  // Select p0 first so the p1 handle becomes visible and can be picked.
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(0), button: 0, ctrlKey: false });
+  mouse("mouseup", window, {});
+
+  const startRatio = (glide.start as number) / path.length;
+  const endRatio = (glide.end as number) / path.length;
+
+  mouse("mousedown", canvas, { clientX: sx(curve.p1.x), clientY: sy(curve.p1.y), button: 0, ctrlKey: false });
+  for (let i = 1; i <= 8; i++) {
+    mouse("mousemove", window, { clientX: sx(curve.p1.x), clientY: sy(i * 0.04) });
+    expect(curve.p1.y).toBeCloseTo(i * 0.04, 3);
+    expect((glide.start as number) / path.length).toBeCloseTo(startRatio, 3);
+    expect((glide.end as number) / path.length).toBeCloseTo(endRatio, 3);
+  }
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("dragging a p1 control point moves timing keyframes with the curve like elements", () => {
+  const { editor, canvas } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  const mid = new TimingKeyframe(0.5 as PathCoordinate, "beats", 4);
+  const last = new TimingKeyframe(0.8 as PathCoordinate, "beats", 2);
+  sequence.addKeyframe("time", mid);
+  sequence.addKeyframe("time", last);
+  const curve = path.curves[0]!;
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(0), button: 0, ctrlKey: false });
+  mouse("mouseup", window, {});
+
+  const midRatio = (mid.pathCoordinate as number) / path.length;
+  const lastRatio = (last.pathCoordinate as number) / path.length;
+
+  mouse("mousedown", canvas, { clientX: sx(curve.p1.x), clientY: sy(curve.p1.y), button: 0, ctrlKey: false });
+  for (let i = 1; i <= 8; i++) {
+    mouse("mousemove", window, { clientX: sx(curve.p1.x + i * 0.02), clientY: sy(curve.p1.y + i * 0.04) });
+    expect((mid.pathCoordinate as number) / path.length).toBeCloseTo(midRatio, 3);
+    expect((last.pathCoordinate as number) / path.length).toBeCloseTo(lastRatio, 3);
+  }
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("dragging a p0 joint keeps timing keyframes fixed relative to their curves", () => {
+  const { editor, canvas } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(4 / 3, 0), new Vector(5 / 3, 0), new Vector(2, 0)));
+  const mid = new TimingKeyframe(1.5 as PathCoordinate, "beats", 2);
+  sequence.addKeyframe("time", mid);
+  const c1 = path.curves[1]!;
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  const tables = () => {
+    let cumulated = 0;
+    return path.curves.map((curve) => {
+      const start = cumulated;
+      cumulated += curve.length;
+      return { start, len: curve.length };
+    });
+  };
+  const before = tables();
+  const midRatio = ((mid.pathCoordinate as number) - before[1]!.start) / before[1]!.len;
+
+  const startX = sx(c1.p0.x);
+  const startY = sy(c1.p0.y);
+  mouse("mousedown", canvas, { clientX: startX, clientY: startY, button: 0, ctrlKey: false });
+  for (let i = 1; i <= 8; i++) {
+    mouse("mousemove", window, { clientX: startX + i * 4, clientY: startY - i * 3 });
+    const after = tables();
+    expect(((mid.pathCoordinate as number) - after[1]!.start) / after[1]!.len).toBeCloseTo(midRatio, 3);
+  }
+  mouse("mouseup", window, {});
   editor.destroy();
 });

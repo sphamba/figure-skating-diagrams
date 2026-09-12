@@ -82,6 +82,7 @@ type JointMoveSnapshot = {
   curveStarts: number[];
   curveLengths: number[];
   items: Array<{ element: Element; start: number; end: number }>;
+  timingKeyframes: Array<{ keyframe: TimingKeyframe; u0: number }>;
 };
 
 type JointDeletionSnapshot = {
@@ -90,6 +91,7 @@ type JointDeletionSnapshot = {
   curveStarts: number[];
   curveLengths: number[];
   items: Array<{ element: Element; start: number; end: number }>;
+  timingKeyframes: Array<{ keyframe: TimingKeyframe; u0: number }>;
 };
 
 export class Editor {
@@ -2225,10 +2227,7 @@ export class Editor {
         this.dragSequence = sequence;
         this.dragOrigin = sequence.path.curves[picked.curveIndex]?.[picked.pointKey].copy() ?? null;
         this.lastDragDelta = new Vector<2>(0, 0);
-        this.jointMoveSnapshot =
-          picked.pointKey === "p0" || picked.pointKey === "p3"
-            ? this.makeJointMoveSnapshot(sequence, picked.curveIndex, picked.pointKey)
-            : null;
+        this.jointMoveSnapshot = this.makeJointMoveSnapshot(sequence, picked.curveIndex, picked.pointKey);
       }
     } else {
       const curveHit = this.pickCurve(screenX, screenY);
@@ -2384,7 +2383,7 @@ export class Editor {
         point.y = world.y;
         this.alignNeighbors(sequence, curveIndex, pointKey, delta);
         sequence.path.updateLength();
-        if (pointKey === "p0" || pointKey === "p3") this.remapElementsAfterJointMove();
+        this.remapElementsAfterJointMove();
         // Move the points selected on the other sequences by the same movement so a
         // selection across sequences keeps moving together.
         for (const [other, keys] of this.selectedPoints) {
@@ -2579,7 +2578,12 @@ export class Editor {
     }
   }
 
-  private makeJointMoveSnapshot(sequence: Sequence, curveIndex: number, pointKey: "p0" | "p3") {
+  private ownedTimingKeyframes(sequence: Sequence): TimingKeyframe[] {
+    const provisional = this.provisionalTimingKeyframes.get(sequence);
+    return provisional ? [provisional, ...sequence.keyframes.time] : [...sequence.keyframes.time];
+  }
+
+  private makeJointMoveSnapshot(sequence: Sequence, curveIndex: number, pointKey: ControlPointKey) {
     const curves = sequence.path.curves;
     const jointCurveIndex = pointKey === "p3" ? curveIndex : curveIndex - 1;
     if (jointCurveIndex < 0 && curves.length === 0) return null;
@@ -2597,7 +2601,11 @@ export class Editor {
     for (const element of this.selectableElements(sequence)) {
       items.push({ element, start: element.start as number, end: element.end as number });
     }
-    return { sequence, jointCurveIndex, curveStarts, curveLengths, items };
+    const timingKeyframes: Array<{ keyframe: TimingKeyframe; u0: number }> = [];
+    for (const keyframe of this.ownedTimingKeyframes(sequence)) {
+      timingKeyframes.push({ keyframe, u0: keyframe.pathCoordinate as number });
+    }
+    return { sequence, jointCurveIndex, curveStarts, curveLengths, items, timingKeyframes };
   }
 
   private remapElementsAfterJointMove() {
@@ -2631,6 +2639,16 @@ export class Editor {
       ) as PathCoordinate;
       this.updateElementKeyframes(item.element);
     }
+
+    for (const item of snapshot.timingKeyframes) {
+      item.keyframe.pathCoordinate = remapUniformAtJoint(
+        item.u0,
+        snapshot.curveStarts,
+        snapshot.curveLengths,
+        newCurveStarts,
+        newCurveLengths,
+      ) as PathCoordinate;
+    }
   }
 
   private axisTables(sequence: Sequence): { curveStarts: number[]; curveLengths: number[] } {
@@ -2652,7 +2670,11 @@ export class Editor {
     for (const element of this.selectableElements(sequence)) {
       items.push({ element, start: element.start as number, end: element.end as number });
     }
-    return { sequence, jointOldIndex, curveStarts, curveLengths, items };
+    const timingKeyframes: Array<{ keyframe: TimingKeyframe; u0: number }> = [];
+    for (const keyframe of this.ownedTimingKeyframes(sequence)) {
+      timingKeyframes.push({ keyframe, u0: keyframe.pathCoordinate as number });
+    }
+    return { sequence, jointOldIndex, curveStarts, curveLengths, items, timingKeyframes };
   }
 
   private remapElementsAfterCurveRemoval() {
@@ -2682,6 +2704,18 @@ export class Editor {
         2,
       ) as PathCoordinate;
       this.updateElementKeyframes(item.element);
+    }
+
+    for (const item of snapshot.timingKeyframes) {
+      item.keyframe.pathCoordinate = remapUniformAtRemoval(
+        item.u0,
+        snapshot.curveStarts,
+        snapshot.curveLengths,
+        curveStarts,
+        curveLengths,
+        snapshot.jointOldIndex,
+        2,
+      ) as PathCoordinate;
     }
     this.jointDeletionSnapshot = null;
   }
