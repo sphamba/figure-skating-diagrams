@@ -11,6 +11,7 @@ export interface GlideJSON {
   type: string;
   start: PathCoordinate;
   end: PathCoordinate;
+  shortName?: string;
 }
 
 export type GlideConstructor = new (start: PathCoordinate, end: PathCoordinate) => Glide;
@@ -80,7 +81,7 @@ export abstract class Glide extends Element {
   }
 
   toJSON(): GlideJSON {
-    return { type: this.type, start: this.start, end: this.end };
+    return { type: this.type, start: this.start, end: this.end, shortName: this.shortName };
   }
 
   static fromJSON(json: GlideJSON): Glide {
@@ -125,7 +126,7 @@ function defineGlide(type: string, shortName: string, config: GlideConfig): Glid
       return type;
     }
 
-    get shortName(): string {
+    get defaultShortName(): string {
       return shortName;
     }
   };
@@ -188,7 +189,7 @@ export class LeftForwardInsideGlide extends Glide {
     return "LeftForwardInsideGlide";
   }
 
-  get shortName(): string {
+  get defaultShortName(): string {
     return "LFI";
   }
 }
@@ -202,7 +203,7 @@ export class LeftForwardOutsideGlide extends Glide {
     return "LeftForwardOutsideGlide";
   }
 
-  get shortName(): string {
+  get defaultShortName(): string {
     return "LFO";
   }
 }
@@ -216,7 +217,7 @@ export class BothForwardGlide extends Glide {
     return "BothForwardGlide";
   }
 
-  get shortName(): string {
+  get defaultShortName(): string {
     return "";
   }
 }

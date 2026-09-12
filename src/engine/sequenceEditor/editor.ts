@@ -519,7 +519,7 @@ export class Editor {
 
     this.drawElementDeleteButton();
     this.drawElementCogButton();
-    this.drawProvisionalAddButtons();
+    this.drawProvisionalCogButtons();
   }
 
   private getDisplayedSpan(sequence: Sequence, element: Element): [PathCoordinate, PathCoordinate] {
@@ -1156,7 +1156,7 @@ export class Editor {
     return geometry.point.plus(geometry.perp.times(-offset));
   }
 
-  private drawCogInCircle(world: Vector<2>) {
+  private drawCogInCircle(world: Vector<2>, color: string = COG_BUTTON_COLOR) {
     const ctx = this.ctx;
     const cx = world.x * CANVAS_SCALE;
     const cy = -world.y * CANVAS_SCALE;
@@ -1164,7 +1164,7 @@ export class Editor {
     const outerRadius = (DELETE_BUTTON_RADIUS * CANVAS_SCALE) / this.view.zoom;
     const circleRadius = outerRadius * 0.62;
 
-    ctx.strokeStyle = COG_BUTTON_COLOR;
+    ctx.strokeStyle = color;
     ctx.lineWidth = (COG_LINE_WIDTH * CANVAS_SCALE) / this.view.zoom;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -1269,7 +1269,7 @@ export class Editor {
     return best ? { sequence: best.sequence, u: best.u } : null;
   }
 
-  private getProvisionalAddButtons(): { sequence: Sequence; center: Vector<2> }[] {
+  private getProvisionalCogButtons(): { sequence: Sequence; center: Vector<2> }[] {
     const result: { sequence: Sequence; center: Vector<2> }[] = [];
     const offset = DELETE_BUTTON_OFFSET / this.view.zoom; // px -> m
     for (const [sequence, element] of this.provisionalElements) {
@@ -1280,20 +1280,31 @@ export class Editor {
     return result;
   }
 
-  private drawProvisionalAddButtons() {
-    for (const { center } of this.getProvisionalAddButtons()) {
-      this.drawPlusInCircleWithColor(center, PROVISIONAL_COLOR);
+  private drawProvisionalCogButtons() {
+    for (const { center } of this.getProvisionalCogButtons()) {
+      this.drawCogInCircle(center, PROVISIONAL_COLOR);
     }
   }
 
-  private hitProvisionalAddButton(screenX: number, screenY: number): Sequence | null {
-    for (const { sequence, center } of this.getProvisionalAddButtons()) {
+  private hitProvisionalCogButton(screenX: number, screenY: number): Sequence | null {
+    for (const { sequence, center } of this.getProvisionalCogButtons()) {
       const [iconX, iconY] = this.worldToScreen(center);
       const dx = screenX - iconX;
       const dy = screenY - iconY;
-      if (Math.hypot(dx, dy) <= ADD_BUTTON_HIT_RADIUS) return sequence;
+      if (Math.hypot(dx, dy) <= DELETE_BUTTON_HIT_RADIUS) return sequence;
     }
     return null;
+  }
+
+  private openProvisionalChange(sequence: Sequence) {
+    const element = this.provisionalElements.get(sequence);
+    if (!element) return;
+    if (this.onElementChangeRequest) {
+      this.onElementChangeRequest(element);
+      this.draw();
+      return;
+    }
+    this.addProvisionalElement(sequence);
   }
 
   private addProvisionalElement(sequence: Sequence) {
@@ -1304,6 +1315,20 @@ export class Editor {
     this.notifySequenceChange();
     if (this.onElementChangeRequest) this.onElementChangeRequest(element);
     this.draw();
+  }
+
+  isProvisional(element: Element): boolean {
+    return this.isProvisionalElement(element);
+  }
+
+  commitProvisionalElement(provisional: Element, replacement: Element): Sequence | null {
+    const sequence = this.getSequenceOfElement(provisional);
+    if (!sequence || !this.isProvisionalElement(provisional)) return null;
+    this.provisionalElements.delete(sequence);
+    sequence.addElement(replacement);
+    this.notifySequenceChange();
+    this.draw();
+    return sequence;
   }
 
   private hitElementCogButton(screenX: number, screenY: number): boolean {
@@ -1611,9 +1636,9 @@ export class Editor {
     if (this.mode === "view") return;
 
     if (this.mode !== "path") {
-      const provisionalHit = this.hitProvisionalAddButton(screenX, screenY);
-      if (provisionalHit) {
-        this.addProvisionalElement(provisionalHit);
+      const provisionalCogHit = this.hitProvisionalCogButton(screenX, screenY);
+      if (provisionalCogHit) {
+        this.openProvisionalChange(provisionalCogHit);
         return;
       }
       if (this.hitElementCogButton(screenX, screenY) && this.onElementChangeRequest) {

@@ -34,7 +34,7 @@ export const choctawKindChoices: { type: string; label: string }[] = defineTwoFe
         return type;
       }
 
-      get shortName(): string {
+      get defaultShortName(): string {
         return shortName;
       }
     };

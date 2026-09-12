@@ -38,7 +38,7 @@ export const mohawkKindChoices: { type: string; label: string }[] = defineTwoFee
         return type;
       }
 
-      get shortName(): string {
+      get defaultShortName(): string {
         return shortName;
       }
     };

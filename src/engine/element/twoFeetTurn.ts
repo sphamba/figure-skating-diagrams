@@ -4,7 +4,7 @@ import { turnDirections, turnSides } from "./oneFootTurn.js";
 import { FootKeyframe, type FootData, HipsKeyframe } from "../keyframe.js";
 import { getQuaternionFromAngleAxis } from "../quaternion.js";
 import { Vector } from "../vector.js";
-import { FootTurn, type FootTurnFlags } from "./turn.js";
+import { FootTurn } from "./turn.js";
 import type { FootKey } from "../sequence.js";
 
 export type TwoFeetTurnFlags = { left: boolean; forward: boolean; closed: boolean };
@@ -66,7 +66,11 @@ export abstract class TwoFeetTurn extends FootTurn {
       : this.createFreeFootKeyframes(start, end, lateralScale);
   }
 
-  protected createOnIceFootKeyframes(start: PathCoordinate, end: PathCoordinate, lateralScale?: number): FootKeyframe[] {
+  protected createOnIceFootKeyframes(
+    start: PathCoordinate,
+    end: PathCoordinate,
+    lateralScale?: number,
+  ): FootKeyframe[] {
     const middle = ((start + end) / 2) as PathCoordinate;
     const spacing = halfFeetSpacing * (lateralScale ?? 1);
     const [midAngle, _midAngleB] = this.midpointFootAngles();

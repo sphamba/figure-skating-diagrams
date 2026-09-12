@@ -100,7 +100,7 @@ for (const [side, left] of turnSides) {
             return type;
           }
 
-          get shortName(): string {
+          get defaultShortName(): string {
             return shortName;
           }
         };

@@ -16,7 +16,7 @@ import { useConfirm } from "openvue/useconfirm";
 import { Editor, type EditMode } from "@/engine/sequenceEditor/editor";
 import type { Sequence, SequenceJSON } from "@/engine/sequence";
 import { changeElementType } from "@/engine/element/turnTypes";
-import type { PathCoordinate } from "@/engine/coordinates";
+import { parseVariantFlags, type VariantFlags } from "@/engine/element/variantFlags";
 import type { Element } from "@/engine/element/element";
 import type { PatternJSON } from "@/engine/pattern";
 import type { DiagramJSON } from "@/engine/diagram";
@@ -44,6 +44,11 @@ watch(isMobile, (mobile) => {
 const elementChangeOpen = ref(false);
 const elementToChange = shallowRef<Element | null>(null);
 const elementChangeBranch = ref<"glide" | "stroke" | "turn" | "twoFeetTurn" | null>(null);
+const isProvisionalTarget = ref(false);
+const oldVariant = ref<VariantFlags | null>(null);
+const oldKind = ref<"glide" | "stroke" | "turn" | "twoFeetTurn" | null>(null);
+const pendingReplacement = shallowRef<Element | null>(null);
+const shortNameDraft = ref("");
 const glidePath = ref<string[]>([]);
 const strokePath = ref<string[]>([]);
 const turnPath = ref<string[]>([]);
@@ -182,7 +187,9 @@ const currentTurnOptions = computed(() => {
 
 const twoFeetTurnGroup = computed(() => twoFeetPath.value[0] ?? "");
 
-const twoFeetTurnStepFinal = computed(() => twoFeetPath.value.length >= (twoFeetTurnStepCounts[twoFeetTurnGroup.value] ?? 1));
+const twoFeetTurnStepFinal = computed(
+  () => twoFeetPath.value.length >= (twoFeetTurnStepCounts[twoFeetTurnGroup.value] ?? 1),
+);
 
 const currentTwoFeetTurnOptions = computed(() => {
   if (twoFeetTurnStepFinal.value) return [];
@@ -198,6 +205,46 @@ const currentGlideOptions = computed(() => (glideStepFinal.value ? [] : glideLev
 const strokeStepFinal = computed(() => strokePath.value.length >= strokeLevelOptions.length);
 
 const currentStrokeOptions = computed(() => (strokeStepFinal.value ? [] : strokeLevelOptions[strokePath.value.length]));
+
+type ElementKind = "glide" | "stroke" | "turn" | "twoFeetTurn";
+
+function kindOfType(type: string): ElementKind {
+  const flags = parseVariantFlags(type);
+  if (flags.stroke) return "stroke";
+  if (flags.openness) return "twoFeetTurn";
+  if (flags.group) return "turn";
+  return "glide";
+}
+
+function oldValueAt(branch: ElementKind, level: number, value: string): boolean {
+  const flags = oldVariant.value;
+  if (!flags) return false;
+  if (branch === "glide") {
+    if (level === 0) return value === (flags.twoFoot ? "TwoFoot" : flags.side);
+    if (level === 1) return value === flags.direction;
+    if (level === 2) return !flags.twoFoot && value === flags.edge;
+    return false;
+  }
+  if (branch === "stroke") {
+    if (level === 0) return value === flags.side;
+    if (level === 1) return value === flags.direction;
+    if (level === 2) return value === flags.edge;
+    if (level === 3) return value === flags.stroke;
+    return false;
+  }
+  if (branch === "turn") {
+    if (level === 0) return value === flags.group;
+    if (level === 1) return value === flags.side;
+    if (level === 2) return value === flags.direction;
+    if (level === 3) return value === flags.edge;
+    if (level === 4) return flags.group === "Twizzle" && value === flags.turns;
+    return false;
+  }
+  if (level === 0) return value === flags.group;
+  if (level === 1) return value === flags.side;
+  if (level === 2) return value === flags.direction;
+  return level === 3 && value === flags.openness;
+}
 
 const chosenLabels = computed<string[]>(() => {
   if (!elementChangeBranch.value) return [];
@@ -259,7 +306,7 @@ const helpItems = computed<HelpItem[]>(() =>
           { keys: ["left click"], description: "on the path: create a provisional element" },
           { keys: ["left drag"], description: "on the path: create a provisional element over the dragged range" },
           { keys: ["drag"], description: "a provisional element: move it or its ends" },
-          { keys: ["+"], description: "on the provisional element: add it to the sequence" },
+          { keys: ["cog"], description: "on the provisional element: open the element selection dialog" },
           ...touchHelpItems,
         ]
       : [
@@ -368,17 +415,22 @@ watch(
 onMounted(() => {
   if (!canvasRef.value) return;
   if (visibleSequences.value.length === 0) return;
-  editor = new Editor(canvasRef.value, visibleSequences.value);
+  const editorInstance = new Editor(canvasRef.value, visibleSequences.value);
+  editor = editorInstance;
 
-  editor.onElementChangeRequest = (element) => {
+  editorInstance.onElementChangeRequest = (element) => {
     elementToChange.value = element;
+    isProvisionalTarget.value = editorInstance.isProvisional(element);
+    oldKind.value = isProvisionalTarget.value ? null : kindOfType(element.type);
+    oldVariant.value = isProvisionalTarget.value ? null : parseVariantFlags(element.type);
     elementChangeBranch.value = null;
     glidePath.value = [];
     turnPath.value = [];
     twoFeetPath.value = [];
+    clearPendingChoice();
     elementChangeOpen.value = true;
   };
-  editor.onSequenceChange = () => store.saveToStorage();
+  editorInstance.onSequenceChange = () => store.saveToStorage();
 });
 
 watch(visibleSequences, (list) => {
@@ -434,17 +486,25 @@ function saveFile() {
   URL.revokeObjectURL(url);
 }
 
-function changeElementKind(kind: string) {
-  if (!editor || !elementToChange.value) return;
-  const current = elementToChange.value as Element;
-  const template = current.toJSON() as { type: string; start: PathCoordinate; end: PathCoordinate };
-  const replacement = changeElementType(kind, { ...template, type: kind });
-  const sequence = editor.replaceElementOf(current, replacement);
-  if (!sequence) return;
-  elementToChange.value = replacement;
-  store.saveToStorage();
-  editor.draw();
+function clearPendingChoice() {
+  pendingReplacement.value = null;
+  shortNameDraft.value = "";
 }
+
+const currentStepFinal = computed(() => {
+  switch (elementChangeBranch.value) {
+    case "glide":
+      return glideStepFinal.value;
+    case "stroke":
+      return strokeStepFinal.value;
+    case "turn":
+      return turnStepFinal.value;
+    case "twoFeetTurn":
+      return twoFeetTurnStepFinal.value;
+    default:
+      return false;
+  }
+});
 
 function onClearConfirmed() {
   store.clear();
@@ -455,80 +515,108 @@ function closeClear() {
   clearOpen.value = false;
 }
 
-function chooseElementBranch(branch: "glide" | "stroke" | "turn" | "twoFeetTurn") {
+function chooseElementBranch(branch: ElementKind) {
   elementChangeBranch.value = branch;
   glidePath.value = [];
   strokePath.value = [];
   turnPath.value = [];
   twoFeetPath.value = [];
+  clearPendingChoice();
+}
+
+function onFinalChoice(type: string) {
+  const target = elementToChange.value;
+  if (!target) return;
+  const candidate = changeElementType(type, { type, start: target.start, end: target.end });
+  pendingReplacement.value = candidate;
+  shortNameDraft.value =
+    !isProvisionalTarget.value && type === target.type ? target.shortName : candidate.defaultShortName;
 }
 
 function onGlideChange(value: string) {
   const next = [...glidePath.value, value];
-  if (next.length < (next[0] === "TwoFoot" ? 2 : 3)) {
-    glidePath.value = next;
-    return;
+  glidePath.value = next;
+  if (next.length >= (next[0] === "TwoFoot" ? 2 : 3)) {
+    const [side, direction, edge] = next;
+    onFinalChoice(
+      side === "TwoFoot" ? `Both${direction}Glide` : `${side}${direction}${edge === "Neither" ? "" : edge}Glide`,
+    );
   }
-  const [side, direction, edge] = next;
-  const type =
-    side === "TwoFoot" ? `Both${direction}Glide` : `${side}${direction}${edge === "Neither" ? "" : edge}Glide`;
-  changeElementKind(type);
-  closeElementChange();
 }
 
 function onStrokeChange(value: string) {
   const next = [...strokePath.value, value];
-  if (next.length < strokeLevelOptions.length) {
-    strokePath.value = next;
-    return;
+  strokePath.value = next;
+  if (next.length >= strokeLevelOptions.length) {
+    const [side, direction, edge, crossed] = next;
+    onFinalChoice(`${side}${crossed}${direction}${edge === "Neither" ? "" : edge}Glide`);
   }
-  const [side, direction, edge, crossed] = next;
-  changeElementKind(`${side}${crossed}${direction}${edge === "Neither" ? "" : edge}Glide`);
-  closeElementChange();
 }
 
 function onTurnChange(value: string) {
   const next = [...turnPath.value, value];
-  if (next.length < (turnStepCounts[next[0] ?? ""] ?? 1)) {
-    turnPath.value = next;
-    return;
+  turnPath.value = next;
+  if (next.length >= (turnStepCounts[next[0] ?? ""] ?? 1)) {
+    if (next[0] === "Twizzle") {
+      const [, side, direction, edge, turns] = next;
+      onFinalChoice(`${side}${direction}${edge}Twizzle${turns}`);
+    } else {
+      const [group, side, direction, edge] = next;
+      onFinalChoice(`${side}${direction}${edge}${group}`);
+    }
   }
-  if (next[0] === "Twizzle") {
-    const [, side, direction, edge, turns] = next;
-    changeElementKind(`${side}${direction}${edge}Twizzle${turns}`);
-  } else {
-    const [group, side, direction, edge] = next;
-    changeElementKind(`${side}${direction}${edge}${group}`);
-  }
-  closeElementChange();
 }
 
 function onTwoFeetTurnChange(value: string) {
   const next = [...twoFeetPath.value, value];
-  if (next.length < 4) {
-    twoFeetPath.value = next;
+  twoFeetPath.value = next;
+  if (next.length >= 4) {
+    const [group, side, direction, openness] = next;
+    onFinalChoice(`${side}${direction}${openness}${group}`);
+  }
+}
+
+function commitElementChange() {
+  const replacement = pendingReplacement.value;
+  if (!replacement || !elementToChange.value) {
+    closeElementChange();
     return;
   }
-  const [group, side, direction, openness] = next;
-  changeElementKind(`${side}${direction}${openness}${group}`);
+  replacement.shortName = shortNameDraft.value.trim();
+  const target = elementToChange.value;
+  if (isProvisionalTarget.value) {
+    const sequence = editor?.commitProvisionalElement(target, replacement);
+    if (sequence) store.saveToStorage();
+  } else {
+    const sequence = editor?.replaceElementOf(target, replacement);
+    if (sequence) {
+      elementToChange.value = replacement;
+      store.saveToStorage();
+    }
+  }
+  editor?.draw();
   closeElementChange();
 }
 
 function previousElementChangeStep() {
   if (elementChangeBranch.value === "glide" && glidePath.value.length > 0) {
     glidePath.value = glidePath.value.slice(0, -1);
+    clearPendingChoice();
     return;
   }
   if (elementChangeBranch.value === "stroke" && strokePath.value.length > 0) {
     strokePath.value = strokePath.value.slice(0, -1);
+    clearPendingChoice();
     return;
   }
   if (elementChangeBranch.value === "turn" && turnPath.value.length > 0) {
     turnPath.value = turnPath.value.slice(0, -1);
+    clearPendingChoice();
     return;
   }
   if (elementChangeBranch.value === "twoFeetTurn" && twoFeetPath.value.length > 0) {
     twoFeetPath.value = twoFeetPath.value.slice(0, -1);
+    clearPendingChoice();
     return;
   }
   elementChangeBranch.value = null;
@@ -536,6 +624,7 @@ function previousElementChangeStep() {
 
 function closeElementChange() {
   elementChangeOpen.value = false;
+  clearPendingChoice();
 }
 </script>
 
@@ -679,12 +768,17 @@ function closeElementChange() {
         <Listbox
           :model-value="elementChangeBranch"
           :options="elementKindGroupOptions"
-          option-label="label"
           option-value="value"
           scroll-height=""
           class="w-full"
           @change="(event) => chooseElementBranch(event.value)"
-        />
+        >
+          <template #option="{ option }">
+            <span :class="{ 'editor-view__option-old': option.value === oldKind }">
+              {{ option.label }}
+            </span>
+          </template>
+        </Listbox>
       </template>
 
       <template v-else>
@@ -693,48 +787,78 @@ function closeElementChange() {
         </div>
 
         <Listbox
-          v-if="elementChangeBranch === 'glide'"
+          v-if="elementChangeBranch === 'glide' && !glideStepFinal"
           :model-value="null"
           :options="currentGlideOptions"
-          option-label="label"
           option-value="value"
           scroll-height=""
           class="w-full"
           @change="(event) => onGlideChange(event.value)"
-        />
+        >
+          <template #option="{ option }">
+            <span :class="{ 'editor-view__option-old': oldValueAt('glide', glidePath.length, option.value) }">
+              {{ option.label }}
+            </span>
+          </template>
+        </Listbox>
 
         <Listbox
-          v-else-if="elementChangeBranch === 'stroke'"
+          v-else-if="elementChangeBranch === 'stroke' && !strokeStepFinal"
           :model-value="null"
           :options="currentStrokeOptions"
-          option-label="label"
           option-value="value"
           scroll-height=""
           class="w-full"
           @change="(event) => onStrokeChange(event.value)"
-        />
+        >
+          <template #option="{ option }">
+            <span :class="{ 'editor-view__option-old': oldValueAt('stroke', strokePath.length, option.value) }">
+              {{ option.label }}
+            </span>
+          </template>
+        </Listbox>
 
         <Listbox
-          v-else-if="elementChangeBranch === 'turn'"
+          v-else-if="elementChangeBranch === 'turn' && !turnStepFinal"
           :model-value="null"
           :options="currentTurnOptions"
-          option-label="label"
           option-value="value"
           scroll-height=""
           class="w-full"
           @change="(event) => onTurnChange(event.value)"
-        />
+        >
+          <template #option="{ option }">
+            <span :class="{ 'editor-view__option-old': oldValueAt('turn', turnPath.length, option.value) }">
+              {{ option.label }}
+            </span>
+          </template>
+        </Listbox>
 
         <Listbox
-          v-else
+          v-else-if="elementChangeBranch === 'twoFeetTurn' && !twoFeetTurnStepFinal"
           :model-value="null"
           :options="currentTwoFeetTurnOptions"
-          option-label="label"
           option-value="value"
           scroll-height=""
           class="w-full"
           @change="(event) => onTwoFeetTurnChange(event.value)"
-        />
+        >
+          <template #option="{ option }">
+            <span :class="{ 'editor-view__option-old': oldValueAt('twoFeetTurn', twoFeetPath.length, option.value) }">
+              {{ option.label }}
+            </span>
+          </template>
+        </Listbox>
+
+        <div v-else class="editor-view__short-name">
+          <label class="editor-view__mode-label" for="element-short-name">Short name</label>
+          <InputText
+            id="element-short-name"
+            v-model="shortNameDraft"
+            class="w-full"
+            @keyup.enter="commitElementChange"
+          />
+        </div>
       </template>
 
       <template #footer>
@@ -745,6 +869,7 @@ function closeElementChange() {
           icon="pi pi-arrow-left"
           @click="previousElementChangeStep"
         />
+        <Button v-if="currentStepFinal" label="OK" icon="pi pi-check" @click="commitElementChange" />
         <Button label="Close" severity="secondary" icon="pi pi-times" @click="closeElementChange" />
       </template>
     </Dialog>
@@ -924,6 +1049,12 @@ function closeElementChange() {
   gap: 0.25rem;
   margin-bottom: 0.5rem;
 }
+
+.editor-view__short-name {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.25rem;
+}
 </style>
 
 <!-- Dialog root teleports to body, scoped attributes never reach it -->
@@ -952,5 +1083,10 @@ function closeElementChange() {
 .editor-view__element-dialog .p-listbox-list-container {
   flex: 1;
   min-height: 0;
+}
+
+.editor-view__element-dialog .editor-view__option-old {
+  color: var(--p-primary-color);
+  font-weight: 600;
 }
 </style>

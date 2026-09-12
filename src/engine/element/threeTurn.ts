@@ -25,7 +25,7 @@ export const threeTurnKindChoices: { type: string; label: string }[] = defineOne
         return type;
       }
 
-      get shortName(): string {
+      get defaultShortName(): string {
         return shortName;
       }
     };

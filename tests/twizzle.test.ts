@@ -179,7 +179,7 @@ test("A twizzle constructor rejects bad turn counts and takes good ones", () => 
       return "TestTwizzle";
     }
 
-    get shortName(): string {
+    get defaultShortName(): string {
       return "T";
     }
   }

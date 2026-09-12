@@ -25,7 +25,7 @@ export const rockerKindChoices: { type: string; label: string }[] = defineOneFoo
         return type;
       }
 
-      get shortName(): string {
+      get defaultShortName(): string {
         return shortName;
       }
     };

@@ -7,7 +7,9 @@ export abstract class Element {
 
   abstract get type(): string;
 
-  abstract get shortName(): string;
+  abstract get defaultShortName(): string;
+
+  shortName: string;
 
   get scalable(): boolean {
     return false;
@@ -16,6 +18,8 @@ export abstract class Element {
   constructor(start: PathCoordinate, end: PathCoordinate) {
     this.start = start;
     this.end = end;
+    // TS rejects abstract access through `this` in its own body, hence the cast.
+    this.shortName = (this as { defaultShortName: string }).defaultShortName;
   }
 
   abstract getLeftFootKeyframes(spanScale?: number, lateralScale?: number): FootKeyframe[];

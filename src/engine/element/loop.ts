@@ -103,7 +103,7 @@ export const loopKindChoices: { type: string; label: string }[] = defineOneFootT
         return type;
       }
 
-      get shortName(): string {
+      get defaultShortName(): string {
         return shortName;
       }
     };

@@ -49,21 +49,23 @@ export function changeElementType(
     start: number;
     end: number;
     footKey?: string;
+    shortName?: string;
   },
 ): Element {
   const start = template.start as PathCoordinate;
   const end = template.end as PathCoordinate;
   const glideConstructor = glideConstructorsByType[type];
-  if (glideConstructor) {
-    return new glideConstructor(start, end);
-  }
-  return changeFootTurnType(type, {
-    ...template,
-    start,
-    end,
-    type,
-    footKey: footKeyFromType(type),
-  } as FootTurnJSON);
+  const element = glideConstructor
+    ? new glideConstructor(start, end)
+    : changeFootTurnType(type, {
+        ...template,
+        start,
+        end,
+        type,
+        footKey: footKeyFromType(type),
+      } as FootTurnJSON);
+  if (typeof template.shortName === "string") element.shortName = template.shortName;
+  return element;
 }
 
 export function createDefaultFootTurn(start: PathCoordinate, end: PathCoordinate, footKey: FootKey = "footL"): Element {

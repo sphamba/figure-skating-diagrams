@@ -10,6 +10,7 @@ export interface FootTurnJSON {
   type: string;
   start: PathCoordinate;
   end: PathCoordinate;
+  shortName?: string;
 }
 
 export type FootTurnFlags = { left: boolean; forward: boolean; inside: boolean };
@@ -63,6 +64,7 @@ export abstract class FootTurn extends Element {
       type: this.type,
       start: this.start,
       end: this.end,
+      shortName: this.shortName,
     };
   }
 

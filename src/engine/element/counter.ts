@@ -25,7 +25,7 @@ export const counterKindChoices: { type: string; label: string }[] = defineOneFo
         return type;
       }
 
-      get shortName(): string {
+      get defaultShortName(): string {
         return shortName;
       }
     };

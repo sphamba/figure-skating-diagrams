@@ -103,7 +103,7 @@ function defineDynamicGlide(
       return type;
     }
 
-    get shortName(): string {
+    get defaultShortName(): string {
       return shortName;
     }
   };
@@ -145,7 +145,7 @@ export class LeftNormalForwardInsideGlide extends DynamicGlide {
     return "LeftNormalForwardInsideGlide";
   }
 
-  get shortName(): string {
+  get defaultShortName(): string {
     return "LFI";
   }
 }
