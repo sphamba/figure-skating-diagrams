@@ -8,6 +8,7 @@ import type { Path } from "../path.js";
 import { LENGTH, WIDTH, CORNER_RADIUS } from "../rink.js";
 import type { CanvasRenderingContext2DSized } from "../rinkCanvas.js";
 import { createDefaultFootTurn } from "../element/turnTypes.js";
+import { TimingKeyframe } from "../keyframe.js";
 import { Sequence } from "../sequence.js";
 import { checkSequenceCurvatures, isStrokeElement } from "./curvatureWarning.js";
 import { Vector } from "../vector.js";
@@ -67,7 +68,7 @@ type ViewState = {
   zoom: number; // pixel per meter
 };
 
-export type EditMode = "view" | "path" | "elements";
+export type EditMode = "view" | "path" | "elements" | "timing";
 
 export type ControlPointSelection = {
   sequence: Sequence;
@@ -116,6 +117,23 @@ export class Editor {
   private creatingSequence: Sequence | null = null;
   private isCreatingProvisional = false;
   private provisionalOriginU = 0;
+  private provisionalTimingKeyframes = new Map<Sequence, TimingKeyframe>();
+  private selectedTimingKeyframes = new Set<TimingKeyframe>();
+  private isCreatingProvisionalTiming = false;
+  private timingCreatingSequence: Sequence | null = null;
+  private timingDragGrabU = 0;
+  private timingDragDeltaMin = -Infinity;
+  private timingDragDeltaMax = Infinity;
+  private isDraggingTimingPoint = false;
+  private draggingTimingKeyframe: TimingKeyframe | null = null;
+  private dragTimingSequence: Sequence | null = null;
+  private dragTimingItems: Array<{
+    keyframe: TimingKeyframe;
+    sequence: Sequence;
+    u0: number;
+    left: number;
+    right: number;
+  }> = [];
   private isDraggingElementPoint = false;
   private dragElement: Element | null = null;
   private dragElementPointIsStart = false;
@@ -129,6 +147,7 @@ export class Editor {
   private jointDeletionSnapshot: JointDeletionSnapshot | null = null;
   private rectAddToSelection = false;
   private rectTargetsElements = false;
+  private rectTargetsTiming = false;
   private rectDidMove = false;
   private rectStartX = 0;
   private rectStartY = 0;
@@ -219,6 +238,13 @@ export class Editor {
     this.dragSequence = null;
     this.dragElement = null;
     this.touchMode = "none";
+    this.provisionalTimingKeyframes.clear();
+    this.selectedTimingKeyframes.clear();
+    this.isCreatingProvisionalTiming = false;
+    this.timingCreatingSequence = null;
+    this.dragTimingItems = [];
+    this.draggingTimingKeyframe = null;
+    this.dragTimingSequence = null;
     this.draw();
   }
 
@@ -258,8 +284,13 @@ export class Editor {
     this.selectedPoints.clear();
     this.selectedCurves.clear();
     this.selectedElements.clear();
+    this.selectedTimingKeyframes.clear();
     this.provisionalElements.clear();
+    this.provisionalTimingKeyframes.clear();
     this.creatingSequence = null;
+    this.isCreatingProvisional = false;
+    this.timingCreatingSequence = null;
+    this.isCreatingProvisionalTiming = false;
   }
 
   replaceSelectedElement(oldElement: Element, newElement: Element) {
@@ -302,8 +333,14 @@ export class Editor {
       this.drawDeleteButtons();
     } else if (this.mode === "elements") {
       this.drawElements();
-    } else {
+    } else if (this.mode === "view") {
       this.drawTraces();
+      this.drawTimingBeatLabels();
+    } else if (this.mode === "timing") {
+      this.drawTimingKeyframes();
+      this.drawTimingButtons();
+      this.drawTimingTimeLabels();
+      this.drawTimingBeatLabels();
     }
     if (this.mode === "path" || this.mode === "elements") {
       this.drawCurvatureWarnings();
@@ -413,7 +450,7 @@ export class Editor {
     const pathColor = this.mode === "elements" ? ELEMENTS_PATH_COLOR : undefined;
     const minDrawIncrement = MIN_DRAW_INCREMENT / this.view.zoom;
     const viewport = this.getTraceViewport(minBladeLength);
-    if (this.mode === "path" && !pathColor) {
+    if ((this.mode === "path" || this.mode === "timing") && !pathColor) {
       this.drawMetres(() => sequence.drawPath(this.ctx, pathWidth, 0 as PathCoordinate, undefined, pathColor));
       this.ctx.globalAlpha = 0.3;
       this.drawMetres(() =>
@@ -458,6 +495,290 @@ export class Editor {
         ),
       );
     }
+  }
+
+  private sortedTimingKeyframes(sequence: Sequence): TimingKeyframe[] {
+    return [...sequence.keyframes.time].sort((a, b) => (a.pathCoordinate as number) - (b.pathCoordinate as number));
+  }
+
+  private drawTimingKeyframes() {
+    const nodeSize = (NODE_SIZE * CANVAS_SCALE) / this.view.zoom;
+    for (const sequence of this.sequences) {
+      if (sequence.path.curves.length === 0) continue;
+      for (const keyframe of this.sortedTimingKeyframes(sequence)) {
+        const point = sequence.path.getPosition(keyframe.pathCoordinate);
+        this.ctx.fillStyle = this.selectedTimingKeyframes.has(keyframe) ? "#d33" : "#444";
+        this.ctx.beginPath();
+        this.ctx.arc(point.x * CANVAS_SCALE, -point.y * CANVAS_SCALE, nodeSize / 2, 0, 2 * Math.PI);
+        this.ctx.fill();
+      }
+      const provisional = this.provisionalTimingKeyframes.get(sequence);
+      if (provisional) {
+        const point = sequence.path.getPosition(provisional.pathCoordinate);
+        this.ctx.fillStyle = PROVISIONAL_COLOR;
+        this.ctx.beginPath();
+        this.ctx.arc(point.x * CANVAS_SCALE, -point.y * CANVAS_SCALE, nodeSize / 2, 0, 2 * Math.PI);
+        this.ctx.fill();
+      }
+    }
+  }
+
+  private getTimingKeyframeGeometry(
+    sequence: Sequence,
+    keyframe: TimingKeyframe,
+  ): { point: Vector<2>; outside: Vector<2> } | null {
+    if (sequence.path.curves.length === 0) return null;
+    return this.getLabelGeometryInside(sequence.path, keyframe.pathCoordinate);
+  }
+
+  private drawTimingButtons() {
+    const offset = DELETE_BUTTON_OFFSET / this.view.zoom;
+    for (const [sequence, provisional] of this.provisionalTimingKeyframes) {
+      const geometry = this.getTimingKeyframeGeometry(sequence, provisional);
+      if (!geometry) continue;
+      this.drawPlusInCircleWithColor(geometry.point.plus(geometry.outside.times(offset)), PROVISIONAL_COLOR);
+    }
+    const selected = this.getSingleSelectedTimingKeyframe();
+    if (!selected) return;
+    const sequence = this.getSequenceOfTimingKeyframe(selected);
+    const geometry = sequence ? this.getTimingKeyframeGeometry(sequence, selected) : null;
+    if (!geometry) return;
+    this.drawMinusInCircle(geometry.point.plus(geometry.outside.times(offset)));
+    this.drawCogInCircle(geometry.point.plus(geometry.outside.times(-offset)));
+  }
+
+  private hitTimingButton(keyframe: TimingKeyframe, side: 1 | -1, screenX: number, screenY: number): boolean {
+    const owner = this.getSequenceOfTimingKeyframe(keyframe);
+    if (!owner) return false;
+    const geometry = this.getTimingKeyframeGeometry(owner, keyframe);
+    if (!geometry) return false;
+    const offset = DELETE_BUTTON_OFFSET / this.view.zoom;
+    const [iconX, iconY] = this.worldToScreen(geometry.point.plus(geometry.outside.times(offset * side)));
+    return Math.hypot(screenX - iconX, screenY - iconY) <= DELETE_BUTTON_HIT_RADIUS;
+  }
+
+  private hitProvisionalTimingPlus(screenX: number, screenY: number): TimingKeyframe | null {
+    for (const [sequence, provisional] of this.provisionalTimingKeyframes) {
+      if (sequence.path.curves.length === 0) continue;
+      if (this.hitTimingButton(provisional, 1, screenX, screenY)) return provisional;
+    }
+    return null;
+  }
+
+  private getSingleSelectedTimingKeyframe(): TimingKeyframe | null {
+    if (this.selectedTimingKeyframes.size !== 1) return null;
+    const selected = [...this.selectedTimingKeyframes][0]!;
+    return this.isProvisionalTiming(selected) ? null : selected;
+  }
+
+  private hitTimingCogButton(screenX: number, screenY: number): TimingKeyframe | null {
+    const selected = this.getSingleSelectedTimingKeyframe();
+    if (!selected) return null;
+    return this.hitTimingButton(selected, -1, screenX, screenY) ? selected : null;
+  }
+
+  private hitTimingMinusButton(screenX: number, screenY: number): TimingKeyframe | null {
+    const selected = this.getSingleSelectedTimingKeyframe();
+    if (!selected) return null;
+    return this.hitTimingButton(selected, 1, screenX, screenY) ? selected : null;
+  }
+
+  private getLabelGeometryInside(path: Path, u: PathCoordinate): { point: Vector<2>; outside: Vector<2> } {
+    const { point, tangent, curvature } = this.getLabelFrame(path, u);
+    // Same frame as getLabelGeometryAt with the flipped sign: inside the curvature.
+    const inside = tangent.getOrthogonal().times(curvature > 0 ? 1 : -1);
+    return { point, outside: inside };
+  }
+
+  private drawTimingTimeLabels() {
+    for (const sequence of this.sequences) {
+      if (sequence.path.curves.length === 0) continue;
+      for (const keyframe of this.sortedTimingKeyframes(sequence)) {
+        if (keyframe.kind !== "time") continue;
+        const geometry = this.getLabelGeometryInside(sequence.path, keyframe.pathCoordinate);
+        this.drawWhiteRectLabel(formatTimingLabel(keyframe.value), geometry.point, geometry.outside);
+      }
+    }
+  }
+
+  private drawTimingBeatLabels() {
+    for (const sequence of this.sequences) {
+      if (sequence.path.curves.length === 0) continue;
+      const sorted = this.sortedTimingKeyframes(sequence);
+      for (let index = 1; index < sorted.length; index++) {
+        const keyframe = sorted[index];
+        if (!keyframe || keyframe.kind !== "beats") continue;
+        const previous = sorted[index - 1];
+        if (!previous) continue;
+        const mid = (((previous.pathCoordinate as number) + keyframe.pathCoordinate) as number) / 2;
+        const geometry = this.getLabelGeometryInside(sequence.path, mid as PathCoordinate);
+        this.drawWhiteCircleLabel(String(Math.round(keyframe.value)), geometry.point, geometry.outside);
+      }
+    }
+  }
+
+  private drawWhiteRectLabel(text: string, point: Vector<2>, inside: Vector<2>, fontSize = LABEL_FONT_SIZE_SMALL) {
+    const ctx = this.ctx;
+    const offset = (LABEL_OFFSET * CANVAS_SCALE) / this.view.zoom;
+    ctx.font = `${(fontSize * CANVAS_SCALE) / this.view.zoom}px sans-serif`;
+    const metrics = ctx.measureText(text);
+    const width = metrics.width;
+    const height = (metrics.actualBoundingBoxAscent ?? 0) + (metrics.actualBoundingBoxDescent ?? 0);
+    if (width === 0 && height === 0) return;
+    const pad = (3 * CANVAS_SCALE) / this.view.zoom;
+    const a = (width + 2 * pad) / 2;
+    const b = (height + 2 * pad) / 2;
+    const total = offset + this.ellipseSupport(Math.abs(inside.x), Math.abs(inside.y), a, b);
+    const cx = point.x * CANVAS_SCALE + inside.x * total;
+    const cy = -(point.y * CANVAS_SCALE + inside.y * total);
+    ctx.fillStyle = "white";
+    ctx.fillRect(cx - a, cy - b, width + 2 * pad, height + 2 * pad);
+    ctx.fillStyle = "#000";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, cx, cy);
+  }
+
+  private drawWhiteCircleLabel(text: string, point: Vector<2>, inside: Vector<2>, fontSize = LABEL_FONT_SIZE_SMALL) {
+    const ctx = this.ctx;
+    const offset = (LABEL_OFFSET * CANVAS_SCALE) / this.view.zoom;
+    ctx.font = `${(fontSize * CANVAS_SCALE) / this.view.zoom}px sans-serif`;
+    const metrics = ctx.measureText(text);
+    const width = metrics.width;
+    const height = (metrics.actualBoundingBoxAscent ?? 0) + (metrics.actualBoundingBoxDescent ?? 0);
+    if (width === 0 && height === 0) return;
+    const pad = (2 * CANVAS_SCALE) / this.view.zoom;
+    const radius = Math.max(Math.hypot(width, height) / 2 + pad, (10 * CANVAS_SCALE) / this.view.zoom);
+    const total = offset + radius;
+    const cx = point.x * CANVAS_SCALE + inside.x * total;
+    const cy = -(point.y * CANVAS_SCALE + inside.y * total);
+    ctx.fillStyle = "white";
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.fillStyle = "#000";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, cx, cy);
+  }
+
+  private timingNeighbourBoundsAround(
+    sequence: Sequence,
+    u: number,
+    exclude: ReadonlySet<TimingKeyframe>,
+  ): { left: number; right: number } {
+    let left = 0;
+    let right = sequence.path.length;
+    for (const other of sequence.keyframes.time) {
+      if (exclude.has(other)) continue;
+      const otherU = other.pathCoordinate as number;
+      if (otherU <= u) left = Math.max(left, otherU);
+      else right = Math.min(right, otherU);
+    }
+    return { left, right };
+  }
+
+  private pickTimingKeyframe(screenX: number, screenY: number): TimingKeyframe | null {
+    const cursor = this.screenToWorld(screenX, screenY);
+    const tolerance = PICK_RADIUS / this.view.zoom;
+    let best: TimingKeyframe | null = null;
+    let bestDistance = Infinity;
+    for (const sequence of this.sequences) {
+      if (sequence.path.curves.length === 0) continue;
+      const candidates = [...sequence.keyframes.time];
+      const provisional = this.provisionalTimingKeyframes.get(sequence);
+      if (provisional) candidates.push(provisional);
+      for (const candidate of candidates) {
+        const distance = sequence.path.getPosition(candidate.pathCoordinate).minus(cursor).length();
+        if (distance <= tolerance && distance < bestDistance) {
+          bestDistance = distance;
+          best = candidate;
+        }
+      }
+    }
+    return best;
+  }
+
+  private selectTimingKeyframe(keyframe: TimingKeyframe, ctrlKey: boolean) {
+    if (ctrlKey) {
+      if (this.selectedTimingKeyframes.has(keyframe)) this.selectedTimingKeyframes.delete(keyframe);
+      else this.selectedTimingKeyframes.add(keyframe);
+    } else if (!this.selectedTimingKeyframes.has(keyframe)) {
+      this.selectedTimingKeyframes = new Set([keyframe]);
+    }
+  }
+
+  private startProvisionalTimingCreation(sequence: Sequence, u: number) {
+    this.provisionalTimingKeyframes.set(sequence, this.makeProvisionalTimingKeyframe(sequence, u));
+    this.isCreatingProvisionalTiming = true;
+    this.timingCreatingSequence = sequence;
+  }
+
+  private makeProvisionalTimingKeyframe(sequence: Sequence, u: number): TimingKeyframe {
+    const previous = [...sequence.keyframes.time]
+      .sort((a, b) => a.pathCoordinate - b.pathCoordinate)
+      .filter((keyframe) => keyframe.pathCoordinate < u)
+      .pop();
+    if (!previous) return new TimingKeyframe(u as PathCoordinate, "beats", 4);
+    return new TimingKeyframe(u as PathCoordinate, previous.kind, previous.value);
+  }
+
+  private updateProvisionalTimingCreation(cursor: Vector<2>) {
+    const sequence = this.timingCreatingSequence;
+    if (!sequence) return;
+    const provisional = this.provisionalTimingKeyframes.get(sequence);
+    if (!provisional || sequence.path.curves.length === 0) return;
+    const u = this.snapCursorToPathAnywhere(sequence, cursor);
+    if (u == null) return;
+    const bounds = this.timingNeighbourBoundsAround(sequence, u, new Set([provisional]));
+    provisional.pathCoordinate = Math.min(Math.max(u, bounds.left), bounds.right) as PathCoordinate;
+    this.draw();
+  }
+
+  private removeTimingKeyframe(keyframe: TimingKeyframe) {
+    const sequence = this.getSequenceOfTimingKeyframe(keyframe);
+    if (!sequence) return;
+    sequence.keyframes.time = sequence.keyframes.time.filter((candidate) => candidate !== keyframe);
+    this.selectedTimingKeyframes.delete(keyframe);
+    this.notifySequenceChange();
+    this.draw();
+  }
+
+  private startTimingDrag(keyframe: TimingKeyframe, screenX: number, screenY: number) {
+    const sequence = this.getSequenceOfTimingKeyframe(keyframe);
+    if (!sequence || sequence.path.curves.length === 0) return;
+
+    this.isDraggingTimingPoint = true;
+    this.draggingTimingKeyframe = keyframe;
+    this.dragTimingSequence = sequence;
+    this.dragTimingItems = [];
+    this.timingDragDeltaMin = -Infinity;
+    this.timingDragDeltaMax = Infinity;
+
+    let moving = new Set<TimingKeyframe>([keyframe]);
+    if (!this.isProvisionalTiming(keyframe)) {
+      if (this.selectedTimingKeyframes.has(keyframe) && this.selectedTimingKeyframes.size > 1) {
+        moving = new Set(this.selectedTimingKeyframes);
+      }
+    }
+
+    let deltaMin = -Infinity;
+    let deltaMax = Infinity;
+    for (const moved of moving) {
+      const owner = this.getSequenceOfTimingKeyframe(moved);
+      if (!owner) continue;
+      const u0 = moved.pathCoordinate as number;
+      const bounds = this.timingNeighbourBoundsAround(owner, u0, moving);
+      this.dragTimingItems.push({ keyframe: moved, sequence: owner, u0, left: bounds.left, right: bounds.right });
+      deltaMin = Math.max(deltaMin, bounds.left - u0);
+      deltaMax = Math.min(deltaMax, bounds.right - u0);
+    }
+    this.timingDragDeltaMin = deltaMin;
+    this.timingDragDeltaMax = deltaMax;
+
+    const cursor = this.screenToWorld(screenX, screenY);
+    const grab = this.snapCursorToPathAnywhere(sequence, cursor);
+    this.timingDragGrabU = grab ?? (keyframe.pathCoordinate as number);
   }
 
   private drawSelectedCurves() {
@@ -521,7 +842,7 @@ export class Editor {
 
     this.drawElementDeleteButton();
     this.drawElementCogButton();
-    this.drawProvisionalCogButtons();
+    this.drawProvisionalPlusButtons();
   }
 
   private getDisplayedSpan(sequence: Sequence, element: Element): [PathCoordinate, PathCoordinate] {
@@ -1319,7 +1640,7 @@ export class Editor {
     return best ? { sequence: best.sequence, u: best.u } : null;
   }
 
-  private getProvisionalCogButtons(): { sequence: Sequence; center: Vector<2> }[] {
+  private getProvisionalPlusButtons(): { sequence: Sequence; center: Vector<2> }[] {
     const result: { sequence: Sequence; center: Vector<2> }[] = [];
     const offset = DELETE_BUTTON_OFFSET / this.view.zoom; // px -> m
     for (const [sequence, element] of this.provisionalElements) {
@@ -1330,14 +1651,14 @@ export class Editor {
     return result;
   }
 
-  private drawProvisionalCogButtons() {
-    for (const { center } of this.getProvisionalCogButtons()) {
-      this.drawCogInCircle(center, PROVISIONAL_COLOR);
+  private drawProvisionalPlusButtons() {
+    for (const { center } of this.getProvisionalPlusButtons()) {
+      this.drawPlusInCircleWithColor(center, PROVISIONAL_COLOR);
     }
   }
 
-  private hitProvisionalCogButton(screenX: number, screenY: number): Sequence | null {
-    for (const { sequence, center } of this.getProvisionalCogButtons()) {
+  private hitProvisionalPlusButton(screenX: number, screenY: number): Sequence | null {
+    for (const { sequence, center } of this.getProvisionalPlusButtons()) {
       const [iconX, iconY] = this.worldToScreen(center);
       const dx = screenX - iconX;
       const dy = screenY - iconY;
@@ -1376,6 +1697,50 @@ export class Editor {
     if (!sequence || !this.isProvisionalElement(provisional)) return null;
     this.provisionalElements.delete(sequence);
     sequence.addElement(replacement);
+    this.notifySequenceChange();
+    this.draw();
+    return sequence;
+  }
+
+  onTimingKeyframeChangeRequest?: (
+    keyframe: TimingKeyframe,
+    isProvisional: boolean,
+    previous: TimingKeyframe | null,
+  ) => void;
+
+  getPreviousTimingKeyframe(keyframe: TimingKeyframe): TimingKeyframe | null {
+    const sequence = this.getSequenceOfTimingKeyframe(keyframe);
+    if (!sequence) return null;
+    return (
+      [...sequence.keyframes.time]
+        .filter((candidate) => candidate.pathCoordinate < keyframe.pathCoordinate)
+        .sort((a, b) => a.pathCoordinate - b.pathCoordinate)
+        .pop() ?? null
+    );
+  }
+
+  isProvisionalTiming(keyframe: TimingKeyframe): boolean {
+    for (const provisional of this.provisionalTimingKeyframes.values()) {
+      if (provisional === keyframe) return true;
+    }
+    return false;
+  }
+
+  getSequenceOfTimingKeyframe(keyframe: TimingKeyframe): Sequence | null {
+    for (const sequence of this.sequences) {
+      if (sequence.keyframes.time.includes(keyframe)) return sequence;
+    }
+    for (const [sequence, provisional] of this.provisionalTimingKeyframes) {
+      if (provisional === keyframe) return sequence;
+    }
+    return null;
+  }
+
+  commitProvisionalTimingKeyframe(provisional: TimingKeyframe, replacement: TimingKeyframe): Sequence | null {
+    const sequence = this.getSequenceOfTimingKeyframe(provisional);
+    if (!sequence || !this.isProvisionalTiming(provisional)) return null;
+    this.provisionalTimingKeyframes.delete(sequence);
+    sequence.addKeyframe("time", replacement);
     this.notifySequenceChange();
     this.draw();
     return sequence;
@@ -1686,10 +2051,56 @@ export class Editor {
   private handlePrimaryDown(screenX: number, screenY: number, ctrlKey: boolean) {
     if (this.mode === "view") return;
 
+    if (this.mode === "timing") {
+      const plusHit = this.hitProvisionalTimingPlus(screenX, screenY);
+      if (plusHit) {
+        this.onTimingKeyframeChangeRequest?.(plusHit, true, this.getPreviousTimingKeyframe(plusHit));
+        return;
+      }
+      const cogHit = this.hitTimingCogButton(screenX, screenY);
+      if (cogHit) {
+        this.onTimingKeyframeChangeRequest?.(cogHit, false, this.getPreviousTimingKeyframe(cogHit));
+        return;
+      }
+      const minusHit = this.hitTimingMinusButton(screenX, screenY);
+      if (minusHit) {
+        this.removeTimingKeyframe(minusHit);
+        return;
+      }
+      const dot = this.pickTimingKeyframe(screenX, screenY);
+      if (dot) {
+        if (!this.isProvisionalTiming(dot)) {
+          const owner = this.getSequenceOfTimingKeyframe(dot);
+          if (owner) this.provisionalTimingKeyframes.delete(owner);
+          this.selectTimingKeyframe(dot, ctrlKey);
+        }
+        this.startTimingDrag(dot, screenX, screenY);
+        this.draw();
+        return;
+      }
+      const pathHit = this.pickPathCoordinate(screenX, screenY);
+      if (pathHit) {
+        this.startProvisionalTimingCreation(pathHit.sequence, pathHit.u);
+        this.draw();
+        return;
+      }
+      this.isSelectingRect = true;
+      this.rectDidMove = false;
+      this.rectTargetsTiming = true;
+      this.rectAddToSelection = ctrlKey;
+      this.rectStartX = screenX;
+      this.rectStartY = screenY;
+      this.rectEndX = screenX;
+      this.rectEndY = screenY;
+      if (!ctrlKey) this.selectedTimingKeyframes.clear();
+      this.draw();
+      return;
+    }
+
     if (this.mode !== "path") {
-      const provisionalCogHit = this.hitProvisionalCogButton(screenX, screenY);
-      if (provisionalCogHit) {
-        this.openProvisionalChange(provisionalCogHit);
+      const provisionalPlusHit = this.hitProvisionalPlusButton(screenX, screenY);
+      if (provisionalPlusHit) {
+        this.openProvisionalChange(provisionalPlusHit);
         return;
       }
       if (this.hitElementCogButton(screenX, screenY) && this.onElementChangeRequest) {
@@ -1880,6 +2291,11 @@ export class Editor {
       return;
     }
 
+    if (this.isCreatingProvisionalTiming) {
+      this.updateProvisionalTimingCreation(this.screenToWorld(screenX, screenY));
+      return;
+    }
+
     if (this.isDraggingElementPoint) {
       if (!this.dragElement) return;
       const world = this.screenToWorld(screenX, screenY);
@@ -1914,6 +2330,26 @@ export class Editor {
           item.element.start = sequence.path.moveAlongByArcLength(item.start0 as PathCoordinate, clamped);
           item.element.end = sequence.path.moveAlongByArcLength(item.end0 as PathCoordinate, clamped);
           this.updateElementKeyframes(item.element);
+        }
+        this.sequenceMutated = true;
+      }
+      this.draw();
+      return;
+    }
+
+    if (this.isDraggingTimingPoint && this.draggingTimingKeyframe && this.dragTimingSequence) {
+      const world = this.screenToWorld(screenX, screenY);
+      const currentU = this.snapCursorToPathAnywhere(this.dragTimingSequence, world);
+      if (currentU != null) {
+        const grab = this.timingDragGrabU;
+        const delta =
+          (currentU as number) >= grab
+            ? this.dragTimingSequence.path.arcLengthBetween(grab as PathCoordinate, currentU as PathCoordinate)
+            : -this.dragTimingSequence.path.arcLengthBetween(currentU as PathCoordinate, grab as PathCoordinate);
+        const clamped = Math.min(Math.max(delta, this.timingDragDeltaMin), this.timingDragDeltaMax);
+        for (const item of this.dragTimingItems) {
+          const moved = item.sequence.path.moveAlongByArcLength(item.u0 as PathCoordinate, clamped);
+          item.keyframe.pathCoordinate = Math.min(Math.max(moved as number, item.left), item.right) as PathCoordinate;
         }
         this.sequenceMutated = true;
       }
@@ -2036,6 +2472,10 @@ export class Editor {
   }
 
   private finishSelectionRectangle() {
+    if (this.rectTargetsTiming) {
+      this.finishTimingSelectionRectangle();
+      return;
+    }
     if (this.rectTargetsElements) {
       this.finishElementSelectionRectangle();
       return;
@@ -2072,6 +2512,30 @@ export class Editor {
 
     this.selectedPoints = hits;
     this.selectedCurves.clear();
+  }
+
+  private finishTimingSelectionRectangle() {
+    const x0 = Math.min(this.rectStartX, this.rectEndX);
+    const x1 = Math.max(this.rectStartX, this.rectEndX);
+    const y0 = Math.min(this.rectStartY, this.rectEndY);
+    const y1 = Math.max(this.rectStartY, this.rectEndY);
+
+    const hits = new Set<TimingKeyframe>();
+    if (this.rectAddToSelection) {
+      for (const keyframe of this.selectedTimingKeyframes) hits.add(keyframe);
+    }
+    for (const sequence of this.sequences) {
+      if (sequence.path.curves.length === 0) continue;
+      for (const keyframe of sequence.keyframes.time) {
+        const [screenX, screenY] = this.worldToScreen(sequence.path.getPosition(keyframe.pathCoordinate));
+        if (screenX >= x0 && screenX <= x1 && screenY >= y0 && screenY <= y1) hits.add(keyframe);
+      }
+    }
+    this.selectedTimingKeyframes = hits;
+    this.selectedPoints.clear();
+    this.selectedCurves.clear();
+    this.selectedElements.clear();
+    this.provisionalElements.clear();
   }
 
   private finishElementSelectionRectangle() {
@@ -2250,6 +2714,9 @@ export class Editor {
       } else if (this.rectTargetsElements) {
         this.provisionalElements.clear();
         this.selectedElements.clear();
+      } else if (this.rectTargetsTiming) {
+        this.provisionalTimingKeyframes.clear();
+        this.selectedTimingKeyframes.clear();
       }
       this.isSelectingRect = false;
     }
@@ -2260,6 +2727,12 @@ export class Editor {
     this.isDraggingElementSegment = false;
     this.isCreatingProvisional = false;
     this.creatingSequence = null;
+    this.isDraggingTimingPoint = false;
+    this.isCreatingProvisionalTiming = false;
+    this.timingCreatingSequence = null;
+    this.draggingTimingKeyframe = null;
+    this.dragTimingSequence = null;
+    this.dragTimingItems = [];
     this.jointMoveSnapshot = null;
     this.dragElement = null;
     this.dragSequence = null;
@@ -2348,6 +2821,20 @@ export function remapUniformAtRemoval(
   const newStart = newCurveStarts[clampedIndex] ?? 0;
   const newLen = newCurveLengths[clampedIndex] ?? 0;
   return Math.max(0, Math.min(newTotal, newStart + ratio * newLen));
+}
+
+export function formatTimingLabel(value: number): string {
+  const total = Math.max(0, value);
+  const minutes = Math.floor(total / 60);
+  const seconds = total - minutes * 60;
+  const whole = Math.floor(seconds);
+  let millis = Math.round((seconds - whole) * 1000);
+  let clampedSeconds = whole;
+  if (millis === 1000) {
+    clampedSeconds += 1;
+    millis = 0;
+  }
+  return `${minutes}:${String(clampedSeconds).padStart(2, "0")}.${String(millis).padStart(3, "0")}`;
 }
 
 function distanceToSegment(p: Vector<2>, a: Vector<2>, b: Vector<2>): number {

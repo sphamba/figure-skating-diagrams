@@ -1,6 +1,6 @@
 import { Curve } from "../../curve.js";
 import type { PathCoordinate, Time } from "../../coordinates.js";
-import { FootKeyframe, TimeKeyframe } from "../../keyframe.js";
+import { FootKeyframe, TimingKeyframe } from "../../keyframe.js";
 import { Path } from "../../path.js";
 import { getQuaternionFromAngleAxis } from "../../quaternion.js";
 import { getOppositeFootKey, Sequence } from "../../sequence.js";
@@ -74,7 +74,7 @@ function createTurn(
   duration: Time = CPathDuration,
 ): Sequence {
   const turn = new Sequence(path);
-  turn.addKeyframe("time", new TimeKeyframe(duration, { pathCoordinate: path.length as PathCoordinate }));
+  turn.addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", duration as number));
   turn.addKeyframe(footKey, skatingFootInitialKeyframe);
   turn.addKeyframe(getOppositeFootKey(footKey), freeFootInitialKeyframe);
   const center = (path.length / 2) as PathCoordinate;

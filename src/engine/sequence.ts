@@ -2,9 +2,10 @@ import { bladeLength, maxBladeLength } from "./constants.js";
 import type { PathCoordinate, Time } from "./coordinates.js";
 import type { AxisRect } from "./curve.js";
 import type { Element } from "./element/element.js";
-import { interpolate } from "./interpolate.js";
-import { FootKeyframe, HipsKeyframe, TimeKeyframe, type FootData } from "./keyframe.js";
-import type { FootKeyframeJSON, HipsKeyframeJSON, TimeKeyframeJSON } from "./keyframe.js";
+import { interpolate, type Interpolable as Interpolatable } from "./interpolate.js";
+import { FootKeyframe, HipsKeyframe, TimingKeyframe, type FootData } from "./keyframe.js";
+import type { FootKeyframeJSON, HipsKeyframeJSON, TimeKeyframeJSON, TimingKeyframeJSON } from "./keyframe.js";
+import type { Transition } from "./keyframe.js";
 import { Path } from "./path.js";
 import { Quaternion, getQuaternionFromAngleAxis } from "./quaternion.js";
 import type { CanvasRenderingContext2DSized } from "./rinkCanvas.js";
@@ -17,7 +18,7 @@ type SequenceKeyframes = {
   footL: FootKeyframe[];
   footR: FootKeyframe[];
   hips: HipsKeyframe[];
-  time: TimeKeyframe[];
+  time: TimingKeyframe[];
 };
 type PartKey = keyof SequenceKeyframes;
 export type FootKey = "footL" | "footR";
@@ -39,7 +40,7 @@ export interface SequenceJSON {
     footL: FootKeyframeJSON[];
     footR: FootKeyframeJSON[];
     hips: HipsKeyframeJSON[];
-    time: TimeKeyframeJSON[];
+    time: TimingKeyframeJSON[];
   };
   elements: (FootTurnJSON | { type: string; start: number; end: number })[];
 }
@@ -53,6 +54,8 @@ const defaultPathColor = "black";
 const defaultTraceColorL = "#3030d2";
 const defaultTraceColorR = "#9c0000";
 const traceOpacityForward = 0.7;
+
+export const DEFAULT_BPM = 120;
 
 const boundaryDelta = 0.001; // m gap kept between consecutive element keyframes
 
@@ -86,13 +89,17 @@ export class Sequence {
       footL: [],
       footR: [],
       hips: [],
-      time: [new TimeKeyframe(0 as Time, { pathCoordinate: 0 as PathCoordinate })],
+      time: [new TimingKeyframe(0 as PathCoordinate, "time", 0)],
     };
     this.elements = [];
   }
 
-  get duration(): Time {
-    return this.keyframes.time[this.keyframes.time.length - 1]!.coordinate;
+  getDuration(bpm: number = DEFAULT_BPM): Time {
+    const resolved = this.resolveTimes(bpm);
+    if (resolved.length === 0) {
+      return 0 as Time;
+    }
+    return resolved[resolved.length - 1]!.time as Time;
   }
 
   addKeyframe<Key extends PartKey, KeyframeType extends SequenceKeyframes[Key][number]>(
@@ -238,7 +245,13 @@ export class Sequence {
       footL: json.keyframes.footL.map((keyframe) => FootKeyframe.fromJSON(keyframe)),
       footR: json.keyframes.footR.map((keyframe) => FootKeyframe.fromJSON(keyframe)),
       hips: json.keyframes.hips.map((keyframe) => HipsKeyframe.fromJSON(keyframe)),
-      time: json.keyframes.time.map((keyframe) => TimeKeyframe.fromJSON(keyframe)),
+      time: (json.keyframes.time ?? []).map((entry) => {
+        if ((entry as { data?: { type?: string } }).data?.type === undefined) {
+          const legacy = entry as unknown as TimeKeyframeJSON;
+          return new TimingKeyframe(legacy.data.pathCoordinate as PathCoordinate, "time", legacy.coordinate);
+        }
+        return TimingKeyframe.fromJSON(entry as TimingKeyframeJSON);
+      }),
     };
     sequence.elements = json.elements.map((element) =>
       changeElementType(element.type, element as { type: string; start: number; end: number }),
@@ -284,41 +297,81 @@ export class Sequence {
     );
   }
 
-  getPathCoordinateFromTime(time: Time): PathCoordinate {
-    return this.getInterpolatedValue("time", "pathCoordinate", time);
+  resolveTimes(bpm: number = DEFAULT_BPM): Array<{ keyframe: TimingKeyframe; time: number }> {
+    const keyframes = [...this.keyframes.time].sort((a, b) => a.pathCoordinate - b.pathCoordinate);
+    const resolved: Array<{ keyframe: TimingKeyframe; time: number }> = [];
+    let previousTime = 0;
+    for (const keyframe of keyframes) {
+      const time = keyframe.kind === "beats" ? previousTime + (keyframe.value * 60) / bpm : keyframe.value;
+      resolved.push({ keyframe, time });
+      previousTime = time;
+    }
+    return resolved;
   }
 
-  getTimeFromPathCoordinate(pathCoordinate: PathCoordinate): Time {
-    const timeKeyframes = this.keyframes.time;
-    if (timeKeyframes.length === 0) {
+  getPathCoordinateFromTime(time: Time, bpm: number = DEFAULT_BPM): PathCoordinate {
+    const resolved = this.resolveTimes(bpm);
+    if (resolved.length === 0) {
+      return 0 as PathCoordinate;
+    }
+
+    const first = resolved[0]!;
+    if (time <= first.time) {
+      return first.keyframe.pathCoordinate;
+    }
+
+    const last = resolved[resolved.length - 1]!;
+    if (time >= last.time) {
+      return last.keyframe.pathCoordinate;
+    }
+
+    for (let i = 0; i + 1 < resolved.length; i++) {
+      const before = resolved[i]!;
+      const after = resolved[i + 1]!;
+      if (after.time === before.time) {
+        continue;
+      }
+      if (time >= before.time && time <= after.time) {
+        const s = (time - before.time) / (after.time - before.time);
+        const eased = getEasedTime(before.keyframe, after.keyframe, s);
+        return interpolate(before.keyframe.pathCoordinate, after.keyframe.pathCoordinate, eased) as PathCoordinate;
+      }
+    }
+
+    return last.keyframe.pathCoordinate;
+  }
+
+  getTimeFromPathCoordinate(pathCoordinate: PathCoordinate, bpm: number = DEFAULT_BPM): Time {
+    const resolved = this.resolveTimes(bpm);
+    if (resolved.length === 0) {
       return 0 as Time;
     }
 
-    const first = timeKeyframes[0]!;
-    if (pathCoordinate <= first.data.pathCoordinate) {
-      return first.coordinate;
+    const first = resolved[0]!;
+    if (pathCoordinate <= first.keyframe.pathCoordinate) {
+      return first.time as Time;
     }
 
-    const last = timeKeyframes[timeKeyframes.length - 1]!;
-    if (pathCoordinate >= last.data.pathCoordinate) {
-      return last.coordinate;
+    const last = resolved[resolved.length - 1]!;
+    if (pathCoordinate >= last.keyframe.pathCoordinate) {
+      return last.time as Time;
     }
 
-    for (let i = 0; i < timeKeyframes.length - 1; i++) {
-      const before = timeKeyframes[i]!;
-      const after = timeKeyframes[i + 1]!;
-      const uBefore = before.data.pathCoordinate;
-      const uAfter = after.data.pathCoordinate;
+    for (let i = 0; i + 1 < resolved.length; i++) {
+      const before = resolved[i]!;
+      const after = resolved[i + 1]!;
+      const uBefore = before.keyframe.pathCoordinate;
+      const uAfter = after.keyframe.pathCoordinate;
       if (uBefore === uAfter) {
         continue;
       }
       if (pathCoordinate >= uBefore && pathCoordinate <= uAfter) {
         const s = (pathCoordinate - uBefore) / (uAfter - uBefore);
-        return (before.coordinate + s * (after.coordinate - before.coordinate)) as Time;
+        return (before.time + s * (after.time - before.time)) as Time;
       }
     }
 
-    return last.coordinate;
+    return last.time as Time;
   }
 
   drawPath(
@@ -565,7 +618,7 @@ export class Sequence {
   }
 
   getKeyframesAround<
-    Key extends PartKey,
+    Key extends FootOrHipsKey,
     KeyframeType extends SequenceKeyframes[Key][number],
     Property extends keyof KeyframeType["data"],
   >(
@@ -599,11 +652,11 @@ export class Sequence {
 
     const easedCoordinate = getEasedTime(keyframeBefore, keyframeAfter, relativeCoordinate as Relative);
 
-    return [keyframeBefore, keyframeAfter, easedCoordinate];
+    return [keyframeBefore, keyframeAfter, easedCoordinate as Relative];
   }
 
   getInterpolatedValue<
-    Key extends PartKey,
+    Key extends FootOrHipsKey,
     KeyframeType extends SequenceKeyframes[Key][number],
     Property extends keyof KeyframeType["data"],
     Interpolable extends KeyframeType["data"][Property],
@@ -621,19 +674,19 @@ export class Sequence {
     );
     const beforeValue = keyframeBefore.data[property as keyof typeof keyframeBefore.data];
     const afterValue = keyframeAfter.data[property as keyof typeof keyframeAfter.data];
-    return interpolate(beforeValue, afterValue, easedCoordinate) as Interpolable;
+    return interpolate(beforeValue as Interpolatable, afterValue as Interpolatable, easedCoordinate) as Interpolable;
   }
 }
 
-function getEasedTime<T extends KeyframeType>(
-  keyframeBefore: T,
-  keyframeAfter: T,
-  relativeCoordinate: Relative,
-): Relative {
+function getEasedTime(
+  keyframeBefore: { transitionOut: Transition },
+  keyframeAfter: { transitionIn: Transition },
+  relativeCoordinate: number,
+): number {
   const transitionStart = keyframeBefore.transitionOut;
   const transitionEnd = keyframeAfter.transitionIn;
   const s = relativeCoordinate;
-  let easedCoordinate: Relative;
+  let easedCoordinate: number;
 
   if (transitionStart === "linear" && transitionEnd === "linear") {
     easedCoordinate = s;

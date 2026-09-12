@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { Curve } from "../src/engine/curve";
 import type { PathCoordinate, Time } from "../src/engine/coordinates";
-import { FootKeyframe, TimeKeyframe } from "../src/engine/keyframe";
+import { FootKeyframe, TimingKeyframe } from "../src/engine/keyframe";
 import { Path } from "../src/engine/path";
 import { Quaternion } from "../src/engine/quaternion";
 import { LeftForwardOutsideThreeTurn } from "../src/engine/element/threeTurn";
@@ -22,7 +22,7 @@ function makeStraightLengthOnePath(): Path {
 
 test("Clock maps path coordinate to time and back", () => {
   const sequence = new Sequence(makeStraightLengthOnePath());
-  sequence.addKeyframe("time", new TimeKeyframe(2 as Time, { pathCoordinate: 1 as PathCoordinate }));
+  sequence.addKeyframe("time", new TimingKeyframe(1 as PathCoordinate, "time", 2));
 
   expect(sequence.getPathCoordinateFromTime(1 as Time)).toBeCloseTo(0.5);
   expect(sequence.getTimeFromPathCoordinate(0.5 as PathCoordinate)).toBeCloseTo(1);
@@ -30,7 +30,7 @@ test("Clock maps path coordinate to time and back", () => {
 
 test("Clock inverse and forward mapping are consistent", () => {
   const sequence = new Sequence(makeStraightLengthOnePath());
-  sequence.addKeyframe("time", new TimeKeyframe(2 as Time, { pathCoordinate: 1 as PathCoordinate }));
+  sequence.addKeyframe("time", new TimingKeyframe(1 as PathCoordinate, "time", 2));
 
   for (const t of [0.1, 0.4, 0.75, 1.3, 1.9]) {
     const u = sequence.getPathCoordinateFromTime(t as Time);
@@ -40,12 +40,20 @@ test("Clock inverse and forward mapping are consistent", () => {
 
 test("Clock clamps outside the defined range", () => {
   const sequence = new Sequence(makeStraightLengthOnePath());
-  sequence.addKeyframe("time", new TimeKeyframe(2 as Time, { pathCoordinate: 1 as PathCoordinate }));
+  sequence.addKeyframe("time", new TimingKeyframe(1 as PathCoordinate, "time", 2));
 
   expect(sequence.getTimeFromPathCoordinate((-0.5) as PathCoordinate)).toBeCloseTo(0);
   expect(sequence.getTimeFromPathCoordinate(5 as PathCoordinate)).toBeCloseTo(2);
   expect(sequence.getPathCoordinateFromTime((-0.3) as Time)).toBeCloseTo(0);
   expect(sequence.getPathCoordinateFromTime(3 as Time)).toBeCloseTo(1);
+});
+
+test("Beats resolve from the previous timing keyframe", () => {
+  const sequence = new Sequence(makeStraightLengthOnePath());
+  sequence.addKeyframe("time", new TimingKeyframe(1 as PathCoordinate, "beats", 2));
+
+  expect(sequence.getDuration(120)).toBeCloseTo(1);
+  expect(sequence.getPathCoordinateFromTime(0.5 as Time)).toBeCloseTo(0.5);
 });
 
 const TRACE_COLOR_L = "#3030d2";
@@ -235,4 +243,47 @@ test("Curve.intersectsRect keeps touching and culls fully outside boxes", () => 
   expect(curve.intersectsRect({ minX: 0, maxX: 1, minY: 2.1, maxY: 3 })).toBe(false);
   expect(curve.intersectsRect({ minX: 0, maxX: 1, minY: 2.1, maxY: 3 }, 0.1)).toBe(true);
   expect(curve.intersectsRect({ minX: 0, maxX: 1, minY: 2.2, maxY: 3 }, 0.1)).toBe(false);
+});
+
+test("Timing keyframes round-trip through JSON", () => {
+  const sequence = new Sequence(makeStraightLengthOnePath());
+  sequence.addKeyframe("time", new TimingKeyframe(0.5 as PathCoordinate, "time", 1.5));
+  sequence.addKeyframe("time", new TimingKeyframe(1 as PathCoordinate, "beats", 2));
+
+  const loaded = Sequence.fromJSON(JSON.parse(JSON.stringify(sequence.toJSON())));
+  expect(loaded.keyframes.time).toHaveLength(3);
+  const time = loaded.keyframes.time.find((keyframe) => keyframe.kind === "time" && (keyframe.pathCoordinate as number) > 0);
+  const beats = loaded.keyframes.time.find((keyframe) => keyframe.kind === "beats");
+  expect(time?.pathCoordinate).toBeCloseTo(0.5);
+  expect(time?.value).toBeCloseTo(1.5);
+  expect(beats?.pathCoordinate).toBeCloseTo(1);
+  expect(beats?.value).toBe(2);
+});
+
+test("Legacy time keyframe entries load as time-type timing keyframes", () => {
+  const sequence = new Sequence(makeStraightLengthOnePath());
+  sequence.addKeyframe("time", new TimingKeyframe(1 as PathCoordinate, "time", 2));
+  const json = sequence.toJSON();
+  json.keyframes.time = [
+    {
+      kind: "TimeKeyframe",
+      coordinate: 0,
+      data: { pathCoordinate: 0 },
+      transitionIn: "linear",
+      transitionOut: "linear",
+    },
+    {
+      kind: "TimeKeyframe",
+      coordinate: 2,
+      data: { pathCoordinate: 1 },
+      transitionIn: "linear",
+      transitionOut: "linear",
+    },
+  ] as typeof json.keyframes.time;
+
+  const loaded = Sequence.fromJSON(json);
+  expect(loaded.keyframes.time).toHaveLength(2);
+  for (const keyframe of loaded.keyframes.time) expect(keyframe.kind).toBe("time");
+  expect(loaded.keyframes.time[1]?.pathCoordinate).toBeCloseTo(1);
+  expect(loaded.keyframes.time[1]?.value).toBeCloseTo(2);
 });

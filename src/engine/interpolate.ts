@@ -6,6 +6,7 @@ export type Interpolable = number | Vector<number> | Quaternion;
 export function interpolate(a: number, b: number, s: number): number;
 export function interpolate(a: Vector<number>, b: Vector<number>, s: number): Vector<number>;
 export function interpolate(a: Quaternion, b: Quaternion, s: number): Quaternion;
+export function interpolate(a: Interpolable, b: Interpolable, s: number): Interpolable;
 
 export function interpolate(a: Interpolable, b: Interpolable, s: number): Interpolable {
   if (typeof a === "number" && typeof b === "number") {

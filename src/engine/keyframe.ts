@@ -3,7 +3,7 @@ import type { PathCoordinate, Time } from "./coordinates.js";
 import { Quaternion } from "./quaternion.js";
 import { Vector } from "./vector.js";
 
-type Transition = "linear" | "smooth";
+export type Transition = "linear" | "smooth";
 type KeyframeData = { [key: string]: Interpolable };
 
 export type TimeData = {
@@ -47,6 +47,16 @@ export interface TimeKeyframeJSON {
   kind: "TimeKeyframe";
   coordinate: Time;
   data: { pathCoordinate: PathCoordinate };
+  transitionIn: Transition;
+  transitionOut: Transition;
+}
+
+export type TimingKind = "time" | "beats";
+
+export interface TimingKeyframeJSON {
+  kind: "TimingKeyframe";
+  coordinate: PathCoordinate;
+  data: { type: TimingKind; value: number };
   transitionIn: Transition;
   transitionOut: Transition;
 }
@@ -116,23 +126,47 @@ export class HipsKeyframe extends Keyframe<PositionAndOrientation3D, PathCoordin
   }
 }
 
-export class TimeKeyframe extends Keyframe<TimeData, Time> {
-  toJSON(): TimeKeyframeJSON {
+export class TimingKeyframe {
+  pathCoordinate: PathCoordinate;
+  kind: TimingKind;
+  value: number; // seconds for kind "time", beat count for kind "beats"
+  transitionIn: Transition;
+  transitionOut: Transition;
+
+  // Keeps addKeyframe sorting by coordinate working for this class too.
+  get coordinate(): PathCoordinate {
+    return this.pathCoordinate;
+  }
+
+  constructor(
+    pathCoordinate: PathCoordinate,
+    kind: TimingKind,
+    value: number,
+    transitionIn: Transition = "linear",
+    transitionOut: Transition = "linear",
+  ) {
+    this.pathCoordinate = pathCoordinate;
+    this.kind = kind;
+    this.value = value;
+    this.transitionIn = transitionIn;
+    this.transitionOut = transitionOut;
+  }
+
+  toJSON(): TimingKeyframeJSON {
     return {
-      kind: "TimeKeyframe",
-      coordinate: this.coordinate,
-      data: {
-        pathCoordinate: this.data.pathCoordinate,
-      },
+      kind: "TimingKeyframe",
+      coordinate: this.pathCoordinate,
+      data: { type: this.kind, value: this.value },
       transitionIn: this.transitionIn,
       transitionOut: this.transitionOut,
     };
   }
 
-  static fromJSON(json: TimeKeyframeJSON): TimeKeyframe {
-    return new TimeKeyframe(
-      json.coordinate as Time,
-      { pathCoordinate: json.data.pathCoordinate as PathCoordinate },
+  static fromJSON(json: TimingKeyframeJSON): TimingKeyframe {
+    return new TimingKeyframe(
+      json.coordinate as PathCoordinate,
+      json.data.type,
+      json.data.value,
       json.transitionIn,
       json.transitionOut,
     );

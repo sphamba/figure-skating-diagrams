@@ -8,13 +8,17 @@ import SelectButton from "openvue/selectbutton";
 import Checkbox from "openvue/checkbox";
 import Dialog from "openvue/dialog";
 import InputText from "openvue/inputtext";
+import InputNumber from "openvue/inputnumber";
+import InputGroup from "openvue/inputgroup";
+import InputGroupAddon from "openvue/inputgroupaddon";
 import Listbox from "openvue/listbox";
 import ColorPicker from "openvue/colorpicker";
 import ToggleSwitch from "openvue/toggleswitch";
 import Inplace from "openvue/inplace";
 import ConfirmPopup from "openvue/confirmpopup";
 import { useConfirm } from "openvue/useconfirm";
-import { Editor, type EditMode } from "@/engine/sequenceEditor/editor";
+import { Editor, formatTimingLabel, type EditMode } from "@/engine/sequenceEditor/editor";
+import { TimingKeyframe, type TimingKind } from "@/engine/keyframe";
 import type { Sequence, SequenceJSON, FootKey } from "@/engine/sequence";
 import { changeElementType } from "@/engine/element/turnTypes";
 import { parseVariantFlags, type VariantFlags } from "@/engine/element/variantFlags";
@@ -34,6 +38,7 @@ const editModeOptions = [
   { label: "View", value: "view" },
   { label: "Path", value: "path" },
   { label: "Elements", value: "elements" },
+  { label: "Timing", value: "timing" },
 ];
 const editMode = ref<EditMode>("view");
 const scaleElements = ref(true);
@@ -316,32 +321,50 @@ const helpItems = computed<HelpItem[]>(() =>
         { keys: ["right drag"], description: "move the view" },
         ...touchHelpItems,
       ]
-    : editMode.value === "elements"
+    : editMode.value === "timing"
       ? [
           { keys: ["wheel"], description: "zoom" },
           { keys: ["right drag"], description: "move the view" },
           { keys: ["left drag"], description: "on empty space: draw a selection rectangle" },
-          { keys: ["left click"], description: "on the path: create a provisional element" },
-          { keys: ["left drag"], description: "on the path: create a provisional element over the dragged range" },
-          { keys: ["drag"], description: "a provisional element: move it or its ends" },
-          { keys: ["cog"], description: "on the provisional element: open the element selection dialog" },
+          { keys: ["left click"], description: "on a timing point: select it" },
+          { keys: ["ctrl", "left click"], description: "add or remove from the selection" },
+          { keys: ["left click"], description: "on the path: create a provisional timing point" },
+          {
+            keys: ["left drag"],
+            description: "on the path: create a provisional timing point at the release position",
+          },
+          { keys: ["drag"], description: "a timing point: move it" },
+          { keys: ["+"], description: "button on the provisional timing point: open the timing keyframe dialog" },
+          { keys: ["cog"], description: "on a selected timing point: open the timing keyframe dialog" },
+          { keys: ["−"], description: "button beside a selected timing point: remove it" },
           ...touchHelpItems,
         ]
-      : [
-          { keys: ["wheel"], description: "zoom" },
-          { keys: ["left click"], description: "on a control point: select it" },
-          { keys: ["left click"], description: "on a line: select that curve" },
-          { keys: ["drag"], description: "a selected curve: move it (and the others selected)" },
-          { keys: ["left drag"], description: "on empty space: draw a selection rectangle" },
-          { keys: ["drag"], description: "one of the selected points: move all selected points" },
-          { keys: ["ctrl", "left click"], description: "add or remove from the selection" },
-          { keys: ["ctrl", "A"], description: "select all" },
-          { keys: ["right drag"], description: "move the view" },
-          { keys: ["+"], description: "button near the end of the path: add a segment" },
-          { keys: ["+"], description: "button at the midpoint of a selected curve: split it" },
-          { keys: ["−"], description: "button beside a selected point: remove that point" },
-          ...touchHelpItems,
-        ],
+      : editMode.value === "elements"
+        ? [
+            { keys: ["wheel"], description: "zoom" },
+            { keys: ["right drag"], description: "move the view" },
+            { keys: ["left drag"], description: "on empty space: draw a selection rectangle" },
+            { keys: ["left click"], description: "on the path: create a provisional element" },
+            { keys: ["left drag"], description: "on the path: create a provisional element over the dragged range" },
+            { keys: ["drag"], description: "a provisional element: move it or its ends" },
+            { keys: ["+"], description: "on the provisional element: open the element selection dialog" },
+            ...touchHelpItems,
+          ]
+        : [
+            { keys: ["wheel"], description: "zoom" },
+            { keys: ["left click"], description: "on a control point: select it" },
+            { keys: ["left click"], description: "on a line: select that curve" },
+            { keys: ["drag"], description: "a selected curve: move it (and the others selected)" },
+            { keys: ["left drag"], description: "on empty space: draw a selection rectangle" },
+            { keys: ["drag"], description: "one of the selected points: move all selected points" },
+            { keys: ["ctrl", "left click"], description: "add or remove from the selection" },
+            { keys: ["ctrl", "A"], description: "select all" },
+            { keys: ["right drag"], description: "move the view" },
+            { keys: ["+"], description: "button near the end of the path: add a segment" },
+            { keys: ["+"], description: "button at the midpoint of a selected curve: split it" },
+            { keys: ["−"], description: "button beside a selected point: remove that point" },
+            ...touchHelpItems,
+          ],
 );
 
 let editor: Editor | null = null;
@@ -355,6 +378,36 @@ const diagramName = computed({
   get: () => store.getDiagram().name,
   set: (value) => store.setDiagramName(value),
 });
+
+const diagramBpm = computed({
+  get: () => store.getDiagram().bpm,
+  set: (value) => {
+    if (typeof value === "number") store.setDiagramBpm(value);
+    editor?.draw();
+  },
+});
+
+const timingTypeOptions = [
+  { label: "Time", value: "time" },
+  { label: "Beats", value: "beats" },
+];
+const timingKeyframeOpen = ref(false);
+const timingTarget = shallowRef<TimingKeyframe | null>(null);
+const timingIsProvisional = ref(false);
+const timingKind = ref<TimingKind>("time");
+const timingValueDraft = ref("");
+const timingValueError = ref<"format" | "bounds" | null>(null);
+const timingValueInvalid = computed(() => timingValueError.value !== null);
+const timingOriginalKind = ref<TimingKind | null>(null);
+const timingOriginalValue = ref<number | null>(null);
+const timingPreviousValue = ref<number | null>(null);
+
+function formatTimingValue(value: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(value - 1e-9));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
 
 const confirm = useConfirm();
 
@@ -439,7 +492,158 @@ function confirmDelete(sequence: Sequence, event: Event) {
   });
 }
 
+function parseTimingValue(draft: string): number | null {
+  const text = draft.trim();
+  if (!text) return null;
+  if (timingKind.value === "beats") {
+    const beats = Number(text);
+    return Number.isFinite(beats) && beats > 0 ? beats : null;
+  }
+  const matches = text.match(/^(\d+):(\d{1,2})(?:\.(\d{1,3}))?$/);
+  if (!matches) return null;
+  const seconds = Number(matches[2]);
+  if (seconds >= 60) return null;
+  const minutes = Number(matches[1]);
+  const millis = matches[3] ? Number(matches[3].padEnd(3, "0")) : 0;
+  return minutes * 60 + seconds + millis / 1000;
+}
+
+function validateTimingValue(draft: string): "format" | "bounds" | null {
+  const value = parseTimingValue(draft);
+  if (value === null) return "format";
+  if (timingKind.value === "time" && timingPreviousValue.value !== null && value < timingPreviousValue.value) {
+    return "bounds";
+  }
+  return null;
+}
+
+const timingTimeInput = ref<{ $el?: HTMLInputElement | null } | null>(null);
+const timingBeatsInput = ref<{ $el?: HTMLElement | null } | null>(null);
+
+async function focusTimingValueInput() {
+  await nextTick();
+  if (timingKind.value === "time") {
+    timingTimeInput.value?.$el?.focus();
+    return;
+  }
+  timingBeatsInput.value?.$el?.querySelector<HTMLInputElement>("input")?.focus();
+}
+
+function openTimingKeyframeChange(keyframe: TimingKeyframe, isProvisional: boolean) {
+  timingTarget.value = keyframe;
+  timingIsProvisional.value = isProvisional;
+  timingOriginalKind.value = keyframe.kind;
+  timingOriginalValue.value = keyframe.value;
+  timingKind.value = keyframe.kind;
+  timingValueDraft.value = keyframe.kind === "time" ? formatTimingLabel(keyframe.value) : String(keyframe.value);
+  timingValueError.value = null;
+  timingKeyframeOpen.value = true;
+  focusTimingValueInput();
+}
+
+function getBpm(): number {
+  return store.getDiagram().bpm || 120;
+}
+
+function onTimingKindChange(kind: TimingKind) {
+  if (kind === timingKind.value) return;
+  const parsed = parseTimingValue(timingValueDraft.value); // in the previous kind
+  timingKind.value = kind;
+  if (parsed === null) {
+    const hasOriginal = timingOriginalKind.value !== null && timingOriginalValue.value !== null;
+    if (hasOriginal && timingOriginalKind.value !== kind) {
+      const original = timingOriginalValue.value!;
+      if (kind === "time") {
+        timingValueDraft.value = formatTimingValue((original * 60) / getBpm());
+      } else {
+        timingValueDraft.value = String(Math.round((original * getBpm()) / 60));
+      }
+    } else if (!hasOriginal) {
+      timingValueDraft.value = kind === "time" ? formatTimingValue(60) : "4";
+    }
+    return;
+  }
+  if (kind === "time") {
+    timingValueDraft.value = formatTimingValue((parsed * 60) / getBpm());
+  } else {
+    timingValueDraft.value = String(Math.round((parsed * getBpm()) / 60));
+  }
+}
+
+const timingKindModel = computed<TimingKind>({
+  get: () => timingKind.value,
+  set: (kind) => onTimingKindChange(kind),
+});
+
+// The InputNumber writes through to the draft so validation and OK commit stay unchanged.
+const timingBeatsModel = computed<number | null>({
+  get: () => {
+    const beats = Number(timingValueDraft.value);
+    if (Number.isFinite(beats) && beats > 0) return beats;
+    return timingOriginalKind.value === "beats" && timingOriginalValue.value !== null && timingOriginalValue.value > 0
+      ? timingOriginalValue.value
+      : 1;
+  },
+  set: (value) => {
+    if (value === null) return;
+    timingValueDraft.value = String(Math.max(1, Math.round(value)));
+  },
+});
+
+function formatTimingStepValue(value: number, decimals: number): string {
+  if (decimals <= 0 || Number.isInteger(value)) return formatTimingValue(value);
+  const minutes = Math.floor(value / 60);
+  const seconds = value - minutes * 60;
+  return `${minutes}:${seconds.toFixed(decimals).padStart(decimals + 3, "0")}`;
+}
+
+function stepTimingValue(direction: 1 | -1) {
+  const draft = timingValueDraft.value.trim();
+  const parsed = parseTimingValue(draft);
+  const base =
+    parsed ??
+    (timingOriginalKind.value === "time" && timingOriginalValue.value !== null ? timingOriginalValue.value : 0);
+  const lower = Math.max(timingPreviousValue.value ?? 0, 0);
+  const candidate = direction === 1 ? base + 1 : Math.max(base - 1, lower);
+  const decimals = draft.match(/\.(\d{1,3})$/); // keep the entered decimal digits
+  timingValueDraft.value = formatTimingStepValue(candidate, decimals ? decimals[1]!.length : 0);
+}
+
+function closeTimingKeyframe() {
+  timingKeyframeOpen.value = false;
+  timingTarget.value = null;
+}
+
+function commitTimingKeyframe() {
+  const target = timingTarget.value;
+  if (!target) {
+    closeTimingKeyframe();
+    return;
+  }
+  const error = validateTimingValue(timingValueDraft.value);
+  if (error !== null) {
+    timingValueError.value = error;
+    return;
+  }
+  const value = parseTimingValue(timingValueDraft.value) as number;
+  if (timingIsProvisional.value) {
+    const replacement = new TimingKeyframe(target.pathCoordinate, timingKind.value, value);
+    const sequence = editor?.commitProvisionalTimingKeyframe(target, replacement);
+    if (sequence) store.saveToStorage();
+  } else {
+    target.kind = timingKind.value;
+    target.value = value;
+    store.saveToStorage();
+  }
+  editor?.draw();
+  closeTimingKeyframe();
+}
+
 const clearOpen = ref(false);
+
+watch([timingValueDraft, timingKind, timingPreviousValue], () => {
+  timingValueError.value = validateTimingValue(timingValueDraft.value);
+});
 
 watch(editMode, (mode) => {
   if (editor) {
@@ -483,6 +687,10 @@ onMounted(() => {
     elementChangeOpen.value = true;
   };
   editorInstance.onSequenceChange = () => store.saveToStorage();
+  editorInstance.onTimingKeyframeChangeRequest = (keyframe, isProvisional, previous) => {
+    timingPreviousValue.value = previous ? previous.value : null;
+    openTimingKeyframeChange(keyframe, isProvisional);
+  };
 });
 
 let previousVisibleSequences: Sequence[] = [];
@@ -714,6 +922,8 @@ function closeElementChange() {
           <div class="editor-view__actions">
             <label class="editor-view__mode-label">Diagram</label>
             <InputText v-model="diagramName" class="w-full" />
+            <label class="editor-view__mode-label" for="diagram-bpm">BPM</label>
+            <InputNumber id="diagram-bpm" v-model="diagramBpm" :min="1" :step="1" :use-grouping="false" fluid />
           </div>
 
           <div class="editor-view__actions">
@@ -978,6 +1188,92 @@ function closeElementChange() {
       </template>
     </Dialog>
 
+    <Dialog
+      v-model:visible="timingKeyframeOpen"
+      header="Timing keyframe"
+      modal
+      class="editor-view__timing-dialog"
+      @hide="closeTimingKeyframe"
+    >
+      <SelectButton
+        v-model="timingKindModel"
+        :options="timingTypeOptions"
+        option-label="label"
+        option-value="value"
+        :allow-empty="false"
+      />
+      <p v-if="timingKind === 'beats'" class="editor-view__timing-caption">
+        Number of beats from the previous timing keyframe.
+      </p>
+      <div class="editor-view__timing-value">
+        <label class="editor-view__mode-label" for="timing-value">{{
+          timingKind === "time" ? "Time (min:sec.decimals)" : "Beats"
+        }}</label>
+        <InputGroup v-if="timingKind === 'time'">
+          <InputText
+            id="timing-value"
+            ref="timingTimeInput"
+            v-model="timingValueDraft"
+            class="w-full"
+            :invalid="timingValueInvalid"
+            autofocus
+            @keyup.enter="commitTimingKeyframe"
+          />
+          <InputGroupAddon>
+            <div class="editor-view__timing-arrows">
+              <Button
+                icon="pi pi-chevron-up"
+                severity="secondary"
+                text
+                rounded
+                size="small"
+                aria-label="Increase by one second"
+                @click="stepTimingValue(1)"
+              />
+              <Button
+                icon="pi pi-chevron-down"
+                severity="secondary"
+                text
+                rounded
+                size="small"
+                aria-label="Decrease by one second"
+                @click="stepTimingValue(-1)"
+              />
+            </div>
+          </InputGroupAddon>
+        </InputGroup>
+        <InputNumber
+          v-else
+          id="timing-value"
+          ref="timingBeatsInput"
+          v-model="timingBeatsModel"
+          class="w-full"
+          :min="1"
+          :step="1"
+          :max-fraction-digits="0"
+          :use-grouping="false"
+          show-buttons
+          button-layout="stacked"
+          fluid
+          :pt="{ pcInputText: { root: { autofocus: true } } }"
+          @keyup.enter="commitTimingKeyframe"
+        />
+        <small v-if="timingValueInvalid" class="editor-view__timing-error">
+          {{
+            timingValueError === "bounds"
+              ? "The time must not be before the previous timing keyframe."
+              : timingKind === "time"
+                ? "Use min:sec or min:sec.decimals with seconds below 60, for example 1:24.5."
+                : "Enter a number of beats."
+          }}
+        </small>
+      </div>
+      <template #footer>
+        <Button label="OK" icon="pi pi-check" @click="commitTimingKeyframe" />
+        <Button label="Close" severity="secondary" icon="pi pi-times" @click="closeTimingKeyframe" />
+      </template>
+    </Dialog>
+
     <ConfirmPopup ref="confirmPopupRef" group="editor-delete" />
   </div>
 </template>
@@ -1232,5 +1528,39 @@ function closeElementChange() {
 .editor-view__element-dialog .editor-view__valid-check {
   flex-shrink: 0;
   color: #2e7d32;
+}
+
+.editor-view__timing-dialog {
+  width: 320px;
+  max-width: 90vw;
+  min-width: 0;
+}
+
+.editor-view__timing-dialog .p-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.editor-view__timing-caption {
+  margin: 0;
+  color: var(--p-text-muted-color);
+  font-size: 0.875rem;
+}
+
+.editor-view__timing-value {
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-view__timing-error {
+  margin-top: 0.25rem;
+  color: var(--p-form-field-invalid-hover-border-color);
+}
+
+.editor-view__timing-arrows {
+  display: flex;
+  flex-direction: column;
+  margin-block: -0.25rem;
 }
 </style>

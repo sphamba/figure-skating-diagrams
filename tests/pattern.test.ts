@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
-import type { PathCoordinate, Time } from "../src/engine/coordinates";
+import type { PathCoordinate } from "../src/engine/coordinates";
 import { Curve } from "../src/engine/curve";
-import { TimeKeyframe } from "../src/engine/keyframe";
+import { TimingKeyframe } from "../src/engine/keyframe";
 import { Path } from "../src/engine/path";
 import { Pattern } from "../src/engine/pattern";
 import { Sequence } from "../src/engine/sequence";
@@ -36,7 +36,7 @@ test("Pattern videoUrl is optional", () => {
 test("Pattern can add sequences", () => {
   const pattern = new Pattern("Mohawk");
   const sequence = new Sequence(makeStraightLengthOnePath());
-  sequence.addKeyframe("time", new TimeKeyframe(2 as Time, { pathCoordinate: 1 as PathCoordinate }));
+  sequence.addKeyframe("time", new TimingKeyframe(1 as PathCoordinate, "time", 2));
 
   pattern.addSequence(sequence);
   expect(pattern.sequences).toHaveLength(1);
