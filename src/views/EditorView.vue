@@ -681,9 +681,11 @@ onMounted(() => {
     }
     elementChangeBranch.value = null;
     glidePath.value = [];
+    strokePath.value = [];
     turnPath.value = [];
     twoFeetPath.value = [];
     clearPendingChoice();
+    if (!isProvisionalTarget.value) openAtExistingVariant();
     elementChangeOpen.value = true;
   };
   editorInstance.onSequenceChange = () => store.saveToStorage();
@@ -769,6 +771,45 @@ const currentStepFinal = computed(() => {
       return false;
   }
 });
+
+function openAtExistingVariant() {
+  const flags = oldVariant.value;
+  const branch = oldKind.value;
+  const element = elementToChange.value;
+  if (!flags || !branch || !element || !element.type) {
+    elementChangeBranch.value = null;
+    return;
+  }
+  elementChangeBranch.value = branch;
+  if (branch === "glide") {
+    glidePath.value = flags.twoFoot
+      ? ["TwoFoot", flags.direction ?? "Forward"]
+      : [flags.side ?? "Left", flags.direction ?? "Forward", flags.edge ?? "Neither"];
+  } else if (branch === "stroke") {
+    strokePath.value = [
+      flags.side ?? "Left",
+      flags.direction ?? "Forward",
+      flags.edge ?? "Neither",
+      flags.stroke ?? "Normal",
+    ];
+  } else if (branch === "turn") {
+    turnPath.value = [
+      flags.group ?? "ThreeTurn",
+      flags.side ?? "Left",
+      flags.direction ?? "Forward",
+      flags.edge ?? "Inside",
+    ];
+    if (flags.group === "Twizzle") turnPath.value.push(flags.turns ?? "1");
+  } else {
+    twoFeetPath.value = [
+      flags.group ?? "Mohawk",
+      flags.side ?? "Left",
+      flags.direction ?? "Forward",
+      flags.openness ?? "Open",
+    ];
+  }
+  onFinalChoice(element.type);
+}
 
 function onClearConfirmed() {
   store.clear();
@@ -860,6 +901,15 @@ function commitElementChange() {
   }
   editor?.draw();
   closeElementChange();
+}
+
+function startElementChange() {
+  elementChangeBranch.value = null;
+  glidePath.value = [];
+  strokePath.value = [];
+  turnPath.value = [];
+  twoFeetPath.value = [];
+  clearPendingChoice();
 }
 
 function previousElementChangeStep() {
@@ -1163,6 +1213,13 @@ function closeElementChange() {
 
       <template #footer>
         <Button
+          v-if="currentStepFinal"
+          label="Start"
+          severity="secondary"
+          icon="pi pi-home"
+          @click="startElementChange"
+        />
+        <Button
           v-if="elementChangeBranch"
           label="Previous"
           severity="secondary"
@@ -1170,7 +1227,7 @@ function closeElementChange() {
           @click="previousElementChangeStep"
         />
         <Button v-if="currentStepFinal" label="OK" icon="pi pi-check" @click="commitElementChange" />
-        <Button label="Close" severity="secondary" icon="pi pi-times" @click="closeElementChange" />
+        <Button v-else label="Close" severity="secondary" icon="pi pi-times" @click="closeElementChange" />
       </template>
     </Dialog>
 
