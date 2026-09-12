@@ -1479,7 +1479,8 @@ export class Editor {
       if (selected.has(curveIndex)) selected.delete(curveIndex);
       else selected.add(curveIndex);
     } else if (!this.selectedCurves.get(sequence)?.has(curveIndex)) {
-      this.selectedCurves.set(sequence, new Set([curveIndex]));
+      this.selectedCurves = new Map([[sequence, new Set([curveIndex])]]);
+      this.selectedPoints.clear();
     }
     if ((this.selectedCurves.get(sequence)?.size ?? 0) > 0) this.selectedPoints.delete(sequence);
   }
