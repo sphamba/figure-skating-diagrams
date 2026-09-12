@@ -1296,7 +1296,7 @@ function closeElementChange() {
 
 .editor-view__panel {
   border-radius: 0;
-  height: 100%;
+  min-height: 100%;
 }
 
 .editor-view__panel-title {
@@ -1439,6 +1439,7 @@ function closeElementChange() {
   min-width: 0;
   height: 100%;
   position: relative;
+  background: white;
 }
 
 .editor-view__floating {

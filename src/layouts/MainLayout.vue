@@ -16,7 +16,7 @@ const year = new Date().getFullYear();
 </script>
 
 <template>
-  <div class="main-layout">
+  <div class="main-layout" :class="{ 'main-layout--full-bleed': isFullBleed }">
     <header class="main-layout__header">
       <Menubar :model="items">
         <template #start>
@@ -54,6 +54,12 @@ const year = new Date().getFullYear();
   min-height: 100vh;
   flex-direction: column;
 
+  &--full-bleed {
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
   &__header {
     position: sticky;
     top: 0;
@@ -69,6 +75,7 @@ const year = new Date().getFullYear();
 
     &--full-bleed {
       display: flex;
+      min-height: 0;
       max-width: none;
       margin: 0;
       padding: 0;
