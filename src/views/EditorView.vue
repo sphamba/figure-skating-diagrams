@@ -21,6 +21,7 @@ import { Editor, formatTimingLabel, type EditMode } from "@/engine/sequenceEdito
 import { TimingKeyframe, type TimingKind } from "@/engine/keyframe";
 import type { Sequence, SequenceJSON, FootKey } from "@/engine/sequence";
 import { changeElementType, isJumpType, jumpTypeChoices, parseJumpType } from "@/engine/element/turnTypes";
+import type { Jump } from "@/engine/element/jump";
 import { parseVariantFlags, type VariantFlags } from "@/engine/element/variantFlags";
 import { checkTurnVariantValidity, type TurnVariantValidity } from "@/engine/sequenceEditor/variantValidation";
 import { OneFootTurn } from "@/engine/element/oneFootTurn";
@@ -231,9 +232,12 @@ function kindOfType(type: string): ElementKind {
 
 function oldValueAt(branch: ElementKind, level: number, value: string): boolean {
   if (branch === "jump") {
-    const parsed = parseJumpType(elementToChange.value?.type ?? "");
-    if (level === 0) return parsed !== undefined && parsed.jump === value;
-    if (level === 1) return parsed !== undefined && String(parsed.revolutions) === value;
+    const element = elementToChange.value;
+    const parsed = parseJumpType(element?.type ?? "");
+    const leftHanded = element && isJumpType(element.type) ? (element as Jump).leftHanded : false;
+    if (level === 0) return parsed !== undefined && value === (leftHanded ? "Left" : "Right");
+    if (level === 1) return parsed !== undefined && parsed.jump === value;
+    if (level === 2) return parsed !== undefined && String(parsed.revolutions) === value;
     return false;
   }
   const flags = oldVariant.value;
@@ -283,7 +287,7 @@ const chosenLabels = computed<string[]>(() => {
   if (elementChangeBranch.value === "jump") {
     const labels = ["Jump"];
     jumpPath.value.forEach((value, level) => {
-      const options = level === 0 ? jumpTypeChoices : jumpRevolutionOptions;
+      const options = level === 0 ? jumpHandednessOptions : level === 1 ? jumpTypeChoices : jumpRevolutionOptions;
       const option = options.find((choice) => choice.value === value);
       if (option) labels.push(option.label);
     });
@@ -792,6 +796,11 @@ const currentStepFinal = computed(() => {
   }
 });
 
+const jumpHandednessOptions: { label: string; value: string }[] = [
+  { label: "Right-handed", value: "Right" },
+  { label: "Left-handed", value: "Left" },
+];
+
 const jumpRevolutionOptions: { label: string; value: string }[] = [
   { label: "Single", value: "1" },
   { label: "Double", value: "2" },
@@ -799,19 +808,20 @@ const jumpRevolutionOptions: { label: string; value: string }[] = [
   { label: "Quadruple", value: "4" },
 ];
 
-const jumpStepFinal = computed(() => jumpPath.value.length >= 2);
+const jumpStepFinal = computed(() => jumpPath.value.length >= 3);
 
 const currentJumpOptions = computed(() => {
   if (jumpStepFinal.value) return [];
-  if (jumpPath.value.length === 0) return jumpTypeChoices;
+  if (jumpPath.value.length === 0) return jumpHandednessOptions;
+  if (jumpPath.value.length === 1) return jumpTypeChoices;
   return jumpRevolutionOptions;
 });
 
 function onJumpChange(value: string) {
   const next = [...jumpPath.value, value];
   jumpPath.value = next;
-  if (next.length >= 2) {
-    const [jump, revolutions] = next;
+  if (next.length >= 3) {
+    const [, jump, revolutions] = next;
     onFinalChoice(`${jump}${revolutions}`);
   }
 }
@@ -820,8 +830,9 @@ function openAtExistingVariant() {
   const element = elementToChange.value;
   if (element?.type && isJumpType(element.type)) {
     const parsed = parseJumpType(element.type);
+    const handedness = (element as Jump).leftHanded ? "Left" : "Right";
     elementChangeBranch.value = "jump";
-    jumpPath.value = parsed ? [parsed.jump, String(parsed.revolutions)] : [];
+    jumpPath.value = parsed ? [handedness, parsed.jump, String(parsed.revolutions)] : [];
     if (parsed) onFinalChoice(element.type);
     return;
   }
@@ -884,7 +895,8 @@ function chooseElementBranch(branch: ElementKind) {
 function onFinalChoice(type: string) {
   const target = elementToChange.value;
   if (!target) return;
-  const candidate = changeElementType(type, { type, start: target.start, end: target.end });
+  const leftHanded = isJumpType(type) ? jumpPath.value[0] === "Left" : undefined;
+  const candidate = changeElementType(type, { type, start: target.start, end: target.end, leftHanded });
   pendingReplacement.value = candidate;
   shortNameDraft.value =
     !isProvisionalTarget.value && type === target.type ? target.shortName : candidate.defaultShortName;

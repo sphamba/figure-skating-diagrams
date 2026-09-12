@@ -213,6 +213,56 @@ test("Axel entry flips the lateral side: forward take-off puts the take-off foot
 	expect(right[0]!.data.position!.z).toBeCloseTo(offIceFootHeight, 10);
 });
 
+test("a left-handed jump mirrors the feet, the lateral shifts and the orientations", () => {
+	const left = new (jumpConstructorsByType["ToeLoop1"] as unknown as new (start: number, end: number, leftHanded?: boolean) => Jump)(
+		start,
+		end,
+		true,
+	);
+	expect(left.leftHanded).toBe(true);
+	// The mirrored take-off foot (left) takes off and ToeLoop still lands on its take-off foot.
+	expect(left.takeOffFoot).toBe("footL");
+	expect(left.landFoot).toBe("footL");
+	// Every coordinate, contact point and toe pick stays; x and z stay; y and the orientation mirror.
+	for (const [footKey, mirrorKey] of [["footL", "footR"], ["footR", "footL"]] as const) {
+		const mirroredKeyframes = left.getFootKeyframes(footKey);
+		const groundKeyframes = jump("ToeLoop1").getFootKeyframes(mirrorKey);
+		expect(mirroredKeyframes).toHaveLength(groundKeyframes.length);
+		for (let index = 0; index < mirroredKeyframes.length; index++) {
+			const mirrored = mirroredKeyframes[index]!;
+			const ground = groundKeyframes[index]!;
+			expect(mirrored.coordinate).toBeCloseTo(ground.coordinate, 10);
+			expect(mirrored.data.position!.x).toBeCloseTo(ground.data.position!.x, 10);
+			expect(mirrored.data.position!.y).toBeCloseTo(-ground.data.position!.y, 10);
+			expect(mirrored.data.position!.z).toBeCloseTo(ground.data.position!.z, 10);
+			expect(mirrored.data.contactPoint).toBe(ground.data.contactPoint);
+			expect(mirrored.data.toePick).toBe(ground.data.toePick);
+			const mirroredOrientation = mirrored.data.orientation!;
+			const groundOrientation = ground.data.orientation!;
+			expect(mirroredOrientation.real).toBeCloseTo(groundOrientation.real, 10);
+			expect(mirroredOrientation.vector.x).toBeCloseTo(-groundOrientation.vector.x, 10);
+			expect(mirroredOrientation.vector.y).toBeCloseTo(-groundOrientation.vector.y, 10);
+			expect(mirroredOrientation.vector.z).toBeCloseTo(-groundOrientation.vector.z, 10);
+		}
+	}
+	// The same-foot landing shifts outside with the mirrored lateral sign.
+	const takeOff = left.getLeftFootKeyframes();
+	expect(takeOff[3]!.data.position!.y).toBeCloseTo(-halfFeetSpacing, 10);
+	expect(takeOff[3]!.data.toePick).toBe(true);
+	expect(takeOff[4]!.data.position!.y).toBeCloseTo(-halfFeetSpacing, 10);
+	expect(takeOff[4]!.data.contactPoint).toBeCloseTo(0.5, 10);
+});
+
+test("left-handed jumps round-trip through JSON and jumps default to right-handed", () => {
+	const json = { type: "ToeLoop1", start, end, leftHanded: true };
+	const restored = Jump.fromJSON(json);
+	expect(restored.leftHanded).toBe(true);
+	expect(restored.toJSON().leftHanded).toBe(true);
+	// The mirrored take-off foot survives the round trip.
+	expect(restored.takeOffFoot).toBe("footL");
+	expect(Jump.fromJSON({ type: "ToeLoop1", start, end }).leftHanded).toBe(false);
+});
+
 test("changeElementType builds jumps with revolution short names and keeps an override", () => {
 	expect(changeElementType("ToeLoop1", { type: "ToeLoop1", start, end }).shortName).toBe("1T");
 	expect(changeElementType("ToeLoop3", { type: "ToeLoop3", start, end }).shortName).toBe("3T");

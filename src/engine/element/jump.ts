@@ -10,6 +10,7 @@ export interface JumpJSON {
   start: PathCoordinate;
   end: PathCoordinate;
   shortName?: string;
+  leftHanded?: boolean;
 }
 
 type JumpConfig = {
@@ -21,20 +22,30 @@ type JumpConfig = {
   rotations: number;
 };
 
-export type JumpConstructor = new (start: PathCoordinate, end: PathCoordinate) => Jump;
+export type JumpConstructor = new (start: PathCoordinate, end: PathCoordinate, leftHanded?: boolean) => Jump;
+
+function mirrorFoot(foot: "footL" | "footR"): "footL" | "footR" {
+  return foot === "footL" ? "footR" : "footL";
+}
 
 export abstract class Jump extends Element {
   protected readonly config: JumpConfig;
+  private readonly mirrored: boolean;
 
   abstract readonly type: string;
 
-  constructor(config: JumpConfig, start: PathCoordinate, end: PathCoordinate) {
+  constructor(config: JumpConfig, start: PathCoordinate, end: PathCoordinate, leftHanded = false) {
     super(start, end);
     this.config = config;
+    this.mirrored = leftHanded;
+  }
+
+  get leftHanded(): boolean {
+    return this.mirrored;
   }
 
   get takeOffFoot(): JumpConfig["takeOffFoot"] {
-    return this.config.takeOffFoot;
+    return this.leftHanded ? mirrorFoot(this.config.takeOffFoot) : this.config.takeOffFoot;
   }
 
   get takeOffForward(): boolean {
@@ -50,7 +61,7 @@ export abstract class Jump extends Element {
   }
 
   get landFoot(): JumpConfig["landFoot"] {
-    return this.config.landFoot;
+    return this.leftHanded ? mirrorFoot(this.config.landFoot) : this.config.landFoot;
   }
 
   get rotations(): number {
@@ -136,7 +147,17 @@ export abstract class Jump extends Element {
         new FootKeyframe(end, this.landFoot === footKey ? landedData : restData),
       ];
     }
-    return takeOffKeyframes;
+    if (!this.leftHanded) return takeOffKeyframes;
+    return takeOffKeyframes.map((keyframe) => {
+      const position = keyframe.data.position!.copy();
+      position.y = -position.y;
+      return new FootKeyframe(keyframe.coordinate, {
+        position,
+        orientation: keyframe.data.orientation!.copy().conjugate(),
+        contactPoint: keyframe.data.contactPoint,
+        toePick: keyframe.data.toePick,
+      });
+    });
   }
 
   private keyframeSpan(spanScale?: number): [PathCoordinate, PathCoordinate] {
@@ -183,7 +204,13 @@ export abstract class Jump extends Element {
   }
 
   toJSON(): JumpJSON {
-    return { type: this.type, start: this.start, end: this.end, shortName: this.shortName };
+    return {
+      type: this.type,
+      start: this.start,
+      end: this.end,
+      shortName: this.shortName,
+      leftHanded: this.leftHanded,
+    };
   }
 
   static fromJSON(json: JumpJSON): Jump {
@@ -191,7 +218,7 @@ export abstract class Jump extends Element {
     if (!constructor) {
       throw new Error(`Unknown jump type: ${json.type}`);
     }
-    return new constructor(json.start, json.end);
+    return new constructor(json.start, json.end, json.leftHanded);
   }
 }
 
@@ -199,8 +226,8 @@ export const jumpConstructorsByType: Record<string, JumpConstructor> = {};
 
 function defineJump(type: string, shortName: string, config: JumpConfig): JumpConstructor {
   const Variant = class extends Jump {
-    constructor(start: PathCoordinate, end: PathCoordinate) {
-      super(config, start, end);
+    constructor(start: PathCoordinate, end: PathCoordinate, leftHanded = false) {
+      super(config, start, end, leftHanded);
     }
 
     get type(): string {

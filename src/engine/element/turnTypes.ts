@@ -68,6 +68,7 @@ export function changeElementType(
     end: number;
     footKey?: string;
     shortName?: string;
+    leftHanded?: boolean;
   },
 ): Element {
   const start = template.start as PathCoordinate;
@@ -76,7 +77,11 @@ export function changeElementType(
   const element = glideConstructor
     ? new glideConstructor(start, end)
     : isJumpType(type)
-      ? new (jumpConstructorsByType[type] as new (start: PathCoordinate, end: PathCoordinate) => Jump)(start, end)
+      ? new (jumpConstructorsByType[type] as new (
+          start: PathCoordinate,
+          end: PathCoordinate,
+          leftHanded?: boolean,
+        ) => Jump)(start, end, template.leftHanded)
       : changeFootTurnType(type, {
           ...template,
           start,
