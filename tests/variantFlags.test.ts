@@ -10,7 +10,7 @@ import type { Element } from "../src/engine/element/element.js";
 import type { PathCoordinate } from "../src/engine/coordinates.js";
 
 describe("parseVariantFlags", () => {
-  test("parses a two-foot glide", () => {
+  test("parses a two-feet glide", () => {
     expect(parseVariantFlags("BothForwardGlide")).toEqual({ twoFoot: true, direction: "Forward" });
     expect(parseVariantFlags("BothBackwardGlide")).toEqual({ twoFoot: true, direction: "Backward" });
   });

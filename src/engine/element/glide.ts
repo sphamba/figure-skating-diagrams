@@ -177,7 +177,7 @@ for (const [direction, forward] of glideDirections) {
   if (!glideConstructorsByType[type]) {
     defineGlide(type, shortName, config);
   }
-  glideKindChoices.push({ type, label: `Two-foot ${direction.toLowerCase()} glide` });
+  glideKindChoices.push({ type, label: `Two-feet ${direction.toLowerCase()} glide` });
 }
 
 export class LeftForwardInsideGlide extends Glide {

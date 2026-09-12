@@ -18,6 +18,9 @@ import { Editor, type EditMode } from "@/engine/sequenceEditor/editor";
 import type { Sequence, SequenceJSON, FootKey } from "@/engine/sequence";
 import { changeElementType } from "@/engine/element/turnTypes";
 import { parseVariantFlags, type VariantFlags } from "@/engine/element/variantFlags";
+import { checkTurnVariantValidity, type TurnVariantValidity } from "@/engine/sequenceEditor/variantValidation";
+import { OneFootTurn } from "@/engine/element/oneFootTurn";
+import { TwoFeetTurn } from "@/engine/element/twoFeetTurn";
 import type { Element } from "@/engine/element/element";
 import type { PatternJSON } from "@/engine/pattern";
 import type { DiagramJSON } from "@/engine/diagram";
@@ -47,6 +50,7 @@ const elementToChange = shallowRef<Element | null>(null);
 const elementChangeBranch = ref<"glide" | "stroke" | "turn" | "twoFeetTurn" | null>(null);
 const isProvisionalTarget = ref(false);
 const oldVariant = ref<VariantFlags | null>(null);
+const validVariant = ref<TurnVariantValidity | null>(null);
 const oldKind = ref<"glide" | "stroke" | "turn" | "twoFeetTurn" | null>(null);
 const pendingReplacement = shallowRef<Element | null>(null);
 const shortNameDraft = ref("");
@@ -66,7 +70,7 @@ const glideLevelOptions: { label: string; value: string }[][] = [
   [
     { label: "Left", value: "Left" },
     { label: "Right", value: "Right" },
-    { label: "Two-foot", value: "TwoFoot" },
+    { label: "Two-feet", value: "TwoFoot" },
   ],
   [
     { label: "Forward", value: "Forward" },
@@ -245,6 +249,19 @@ function oldValueAt(branch: ElementKind, level: number, value: string): boolean 
   if (level === 1) return value === flags.side;
   if (level === 2) return value === flags.direction;
   return level === 3 && value === flags.openness;
+}
+
+// Marks the flag values the geometry computes as valid at the element start
+// point. The side and direction levels apply to both turn branches; the edge
+// level only exists in the one-foot turn branch, so openness and the twizzle
+// turn counts get no check.
+function validFlagAt(branch: ElementKind, level: number, value: string): boolean {
+  const v = validVariant.value;
+  if (!v) return false;
+  if (level === 1) return v.left !== null && value === (v.left ? "Left" : "Right");
+  if (level === 2) return v.forward !== null && value === (v.forward ? "Forward" : "Backward");
+  if (branch === "turn" && level === 3) return v.inside !== null && value === (v.inside ? "Inside" : "Outside");
+  return false;
 }
 
 const chosenLabels = computed<string[]>(() => {
@@ -453,6 +470,11 @@ onMounted(() => {
     isProvisionalTarget.value = editorInstance.isProvisional(element);
     oldKind.value = isProvisionalTarget.value ? null : kindOfType(element.type);
     oldVariant.value = isProvisionalTarget.value ? null : parseVariantFlags(element.type);
+    validVariant.value = null;
+    if (element instanceof TwoFeetTurn || element instanceof OneFootTurn) {
+      const elementSequence = editorInstance.getSequenceOfElement(element);
+      if (elementSequence) validVariant.value = checkTurnVariantValidity(elementSequence, element);
+    }
     elementChangeBranch.value = null;
     glidePath.value = [];
     turnPath.value = [];
@@ -882,8 +904,15 @@ function closeElementChange() {
           @change="(event) => onTurnChange(event.value)"
         >
           <template #option="{ option }">
-            <span :class="{ 'editor-view__option-old': oldValueAt('turn', turnPath.length, option.value) }">
-              {{ option.label }}
+            <span class="editor-view__option-row">
+              <span :class="{ 'editor-view__option-old': oldValueAt('turn', turnPath.length, option.value) }">
+                {{ option.label }}
+              </span>
+              <i
+                v-if="validFlagAt('turn', turnPath.length, option.value)"
+                class="pi pi-check-circle editor-view__valid-check"
+                aria-label="Valid variant flag"
+              ></i>
             </span>
           </template>
         </Listbox>
@@ -898,8 +927,15 @@ function closeElementChange() {
           @change="(event) => onTwoFeetTurnChange(event.value)"
         >
           <template #option="{ option }">
-            <span :class="{ 'editor-view__option-old': oldValueAt('twoFeetTurn', twoFeetPath.length, option.value) }">
-              {{ option.label }}
+            <span class="editor-view__option-row">
+              <span :class="{ 'editor-view__option-old': oldValueAt('twoFeetTurn', twoFeetPath.length, option.value) }">
+                {{ option.label }}
+              </span>
+              <i
+                v-if="validFlagAt('twoFeetTurn', twoFeetPath.length, option.value)"
+                class="pi pi-check-circle editor-view__valid-check"
+                aria-label="Valid variant flag"
+              ></i>
             </span>
           </template>
         </Listbox>
@@ -1183,5 +1219,18 @@ function closeElementChange() {
 .editor-view__element-dialog .editor-view__option-old {
   color: var(--p-primary-color);
   font-weight: 600;
+}
+
+.editor-view__element-dialog .editor-view__option-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.editor-view__element-dialog .editor-view__valid-check {
+  flex-shrink: 0;
+  color: #2e7d32;
 }
 </style>
