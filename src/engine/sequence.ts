@@ -32,6 +32,8 @@ type FootOrHipsKey = "footL" | "footR" | "hips";
 
 export interface SequenceJSON {
   name?: string;
+  traceColorL?: string;
+  traceColorR?: string;
   path: ReturnType<Path["toJSON"]>;
   keyframes: {
     footL: FootKeyframeJSON[];
@@ -48,8 +50,8 @@ const drawIncrement = 0.02; // path coordinate increment for drawing traces, in 
 const traceWidth = 0.004;
 const skidWidth = 0.03;
 const defaultPathColor = "black";
-const traceColorL = "rgb(48, 48, 210)";
-const traceColorR = "rgb(156, 0, 0)";
+const defaultTraceColorL = "#3030d2";
+const defaultTraceColorR = "#9c0000";
 const traceOpacityForward = 0.7;
 
 const boundaryDelta = 0.001; // m gap kept between consecutive element keyframes
@@ -70,6 +72,8 @@ function boundaryCoordinates(
 
 export class Sequence {
   name: string = "Sequence";
+  traceColorL: string = defaultTraceColorL;
+  traceColorR: string = defaultTraceColorR;
   path: Path;
   keyframes: SequenceKeyframes;
   elements: Element[];
@@ -212,6 +216,8 @@ export class Sequence {
   toJSON(): SequenceJSON {
     return {
       name: this.name,
+      traceColorL: this.traceColorL,
+      traceColorR: this.traceColorR,
       path: this.path.toJSON(),
       keyframes: {
         footL: [],
@@ -226,6 +232,8 @@ export class Sequence {
   static fromJSON(json: SequenceJSON): Sequence {
     const sequence = new Sequence(Path.fromJSON(json.path));
     sequence.name = json.name ?? "Sequence";
+    sequence.traceColorL = json.traceColorL ?? defaultTraceColorL;
+    sequence.traceColorR = json.traceColorR ?? defaultTraceColorR;
     sequence.keyframes = {
       footL: json.keyframes.footL.map((keyframe) => FootKeyframe.fromJSON(keyframe)),
       footR: json.keyframes.footR.map((keyframe) => FootKeyframe.fromJSON(keyframe)),
@@ -482,17 +490,12 @@ export class Sequence {
           continue;
         }
         if (footKey == "footL") {
-          ctx.strokeStyle = traceColorL;
+          ctx.strokeStyle = this.traceColorL;
         } else {
-          ctx.strokeStyle = traceColorR;
+          ctx.strokeStyle = this.traceColorR;
         }
         const traceIncrement = contactPosition.minus(previousContactPosition);
-        const { width: lineWidth, alignment } = getTraceWidth(
-          footDirection,
-          traceIncrement,
-          traceWidth,
-          skidWidth,
-        );
+        const { width: lineWidth, alignment } = getTraceWidth(footDirection, traceIncrement, traceWidth, skidWidth);
         const backward = alignment < 0;
         if (backward) {
           backwardSegmentCount++;

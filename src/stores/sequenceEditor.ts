@@ -4,7 +4,7 @@ import { BothForwardGlide } from "@/engine/element/glide";
 import { Curve } from "@/engine/curve";
 import { Diagram, type DiagramJSON } from "@/engine/diagram";
 import { Path } from "@/engine/path";
-import { Sequence, type SequenceJSON } from "@/engine/sequence";
+import { Sequence, type FootKey, type SequenceJSON } from "@/engine/sequence";
 import { Vector } from "@/engine/vector";
 import type { PathCoordinate } from "@/engine/coordinates";
 
@@ -123,6 +123,13 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     saveToStorage();
   }
 
+  function setTraceColor(sequence: Sequence, footKey: FootKey, color: string) {
+    if (footKey === "footL") sequence.traceColorL = color;
+    else sequence.traceColorR = color;
+    triggerRef(diagram);
+    saveToStorage();
+  }
+
   function setDiagramName(name: string) {
     const trimmed = name.trim();
     if (trimmed) diagram.value.name = trimmed;
@@ -174,6 +181,7 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     addSequence,
     removeSequence,
     renameSequence,
+    setTraceColor,
     setDiagramName,
     saveToStorage,
     loadFromJSON,

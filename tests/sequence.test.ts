@@ -48,8 +48,8 @@ test("Clock clamps outside the defined range", () => {
   expect(sequence.getPathCoordinateFromTime(3 as Time)).toBeCloseTo(1);
 });
 
-const TRACE_COLOR_L = "rgb(48, 48, 210)";
-const TRACE_COLOR_R = "rgb(156, 0, 0)";
+const TRACE_COLOR_L = "#3030d2";
+const TRACE_COLOR_R = "#9c0000";
 
 function makeMockContext() {
   const strokes: unknown[] = [];

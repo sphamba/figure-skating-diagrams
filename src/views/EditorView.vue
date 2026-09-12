@@ -9,12 +9,13 @@ import Checkbox from "openvue/checkbox";
 import Dialog from "openvue/dialog";
 import InputText from "openvue/inputtext";
 import Listbox from "openvue/listbox";
+import ColorPicker from "openvue/colorpicker";
 import ToggleSwitch from "openvue/toggleswitch";
 import Inplace from "openvue/inplace";
 import ConfirmPopup from "openvue/confirmpopup";
 import { useConfirm } from "openvue/useconfirm";
 import { Editor, type EditMode } from "@/engine/sequenceEditor/editor";
-import type { Sequence, SequenceJSON } from "@/engine/sequence";
+import type { Sequence, SequenceJSON, FootKey } from "@/engine/sequence";
 import { changeElementType } from "@/engine/element/turnTypes";
 import { parseVariantFlags, type VariantFlags } from "@/engine/element/variantFlags";
 import type { Element } from "@/engine/element/element";
@@ -340,9 +341,22 @@ const diagramName = computed({
 
 const confirm = useConfirm();
 
-const sequenceNames = computed(
-  () => new Map(store.getSequences().map((sequence) => [sequence, sequence.name] as const)),
+const sequenceInfos = computed(
+  () =>
+    new Map(
+      store
+        .getSequences()
+        .map(
+          (sequence) =>
+            [sequence, { name: sequence.name, footL: sequence.traceColorL, footR: sequence.traceColorR }] as const,
+        ),
+    ),
 );
+
+const footSwatches = [
+  { footKey: "footL" as FootKey, letter: "L" },
+  { footKey: "footR" as FootKey, letter: "R" },
+];
 
 const renameDraft = ref("");
 const renamingTarget = shallowRef<Sequence | null>(null);
@@ -362,6 +376,22 @@ function commitRename() {
 
 function cancelRename() {
   renamingTarget.value = null;
+}
+
+function setTraceColor(sequence: Sequence, footKey: FootKey, color: string) {
+  store.setTraceColor(sequence, footKey, color);
+  editor?.draw();
+}
+
+function swatchTextColor(color: string): string {
+  const match = color.match(/^#([0-9a-f]{6})$/i);
+  if (!match) return "white";
+  const channels = [0, 2, 4].map((offset) => parseInt(match[1]!.slice(offset, offset + 2), 16) / 255);
+  const [r = 0, g = 0, b = 0] = channels.map((value) =>
+    value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
+  );
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance > 0.35 ? "black" : "white";
 }
 
 const selectedSequence = computed({
@@ -433,8 +463,12 @@ onMounted(() => {
   editorInstance.onSequenceChange = () => store.saveToStorage();
 });
 
+let previousVisibleSequences: Sequence[] = [];
 watch(visibleSequences, (list) => {
-  if (editor) editor.setSequences(list);
+  const sameMembers =
+    list.length === previousVisibleSequences.length && list.every((s, i) => s === previousVisibleSequences[i]);
+  previousVisibleSequences = list;
+  if (!sameMembers && editor) editor.setSequences(list);
 });
 
 onBeforeUnmount(() => {
@@ -675,6 +709,26 @@ function closeElementChange() {
                   @update:model-value="store.toggleVisible(option)"
                   @click.stop
                 />
+                <span class="editor-view__swatches">
+                  <span
+                    v-for="swatch in footSwatches"
+                    :key="swatch.footKey"
+                    class="editor-view__swatch-wrapper"
+                    @click.stop
+                  >
+                    <ColorPicker
+                      class="editor-view__swatch"
+                      :aria-label="`${sequenceInfos.get(option)?.name ?? 'Sequence'} foot trace color ${swatch.letter}`"
+                      :model-value="sequenceInfos.get(option)?.[swatch.footKey]"
+                      @update:model-value="(value) => setTraceColor(option, swatch.footKey, `#${value}`)"
+                    />
+                    <span
+                      class="editor-view__swatch-letter"
+                      :style="{ color: swatchTextColor(sequenceInfos.get(option)?.[swatch.footKey] ?? '#ffffff') }"
+                      >{{ swatch.letter }}</span
+                    >
+                  </span>
+                </span>
                 <Inplace
                   class="editor-view__sequence-name"
                   :active="renamingTarget === option"
@@ -683,7 +737,7 @@ function closeElementChange() {
                   @keyup.enter="commitRename"
                   @keyup.esc="cancelRename"
                 >
-                  <template #display>{{ sequenceNames.get(option) }}</template>
+                  <template #display>{{ sequenceInfos.get(option)?.name }}</template>
                   <template #content>
                     <InputText v-model="renameDraft" @keydown.stop />
                   </template>
@@ -949,6 +1003,47 @@ function closeElementChange() {
 .editor-view__sequence-name {
   flex: 1;
   min-width: 0;
+}
+
+.editor-view__swatches {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-inline: 0.25rem;
+}
+
+.editor-view__swatch-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.editor-view__swatch {
+  display: inline-flex;
+}
+
+.editor-view__swatch :deep(input.p-colorpicker-preview) {
+  display: block;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  font-size: 0;
+  cursor: pointer;
+}
+
+.editor-view__swatch-letter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
 }
 
 .editor-view__add-sequence {
