@@ -163,6 +163,8 @@ export class Editor {
   private lastPinchDist = 0;
   private lastPinchMidX = 0;
   private lastPinchMidY = 0;
+  private drawScheduled = false;
+  private drawFrameHandle: number | null = null;
 
   private onWheel = (event: WheelEvent) => this.handleWheel(event);
   private onMouseDown = (event: MouseEvent) => this.handleMouseDown(event);
@@ -211,6 +213,11 @@ export class Editor {
   }
 
   destroy() {
+    if (this.drawFrameHandle !== null) {
+      if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(this.drawFrameHandle);
+      this.drawFrameHandle = null;
+    }
+    this.drawScheduled = false;
     this.canvas.removeEventListener("wheel", this.onWheel);
     this.canvas.removeEventListener("mousedown", this.onMouseDown);
     this.canvas.removeEventListener("touchstart", this.onTouchStart);
@@ -354,6 +361,20 @@ export class Editor {
     this.drawStartLabels();
     ctx.restore();
     this.drawSelectionRectangle();
+  }
+
+  requestDraw() {
+    if (typeof requestAnimationFrame !== "function") {
+      this.draw();
+      return;
+    }
+    if (this.drawScheduled) return;
+    this.drawScheduled = true;
+    this.drawFrameHandle = requestAnimationFrame(() => {
+      this.drawScheduled = false;
+      this.drawFrameHandle = null;
+      this.draw();
+    });
   }
 
   private drawTraces() {
@@ -734,7 +755,7 @@ export class Editor {
     if (u == null) return;
     const bounds = this.timingNeighbourBoundsAround(sequence, u, new Set([provisional]));
     provisional.pathCoordinate = Math.min(Math.max(u, bounds.left), bounds.right) as PathCoordinate;
-    this.draw();
+    this.requestDraw();
   }
 
   private removeTimingKeyframe(keyframe: TimingKeyframe) {
@@ -1622,7 +1643,7 @@ export class Editor {
     this.selectedElements = new Set(
       [...this.selectedElements].filter((element) => this.getSequenceOfElement(element) !== sequence),
     );
-    this.draw();
+    this.requestDraw();
   }
 
   private pickPathCoordinate(screenX: number, screenY: number): { sequence: Sequence; u: number } | null {
@@ -1944,7 +1965,7 @@ export class Editor {
       worldBefore.y + (screenY - this.height / 2) / this.view.zoom,
     );
 
-    this.draw();
+    this.requestDraw();
   }
 
   private handleMouseDown(event: MouseEvent) {
@@ -2041,7 +2062,7 @@ export class Editor {
     this.lastPinchDist = dist;
     this.lastPinchMidX = midX;
     this.lastPinchMidY = midY;
-    this.draw();
+    this.requestDraw();
   }
 
   private handleSecondaryDown(screenX: number, screenY: number) {
@@ -2268,7 +2289,7 @@ export class Editor {
       this.lastPanY = screenY;
 
       this.view.center = this.view.center.plus(new Vector<2>(-deltaX, deltaY).times(1 / this.view.zoom));
-      this.draw();
+      this.requestDraw();
       return;
     }
 
@@ -2281,7 +2302,7 @@ export class Editor {
       }
       this.rectEndX = screenX;
       this.rectEndY = screenY;
-      this.draw();
+      this.requestDraw();
       return;
     }
 
@@ -2305,7 +2326,7 @@ export class Editor {
         this.updateElementKeyframes(this.dragElement);
         this.sequenceMutated = true;
       }
-      this.draw();
+      this.requestDraw();
       return;
     }
 
@@ -2332,7 +2353,7 @@ export class Editor {
         }
         this.sequenceMutated = true;
       }
-      this.draw();
+      this.requestDraw();
       return;
     }
 
@@ -2352,7 +2373,7 @@ export class Editor {
         }
         this.sequenceMutated = true;
       }
-      this.draw();
+      this.requestDraw();
       return;
     }
 
@@ -2391,7 +2412,7 @@ export class Editor {
           this.translateGroupOf(other, keys, delta);
         }
         this.sequenceMutated = true;
-        this.draw();
+        this.requestDraw();
       } else if (this.dragOrigin) {
         const world = this.screenToWorld(screenX, screenY);
         const delta = world.minus(this.dragOrigin);
@@ -2408,7 +2429,7 @@ export class Editor {
       this.translateGroupOf(sequence, selected, delta);
     }
     this.sequenceMutated = true;
-    this.draw();
+    this.requestDraw();
   }
 
   private translateGroupOf(sequence: Sequence, selected: ReadonlySet<string>, delta: Vector<2>) {
@@ -2467,7 +2488,7 @@ export class Editor {
       sequence.path.updateLength();
     }
     this.sequenceMutated = true;
-    this.draw();
+    this.requestDraw();
   }
 
   private finishSelectionRectangle() {
