@@ -6,7 +6,6 @@ import { offIceFootHeight, halfFeetSpacing } from "../src/engine/element/glide";
 const start = 0;
 const end = 2; // span 2 m: 10% = 0.2, 50% = 1.0, 95% = 1.9
 
-type Kf = { coordinate: number; data: { position?: { x: number; y: number; z: number }; contactPoint?: number; toePick?: boolean } };
 
 function jump(typeName: string): Jump {
 	return new (jumpConstructorsByType[typeName] as unknown as new (start: number, end: number) => Jump)(start, end);

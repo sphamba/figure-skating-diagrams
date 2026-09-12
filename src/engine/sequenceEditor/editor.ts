@@ -992,7 +992,11 @@ export class Editor {
       const geometry = this.getElementLabelGeometry(sequence, element);
       if (!geometry) continue;
       if (isJumpType(element.type)) {
-        this.drawCenteredLabel(element.shortName, geometry.point);
+        if (this.mode !== "view") {
+          this.drawShiftedLabel(element.shortName, geometry.point, geometry.outside);
+        } else {
+          this.drawCenteredLabel(element.shortName, geometry.point);
+        }
       } else {
         this.drawShiftedLabel(element.shortName, geometry.point, geometry.outside);
       }

@@ -7,6 +7,8 @@ import type { PathCoordinate } from "../src/engine/coordinates";
 import { Vector } from "../src/engine/vector";
 import { LeftForwardOutsideThreeTurn } from "../src/engine/element/threeTurn";
 import { glideConstructorsByType, LeftForwardOutsideGlide } from "../src/engine/element/glide";
+import { jumpConstructorsByType } from "../src/engine/element/jump";
+import type { Element } from "../src/engine/element/element";
 import { LeftNormalForwardInsideGlide } from "../src/engine/element/stroke";
 import { TimingKeyframe } from "../src/engine/keyframe";
 
@@ -931,5 +933,47 @@ test("dragging a p0 joint keeps timing keyframes fixed relative to their curves"
     expect(((mid.pathCoordinate as number) - after[1]!.start) / after[1]!.len).toBeCloseTo(midRatio, 3);
   }
   mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("a jump label is shifted in path, elements and timing modes and centered in view mode", () => {
+  const { editor, canvas } = makeEditor();
+  const ctx = canvas.getContext() as unknown as Record<string, unknown>;
+  const drawn: { text: string; x: number; y: number; font: string }[] = [];
+  ctx.fillText = (text: string, x: number, y: number) => {
+    drawn.push({ text, x, y, font: String(ctx.font) });
+  };
+
+  const sequence = editor.getSequences()[0];
+  const jump = new (jumpConstructorsByType["ToeLoop1"] as unknown as new (
+    start: number,
+    end: number,
+  ) => Element)(0, 1);
+  sequence.addElement(jump);
+
+  let shiftedFont = "";
+  for (const mode of ["elements", "path", "timing"] as const) {
+    editorRef(editor).mode = mode;
+    drawn.length = 0;
+    editor.draw();
+    const shifted = drawn.filter((label) => label.text === "1T");
+    expect(shifted).toHaveLength(1);
+    // The straight path anchors the label at the span midpoint (0.5, 0) and
+    // shifts it away from the path line.
+    expect(shifted[0]!.x).toBeCloseTo(0.5 * 20, 6);
+    expect(shifted[0]!.y).not.toBeCloseTo(0, 6);
+    shiftedFont = shifted[0]!.font;
+  }
+
+  editorRef(editor).mode = "view";
+  drawn.length = 0;
+  editor.draw();
+  const centered = drawn.filter((label) => label.text === "1T");
+  expect(centered).toHaveLength(1);
+  // In view mode only the label sits on the anchor without the outward shift.
+  expect(centered[0]!.x).toBeCloseTo(0.5 * 20, 6);
+  expect(centered[0]!.y).toBeCloseTo(0, 6);
+  expect(centered[0]!.font).toBe(shiftedFont);
+
   editor.destroy();
 });

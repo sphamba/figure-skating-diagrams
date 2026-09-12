@@ -819,6 +819,10 @@ const currentJumpOptions = computed(() => {
 
 function onJumpChange(value: string) {
   const next = [...jumpPath.value, value];
+  // Euler only exists as a single rotation, so the revolution level is skipped.
+  if (next.length === 2 && next[1] === "Euler") {
+    next.push("1");
+  }
   jumpPath.value = next;
   if (next.length >= 3) {
     const [, jump, revolutions] = next;
@@ -977,6 +981,16 @@ function startElementChange() {
 }
 
 function previousElementChangeStep() {
+  if (elementChangeBranch.value === "jump" && jumpPath.value.length > 0) {
+    let next = jumpPath.value.slice(0, -1);
+    // Euler completes without the revolution level, so going back from it skips to the type level.
+    if (next.length === 2 && next[1] === "Euler") {
+      next = next.slice(0, -1);
+    }
+    jumpPath.value = next;
+    clearPendingChoice();
+    return;
+  }
   if (elementChangeBranch.value === "glide" && glidePath.value.length > 0) {
     glidePath.value = glidePath.value.slice(0, -1);
     clearPendingChoice();
