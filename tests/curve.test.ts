@@ -235,3 +235,46 @@ test("Cut curve", () => {
 		expect(derivativeOriginal.y).toBeCloseTo(derivativeNew.y, precision);
 	}
 });
+
+test("getInflections finds the single inflection of a linear-numerator curve", () => {
+  // cross(t) = 18·(1 − 2t), inflection at t = 1/2
+  const curve = new Curve(new Vector(0, 0), new Vector(1, 0), new Vector(2, 1), new Vector(3, 1));
+
+  const inflections = curve.getInflections();
+  expect(inflections).toHaveLength(1);
+  expect(inflections[0]).toBeCloseTo(0.5, 6);
+
+  const t = inflections[0] as Curvilinear;
+  const before = (t - 0.05) as Curvilinear;
+  const after = (t + 0.05) as Curvilinear;
+  expect(curve.getCurvature(before) * curve.getCurvature(after)).toBeLessThan(0);
+});
+
+test("getInflections finds both inflections of a serpentine curve", () => {
+  // Verified construction: cross(t) ∝ (t − 0.3)·(t − 0.7)
+  const curve = new Curve(
+    new Vector(0, 0),
+    new Vector(21 / 2, 0),
+    new Vector(21, 1),
+    new Vector(-37 / 2, -37 / 21),
+  );
+
+  const inflections = curve.getInflections();
+  expect(inflections).toHaveLength(2);
+  expect(inflections[0]).toBeCloseTo(0.3, 6);
+  expect(inflections[1]).toBeCloseTo(0.7, 6);
+});
+
+test("getInflections returns nothing when the curvature does not change sign", () => {
+  // cross(t) = 18·(1 − t + 3t²), discriminant < 0
+  const noRoot = new Curve(new Vector(0, 0), new Vector(1, 0), new Vector(2, 1), new Vector(0, 2));
+  expect(noRoot.getInflections()).toHaveLength(0);
+
+  // Common a·b < 0 trap: cross(t) = 18·(1 − 3t + 3t²), discriminant < 0
+  const quadraticNumerator = new Curve(new Vector(0, 0), new Vector(1, 0), new Vector(2, 1), new Vector(0, 0));
+  expect(quadraticNumerator.getInflections()).toHaveLength(0);
+
+  // Collinear control polygon: cross(t) ≡ 0
+  const line = new Curve(new Vector(0, 0), new Vector(1, 1), new Vector(2, 2), new Vector(3, 3));
+  expect(line.getInflections()).toHaveLength(0);
+});

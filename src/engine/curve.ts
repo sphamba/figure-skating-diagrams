@@ -116,7 +116,8 @@ export class Curve {
     if (s >= 1) return this.length;
     const n = this.uniformCoordinates.length;
     if (n === 0) return 0;
-    const ds = 0.001;
+    // Shared with the module-level ds: the LUT is built with this step by
+    // updateLength, so the inverse map cannot silently desynchronize from it.
     const pos = s / ds;
     const i0 = Math.min(n - 1, Math.floor(pos));
     const i1 = Math.min(n - 1, i0 + 1);
@@ -160,6 +161,60 @@ export class Curve {
     const speed = d1.length();
     if (speed === 0) return 0;
     return (d1.x * d2.y - d1.y * d2.x) / speed ** 3;
+  }
+
+  /**
+   * Inflection parameters t of the cubic, where the signed curvature changes sign.
+   *
+   * The curvature numerator x'(t)y''(t) − y'(t)x''(t) is at most quadratic in t:
+   *
+   *   cross(t) = 18 · ( A + (B − A)·t + C·t² )
+   *   A = (P1−P0) × (P2−2P1+P0)
+   *   B = (P1−P0) × (P3−2P2+P1)
+   *   C = (P2−2P1+P0) × (P3−2P2+P1)
+   *
+   * Returns the roots strictly inside (0, 1), ascending. Degenerate cases:
+   * |C| ≈ 0 gives a linear numerator (single root, only when A·B < 0);
+   * a zero discriminant is a zero-curvature touch, not a sign change;
+   * roots where the first derivative is nearly zero are cusps, not inflections.
+   */
+  getInflections(): Curvilinear[] {
+    const q0 = this.p1.minus(this.p0);
+    const r0 = this.p2.minus(this.p1.times(2)).plus(this.p0);
+    const r1 = this.p3.minus(this.p2.times(2)).plus(this.p1);
+    const cross = (a: Vector<2>, v: Vector<2>): number => a.x * v.y - a.y * v.x;
+    const A = cross(q0, r0);
+    const B = cross(q0, r1);
+    const C = cross(r0, r1);
+
+    const eps = 1e-12;
+    const scale = Math.max(Math.abs(A), Math.abs(B), Math.abs(C), 1);
+    const roots: Curvilinear[] = [];
+
+    // Curvature is undefined where the first derivative is nearly zero (cusp),
+    // so such roots are not inflection points.
+    const isRegular = (t: number): boolean => this.getDerivative(t as Curvilinear).length() > eps * scale;
+
+    if (Math.abs(C) <= eps * scale) {
+      const denom = B - A;
+      if (Math.abs(denom) > eps * scale) {
+        const t = A / (A - B);
+        if (A * B < 0 && t > eps && t < 1 - eps && isRegular(t)) roots.push(t as Curvilinear);
+      }
+    } else {
+      const b = B - A;
+      const discriminant = b * b - 4 * C * A;
+      if (discriminant > 0) {
+        const root = Math.sqrt(discriminant);
+        // Numerically stable pairing (the product of the roots is A/C).
+        const q = -0.5 * (b + Math.sign(b || 1) * root);
+        const candidates = q !== 0 ? [q / C, A / q] : [];
+        for (const t of candidates) {
+          if (t > eps && t < 1 - eps && isRegular(t)) roots.push(t as Curvilinear);
+        }
+      }
+    }
+    return roots.sort((a, b) => a - b);
   }
 
   isPointInBoundingBox(point: Vector<2>, tolerance = 0): boolean {

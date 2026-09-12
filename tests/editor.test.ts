@@ -618,6 +618,147 @@ test("a forward crossed stroke draws no cross label when the curvature keeps its
   editor.destroy();
 });
 
+test("an inflection point covered by an element draws no inflection label", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const ctx = canvas.getContext() as unknown as Record<string, unknown>;
+  const drawn: { text: string; font: string }[] = [];
+  ctx.fillText = (text: string) => {
+    drawn.push({ text, font: String(ctx.font) });
+  };
+
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  // Cubic with curvature numerator linear in t: inflects exactly at t = 0.5.
+  path.curves = [new Curve(new Vector(0, 0), new Vector(1, 0), new Vector(2, 1), new Vector(3, 1))];
+  path.updateLength();
+  const curve = path.curves[0]!;
+  expect(curve.getInflections()).toHaveLength(1);
+
+  // The element spans the whole path, so it covers the inflection coordinate.
+  sequence.addElement(new LeftForwardOutsideGlide(0 as PathCoordinate, path.length as PathCoordinate));
+  editor.draw();
+
+  expect(drawn.filter((label) => label.text === "CE")).toHaveLength(0);
+  // Other labels are still drawn, so the single-curve path drew labels at all.
+  expect(drawn.filter((label) => /px/.test(label.font)).length).toBeGreaterThan(0);
+
+  editor.destroy();
+});
+
+test("an uncovered inflection point draws one small inflection label", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const ctx = canvas.getContext() as unknown as Record<string, unknown>;
+  const drawn: { text: string; font: string }[] = [];
+  ctx.fillText = (text: string) => {
+    drawn.push({ text, font: String(ctx.font) });
+  };
+
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  // Cubic with curvature numerator linear in t: inflects exactly at t = 0.5.
+  path.curves = [new Curve(new Vector(0, 0), new Vector(1, 0), new Vector(2, 1), new Vector(3, 1))];
+  path.updateLength();
+  const curve = path.curves[0]!;
+  expect(curve.getInflections()).toHaveLength(1);
+  const inflectionU = curve.getUniformCoordFromCurvilinear(curve.getInflections()[0]!);
+  expect(inflectionU).toBeGreaterThan(0);
+
+  // The element ends before the inflection coordinate, so no element covers it.
+  sequence.addElement(new LeftForwardOutsideGlide(0 as PathCoordinate, (inflectionU - 0.1) as PathCoordinate));
+  editor.draw();
+
+  const inflectionLabels = drawn.filter((label) => label.text === "CE");
+  expect(inflectionLabels).toHaveLength(1);
+
+  const px = (font: string) => Number(font.replace("px sans-serif", ""));
+  const mainLabels = drawn.filter((label) => label.text === "LFO");
+  expect(mainLabels.length).toBeGreaterThan(0);
+  expect(px(inflectionLabels[0]!.font) * 14).toBeCloseTo(px(mainLabels[0]!.font) * 12, 9);
+
+  editor.destroy();
+});
+
+test("a path joint whose curvature changes sign draws one uncovered CE label", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const ctx = canvas.getContext() as unknown as Record<string, unknown>;
+  const drawn: { text: string; font: string }[] = [];
+  ctx.fillText = (text: string) => {
+    drawn.push({ text, font: String(ctx.font) });
+  };
+
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  // Neither curve inflects, but the end curvature of the first curve (+9) and
+  // the start curvature of the second curve (−18) have opposite signs.
+  const first = new Curve(new Vector(0, 0), new Vector(1, 0), new Vector(2, 0.5), new Vector(3, 1.5));
+  const second = new Curve(new Vector(3, 1.5), new Vector(4, 2.5), new Vector(5, 2.5), new Vector(6, 2));
+  path.curves = [first, second];
+  path.updateLength();
+  expect(first.getCurvature(1 as Curvilinear) * second.getCurvature(0 as Curvilinear)).toBeLessThan(0);
+  expect(first.getInflections()).toHaveLength(0);
+  expect(second.getInflections()).toHaveLength(0);
+
+  // No elements, so the joint is uncovered and draws exactly one CE label.
+  editor.draw();
+  expect(drawn.filter((label) => label.text === "CE")).toHaveLength(1);
+
+  editor.destroy();
+});
+
+test("a path joint covered by an element draws no CE label", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const ctx = canvas.getContext() as unknown as Record<string, unknown>;
+  const drawn: { text: string; font: string }[] = [];
+  ctx.fillText = (text: string) => {
+    drawn.push({ text, font: String(ctx.font) });
+  };
+
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  const first = new Curve(new Vector(0, 0), new Vector(1, 0), new Vector(2, 0.5), new Vector(3, 1.5));
+  const second = new Curve(new Vector(3, 1.5), new Vector(4, 2.5), new Vector(5, 2.5), new Vector(6, 2));
+  path.curves = [first, second];
+  path.updateLength();
+  expect(first.getCurvature(1 as Curvilinear) * second.getCurvature(0 as Curvilinear)).toBeLessThan(0);
+
+  // The element spans the whole path, so it covers the joint coordinate.
+  sequence.addElement(new LeftForwardOutsideGlide(0 as PathCoordinate, path.length as PathCoordinate));
+  editor.draw();
+  expect(drawn.filter((label) => label.text === "CE")).toHaveLength(0);
+
+  editor.destroy();
+});
+
+test("a path joint whose curvature keeps its sign draws no CE label", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const ctx = canvas.getContext() as unknown as Record<string, unknown>;
+  const drawn: { text: string; font: string }[] = [];
+  ctx.fillText = (text: string) => {
+    drawn.push({ text, font: String(ctx.font) });
+  };
+
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  // Both curves bend the same way around the joint (+9 and +9).
+  const first = new Curve(new Vector(0, 0), new Vector(1, 0), new Vector(2, 0.5), new Vector(3, 1.5));
+  const second = new Curve(new Vector(3, 1.5), new Vector(4, 2.5), new Vector(5, 4), new Vector(6, 6));
+  path.curves = [first, second];
+  path.updateLength();
+  expect(first.getCurvature(1 as Curvilinear) * second.getCurvature(0 as Curvilinear)).toBeGreaterThan(0);
+  expect(first.getInflections()).toHaveLength(0);
+  expect(second.getInflections()).toHaveLength(0);
+
+  editor.draw();
+  expect(drawn.filter((label) => label.text === "CE")).toHaveLength(0);
+
+  editor.destroy();
+});
+
 test("a curvature sign change draws XS for forward crossed strokes and replaces XB for backward crossed-back ones", () => {
   const { editor, canvas } = makeEditor();
   editorRef(editor).mode = "elements";
@@ -632,7 +773,9 @@ test("a curvature sign change draws XS for forward crossed strokes and replaces 
   curve.p1 = new Vector(1 / 3, 0.3);
   curve.p2 = new Vector(2 / 3, 0.3);
   sequence.path.updateLength();
-  sequence.path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(4 / 3, -0.3), new Vector(5 / 3, -0.3), new Vector(2, 0)));
+  sequence.path.addCurveEnd(
+    new Curve(new Vector(1, 0), new Vector(4 / 3, -0.3), new Vector(5 / 3, -0.3), new Vector(2, 0)),
+  );
   const firstCurve = sequence.path.curves[0]!;
   const secondCurve = sequence.path.curves[1]!;
   const endU = (firstCurve.length + secondCurve.length / 2) as PathCoordinate;

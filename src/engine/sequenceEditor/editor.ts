@@ -29,7 +29,8 @@ const MIN_DRAW_INCREMENT = 2; // px
 const ELEMENTS_PATH_COLOR = "#000";
 const LABEL_FONT_SIZE = 14; // px
 const LABEL_OFFSET = 15; // px
-const CROSS_LABEL_FONT_SIZE = 12; // px
+const LABEL_FONT_SIZE_SMALL = 12; // px
+const CHANGE_EDGE_LABEL = "CE";
 const ELEMENT_DRAW_INCREMENT = 0.02; // m
 const NODE_SIZE = 10; // px
 const POLYGON_ALPHA = 0.25;
@@ -310,6 +311,7 @@ export class Editor {
     for (const sequence of this.sequences) {
       this.drawElementLabels(sequence);
     }
+    this.drawInflectionLabels();
     this.drawStartLabels();
     ctx.restore();
     this.drawSelectionRectangle();
@@ -642,7 +644,7 @@ export class Editor {
         const text = this.crossedLabel(sequence, element);
         if (text) {
           const crossedGeometry = this.getLabelGeometryAt(sequence.path, this.getSpanMidpoint(element));
-          this.drawShiftedLabel(text, crossedGeometry.point, crossedGeometry.outside.times(-1), CROSS_LABEL_FONT_SIZE);
+          this.drawShiftedLabel(text, crossedGeometry.point, crossedGeometry.outside.times(-1), LABEL_FONT_SIZE_SMALL);
         }
       }
     }
@@ -696,6 +698,54 @@ export class Editor {
     const geometry = this.getStartLabelGeometry(sequence);
     if (!geometry) return;
     this.drawShiftedLabel("start", geometry.point, geometry.outside);
+  }
+
+  private drawInflectionLabels() {
+    for (const sequence of this.sequences) {
+      if (sequence.path.curves.length === 0) continue;
+      for (const u of [
+        ...this.getUncoveredInflectionCoordinates(sequence),
+        ...this.getUncoveredJointEdgeChangeCoordinates(sequence),
+      ]) {
+        const geometry = this.getLabelGeometryAt(sequence.path, u);
+        this.drawShiftedLabel(CHANGE_EDGE_LABEL, geometry.point, geometry.outside, LABEL_FONT_SIZE_SMALL);
+      }
+    }
+  }
+
+  private getUncoveredInflectionCoordinates(sequence: Sequence): PathCoordinate[] {
+    const curves = sequence.path.curves;
+    const pathCoordinates: PathCoordinate[] = [];
+    curves.forEach((curve, curveIndex) => {
+      for (const inflection of curve.getInflections()) {
+        // Convert the inflection parameter to a uniform path coordinate so it can
+        // be compared against the real element spans, not the visual scaling.
+        const u = this.uniformCoordinateAt(curves, curveIndex, inflection) as PathCoordinate;
+        if (!this.isInsideElementSpan(sequence, u)) pathCoordinates.push(u);
+      }
+    });
+    return pathCoordinates;
+  }
+
+  private getUncoveredJointEdgeChangeCoordinates(sequence: Sequence): PathCoordinate[] {
+    const curves = sequence.path.curves;
+    const pathCoordinates: PathCoordinate[] = [];
+    for (let i = 0; i + 1 < curves.length; i++) {
+      const before = curves[i]!.getCurvature(1 as Curvilinear);
+      const after = curves[i + 1]!.getCurvature(0 as Curvilinear);
+      if (before * after >= 0) continue; // zero curvature counts as no sign change
+      const u = this.uniformCoordinateAt(curves, i, 1 as Curvilinear) as PathCoordinate;
+      if (!this.isInsideElementSpan(sequence, u)) pathCoordinates.push(u);
+    }
+    return pathCoordinates;
+  }
+
+  private isInsideElementSpan(sequence: Sequence, u: PathCoordinate): boolean {
+    return sequence.elements.some((element) => {
+      const lo = Math.min(element.start as number, element.end as number);
+      const hi = Math.max(element.start as number, element.end as number);
+      return (u as number) >= lo && (u as number) <= hi;
+    });
   }
 
   private getElementPoints(element: Element): Vector<2>[] {
