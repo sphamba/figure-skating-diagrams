@@ -75,6 +75,7 @@ export function test() {
       position: new Vector<3>(0, 0.2, 0),
       orientation: new Quaternion(),
       contactPoint: 0.5,
+      toePick: false,
     }),
   );
 
@@ -82,6 +83,7 @@ export function test() {
     "footL",
     new FootKeyframe((path.length / 2) as PathCoordinate, {
       position: new Vector<3>(0, 0, 0),
+      toePick: false,
     }),
   );
 
@@ -98,6 +100,7 @@ export function test() {
     new FootKeyframe(path.length as PathCoordinate, {
       position: new Vector<3>(0, 0, 0),
       orientation: getQuaternionFromAngleAxis(Math.PI * 1.5),
+      toePick: false,
     }),
   );
 
@@ -106,6 +109,7 @@ export function test() {
     new FootKeyframe(0 as PathCoordinate, {
       position: new Vector<3>(0, -0.2, 0),
       orientation: new Quaternion(),
+      toePick: false,
     }),
   );
 
@@ -115,6 +119,7 @@ export function test() {
       position: new Vector<3>(-0.3, -0.2, 0),
       orientation: getQuaternionFromAngleAxis(-Math.PI * 0.2),
       contactPoint: 0.8,
+      toePick: false,
     }),
   );
 
@@ -124,6 +129,7 @@ export function test() {
       position: new Vector<3>(0.2, 0, 0.1),
       orientation: getQuaternionFromAngleAxis(Math.PI / 2),
       contactPoint: 0.5,
+      toePick: false,
     }),
   );
 
@@ -132,6 +138,7 @@ export function test() {
     new FootKeyframe(path.length as PathCoordinate, {
       position: new Vector<3>(0.3, 0.2, 0.2),
       orientation: getQuaternionFromAngleAxis(Math.PI),
+      toePick: false,
     }),
   );
 

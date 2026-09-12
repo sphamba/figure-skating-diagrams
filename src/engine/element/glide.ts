@@ -102,6 +102,7 @@ export abstract class Glide extends Element {
       position: new Vector<3>(0, lateral, onIce ? 0 : offIceFootHeight),
       orientation: getQuaternionFromAngleAxis(this.forward ? 0 : Math.PI),
       contactPoint: 0.5,
+      toePick: false,
     };
     return [new FootKeyframe(start, data, "smooth", "smooth"), new FootKeyframe(end, data, "smooth", "smooth")];
   }

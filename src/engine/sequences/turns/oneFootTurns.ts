@@ -39,6 +39,7 @@ const SPathDuration = 4 as Time; // seconds
 
 const skatingFootInitialOrFinalData = {
   position: new Vector<3>(0, 0, 0),
+  toePick: false,
 };
 
 const skatingFootInitialKeyframe = new FootKeyframe(0 as PathCoordinate, skatingFootInitialOrFinalData);
@@ -47,6 +48,7 @@ const freeFootInitialData = {
   position: new Vector<3>(0, 0, freeFootHeight),
   orientation: getQuaternionFromAngleAxis(0),
   contactPoint: 0.5,
+  toePick: false,
 };
 
 const freeFootInitialKeyframe = new FootKeyframe(0 as PathCoordinate, freeFootInitialData);

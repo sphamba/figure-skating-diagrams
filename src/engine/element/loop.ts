@@ -74,6 +74,7 @@ export abstract class Loop extends OneFootTurn {
         orientation: getQuaternionFromAngleAxis(angle),
         contactPoint: contactPoint,
         position: positions[i],
+        toePick: false,
       };
 
       const keyframe = new FootKeyframe(

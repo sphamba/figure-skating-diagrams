@@ -64,9 +64,9 @@ export abstract class DynamicGlide extends Glide {
     }
     const facing = getQuaternionFromAngleAxis(this.forward ? 0 : Math.PI);
     const onIceData = (position: Vector<3>): FootData => {
-      return { position, orientation: facing, contactPoint: 0.5 };
+      return { position, orientation: facing, contactPoint: 0.5, toePick: false };
     };
-    const offset = this.forward ? -0.5 : 0.5;
+    const offset = this.forward ? -0.4 : 0.4;
     if (gliding) {
       const centered = onIceData(new Vector<3>(0, 0, 0));
       return [

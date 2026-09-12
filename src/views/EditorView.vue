@@ -20,7 +20,7 @@ import { useConfirm } from "openvue/useconfirm";
 import { Editor, formatTimingLabel, type EditMode } from "@/engine/sequenceEditor/editor";
 import { TimingKeyframe, type TimingKind } from "@/engine/keyframe";
 import type { Sequence, SequenceJSON, FootKey } from "@/engine/sequence";
-import { changeElementType } from "@/engine/element/turnTypes";
+import { changeElementType, isJumpType, jumpTypeChoices, parseJumpType } from "@/engine/element/turnTypes";
 import { parseVariantFlags, type VariantFlags } from "@/engine/element/variantFlags";
 import { checkTurnVariantValidity, type TurnVariantValidity } from "@/engine/sequenceEditor/variantValidation";
 import { OneFootTurn } from "@/engine/element/oneFootTurn";
@@ -52,23 +52,25 @@ watch(isMobile, (mobile) => {
 
 const elementChangeOpen = ref(false);
 const elementToChange = shallowRef<Element | null>(null);
-const elementChangeBranch = ref<"glide" | "stroke" | "turn" | "twoFeetTurn" | null>(null);
+const elementChangeBranch = ref<"glide" | "stroke" | "turn" | "twoFeetTurn" | "jump" | null>(null);
 const isProvisionalTarget = ref(false);
 const oldVariant = ref<VariantFlags | null>(null);
 const validVariant = ref<TurnVariantValidity | null>(null);
-const oldKind = ref<"glide" | "stroke" | "turn" | "twoFeetTurn" | null>(null);
+const oldKind = ref<"glide" | "stroke" | "turn" | "twoFeetTurn" | "jump" | null>(null);
 const pendingReplacement = shallowRef<Element | null>(null);
 const shortNameDraft = ref("");
 const glidePath = ref<string[]>([]);
 const strokePath = ref<string[]>([]);
 const turnPath = ref<string[]>([]);
 const twoFeetPath = ref<string[]>([]);
+const jumpPath = ref<string[]>([]);
 
 const elementKindGroupOptions = [
   { label: "Glide", value: "glide" },
   { label: "Stroke", value: "stroke" },
   { label: "One-foot turn", value: "turn" },
   { label: "Two-feet turn", value: "twoFeetTurn" },
+  { label: "Jump", value: "jump" },
 ];
 
 const glideLevelOptions: { label: string; value: string }[][] = [
@@ -216,9 +218,10 @@ const strokeStepFinal = computed(() => strokePath.value.length >= strokeLevelOpt
 
 const currentStrokeOptions = computed(() => (strokeStepFinal.value ? [] : strokeLevelOptions[strokePath.value.length]));
 
-type ElementKind = "glide" | "stroke" | "turn" | "twoFeetTurn";
+type ElementKind = "glide" | "stroke" | "turn" | "twoFeetTurn" | "jump";
 
 function kindOfType(type: string): ElementKind {
+  if (isJumpType(type)) return "jump";
   const flags = parseVariantFlags(type);
   if (flags.stroke) return "stroke";
   if (flags.openness) return "twoFeetTurn";
@@ -227,6 +230,12 @@ function kindOfType(type: string): ElementKind {
 }
 
 function oldValueAt(branch: ElementKind, level: number, value: string): boolean {
+  if (branch === "jump") {
+    const parsed = parseJumpType(elementToChange.value?.type ?? "");
+    if (level === 0) return parsed !== undefined && parsed.jump === value;
+    if (level === 1) return parsed !== undefined && String(parsed.revolutions) === value;
+    return false;
+  }
   const flags = oldVariant.value;
   if (!flags) return false;
   if (branch === "glide") {
@@ -271,6 +280,15 @@ function validFlagAt(branch: ElementKind, level: number, value: string): boolean
 
 const chosenLabels = computed<string[]>(() => {
   if (!elementChangeBranch.value) return [];
+  if (elementChangeBranch.value === "jump") {
+    const labels = ["Jump"];
+    jumpPath.value.forEach((value, level) => {
+      const options = level === 0 ? jumpTypeChoices : jumpRevolutionOptions;
+      const option = options.find((choice) => choice.value === value);
+      if (option) labels.push(option.label);
+    });
+    return labels;
+  }
   if (elementChangeBranch.value === "twoFeetTurn") {
     const labels = ["Two-feet turn"];
     twoFeetPath.value.forEach((value, level) => {
@@ -767,15 +785,48 @@ const currentStepFinal = computed(() => {
       return turnStepFinal.value;
     case "twoFeetTurn":
       return twoFeetTurnStepFinal.value;
+    case "jump":
+      return jumpStepFinal.value;
     default:
       return false;
   }
 });
 
+const jumpRevolutionOptions: { label: string; value: string }[] = [
+  { label: "Single", value: "1" },
+  { label: "Double", value: "2" },
+  { label: "Triple", value: "3" },
+  { label: "Quadruple", value: "4" },
+];
+
+const jumpStepFinal = computed(() => jumpPath.value.length >= 2);
+
+const currentJumpOptions = computed(() => {
+  if (jumpStepFinal.value) return [];
+  if (jumpPath.value.length === 0) return jumpTypeChoices;
+  return jumpRevolutionOptions;
+});
+
+function onJumpChange(value: string) {
+  const next = [...jumpPath.value, value];
+  jumpPath.value = next;
+  if (next.length >= 2) {
+    const [jump, revolutions] = next;
+    onFinalChoice(`${jump}${revolutions}`);
+  }
+}
+
 function openAtExistingVariant() {
+  const element = elementToChange.value;
+  if (element?.type && isJumpType(element.type)) {
+    const parsed = parseJumpType(element.type);
+    elementChangeBranch.value = "jump";
+    jumpPath.value = parsed ? [parsed.jump, String(parsed.revolutions)] : [];
+    if (parsed) onFinalChoice(element.type);
+    return;
+  }
   const flags = oldVariant.value;
   const branch = oldKind.value;
-  const element = elementToChange.value;
   if (!flags || !branch || !element || !element.type) {
     elementChangeBranch.value = null;
     return;
@@ -826,6 +877,7 @@ function chooseElementBranch(branch: ElementKind) {
   strokePath.value = [];
   turnPath.value = [];
   twoFeetPath.value = [];
+  jumpPath.value = [];
   clearPendingChoice();
 }
 
@@ -1196,6 +1248,22 @@ function closeElementChange() {
                 class="pi pi-check-circle editor-view__valid-check"
                 aria-label="Valid variant flag"
               ></i>
+            </span>
+          </template>
+        </Listbox>
+
+        <Listbox
+          v-else-if="elementChangeBranch === 'jump' && !jumpStepFinal"
+          :model-value="null"
+          :options="currentJumpOptions"
+          option-value="value"
+          scroll-height=""
+          class="w-full"
+          @change="(event) => onJumpChange(event.value)"
+        >
+          <template #option="{ option }">
+            <span :class="{ 'editor-view__option-old': oldValueAt('jump', jumpPath.length, option.value) }">
+              {{ option.label }}
             </span>
           </template>
         </Listbox>

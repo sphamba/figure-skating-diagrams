@@ -9,6 +9,8 @@ import { rockerConstructorsByType, rockerKindChoices } from "./rocker.js";
 import { counterConstructorsByType, counterKindChoices } from "./counter.js";
 import { mohawkConstructorsByType, mohawkKindChoices } from "./mohawk.js";
 import { choctawConstructorsByType, choctawKindChoices } from "./choctaw.js";
+import { jumpConstructorsByType } from "./jump.js";
+import type { Jump } from "./jump.js";
 import type { Element } from "./element.js";
 import { footTurnConstructorsByType, changeFootTurnType } from "./turn.js";
 import type { FootTurnJSON } from "./turn.js";
@@ -42,6 +44,22 @@ function footKeyFromType(type: string): FootKey {
   return type.startsWith("Right") ? "footR" : "footL";
 }
 
+export function isJumpType(type: string): boolean {
+  return type in jumpConstructorsByType;
+}
+
+export { parseJumpType } from "./jump.js";
+
+export const jumpTypeChoices: { value: string; label: string }[] = [
+  { value: "ToeLoop", label: "Toe loop" },
+  { value: "Salchow", label: "Salchow" },
+  { value: "Loop", label: "Loop" },
+  { value: "Flip", label: "Flip" },
+  { value: "Lutz", label: "Lutz" },
+  { value: "Axel", label: "Axel" },
+  { value: "Euler", label: "Euler" },
+];
+
 export function changeElementType(
   type: string,
   template: {
@@ -57,13 +75,15 @@ export function changeElementType(
   const glideConstructor = glideConstructorsByType[type];
   const element = glideConstructor
     ? new glideConstructor(start, end)
-    : changeFootTurnType(type, {
-        ...template,
-        start,
-        end,
-        type,
-        footKey: footKeyFromType(type),
-      } as FootTurnJSON);
+    : isJumpType(type)
+      ? new (jumpConstructorsByType[type] as new (start: PathCoordinate, end: PathCoordinate) => Jump)(start, end)
+      : changeFootTurnType(type, {
+          ...template,
+          start,
+          end,
+          type,
+          footKey: footKeyFromType(type),
+        } as FootTurnJSON);
   if (typeof template.shortName === "string") element.shortName = template.shortName;
   return element;
 }

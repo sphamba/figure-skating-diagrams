@@ -46,6 +46,7 @@ export abstract class Twizzle extends EdgeTurn {
         position: new Vector<3>(0, 0, 0),
         orientation: getQuaternionFromAngleAxis(angle),
         contactPoint: contactPoint,
+        toePick: false,
       };
 
       const keyframe = new FootKeyframe(

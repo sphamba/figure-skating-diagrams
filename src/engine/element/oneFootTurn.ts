@@ -45,6 +45,7 @@ export abstract class OneFootTurn extends FootTurn {
       position: new Vector<3>(0, side, offIceFootHeight),
       orientation: getQuaternionFromAngleAxis(this.forward ? 0 : Math.PI),
       contactPoint: 0.5,
+      toePick: false,
     };
     return [new FootKeyframe(start, data, "smooth", "smooth"), new FootKeyframe(end, data, "smooth", "smooth")];
   }
@@ -136,6 +137,7 @@ export abstract class EdgeTurn extends OneFootTurn {
         position: new Vector<3>(0, 0, 0),
         orientation: getQuaternionFromAngleAxis(angle),
         contactPoint: contactPoint,
+        toePick: false,
       };
 
       const keyframe = new FootKeyframe(

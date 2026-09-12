@@ -79,11 +79,13 @@ export abstract class TwoFeetTurn extends FootTurn {
       position: new Vector<3>(0, 0, 0),
       orientation: getQuaternionFromAngleAxis(this.initialAngle),
       contactPoint: 0.5,
+      toePick: false,
     };
     const midData: FootData = {
       position: positionA,
       orientation: getQuaternionFromAngleAxis(midAngle),
       contactPoint: 0.5,
+      toePick: false,
     };
     const scale = lateralScale ?? 1;
     const ownSide = (this.footKey === "footL" ? halfFeetSpacing : -halfFeetSpacing) * scale;
@@ -91,6 +93,7 @@ export abstract class TwoFeetTurn extends FootTurn {
       position: new Vector<3>(0, ownSide, offIceFootHeight),
       orientation: getQuaternionFromAngleAxis(this.finalAngle),
       contactPoint: 0.5,
+      toePick: false,
     };
     const coordinates = [start, middle, end];
     const data = [onIceData, midData, freeFootData];
@@ -115,16 +118,19 @@ export abstract class TwoFeetTurn extends FootTurn {
       position: new Vector<3>(0, freeSide, offIceFootHeight),
       orientation: getQuaternionFromAngleAxis(this.initialAngle),
       contactPoint: 0.5,
+      toePick: false,
     };
     const midData: FootData = {
       position: positionB,
       orientation: getQuaternionFromAngleAxis(midAngle),
       contactPoint: 0.5,
+      toePick: false,
     };
     const onIceData: FootData = {
       position: new Vector<3>(0, 0, 0),
       orientation: getQuaternionFromAngleAxis(this.finalAngle),
       contactPoint: 0.5,
+      toePick: false,
     };
     const coordinates = [start, middle, end];
     const data = [freeFootData, midData, onIceData];

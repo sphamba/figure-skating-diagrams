@@ -7,7 +7,7 @@ const start = 0;
 const end = 2;
 const T95 = 1.9;
 const SPACING = 0.15;
-const FREE_OFFSET = 0.5;
+const FREE_OFFSET = 0.4;
 
 type Kf = { coordinate: number; data: { position?: { x: number; y: number; z: number } } };
 

@@ -7,7 +7,7 @@ import type { DynamicGlide } from "../element/stroke.js";
 import type { Path } from "../path.js";
 import { LENGTH, WIDTH, CORNER_RADIUS } from "../rink.js";
 import type { CanvasRenderingContext2DSized } from "../rinkCanvas.js";
-import { createDefaultFootTurn } from "../element/turnTypes.js";
+import { createDefaultFootTurn, isJumpType } from "../element/turnTypes.js";
 import { TimingKeyframe } from "../keyframe.js";
 import { Sequence } from "../sequence.js";
 import { checkSequenceCurvatures, isStrokeElement } from "./curvatureWarning.js";
@@ -26,6 +26,7 @@ const RINK_CENTERLINE_GAP = 6; // gap, px on screen
 const PATH_WIDTH = 1; // px
 const MIN_TRACE_WIDTH = 2; // px
 const MIN_BLADE_LENGTH = 25; // px, only effective when zoomed out
+const MIN_MARK_SIZE = 12; // px minimum toe-pick mark diameter when zoomed out
 const MIN_DRAW_INCREMENT = 2; // px
 const ELEMENTS_PATH_COLOR = "#000";
 const LABEL_FONT_SIZE = 14; // px
@@ -380,10 +381,13 @@ export class Editor {
   private drawTraces() {
     const minTraceWidth = MIN_TRACE_WIDTH / this.view.zoom;
     const minBladeLength = this.scaleElements ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
+    const minMarkSize = MIN_MARK_SIZE / this.view.zoom;
     const minDrawIncrement = MIN_DRAW_INCREMENT / this.view.zoom;
     const viewport = this.getTraceViewport(minBladeLength);
     for (const sequence of this.sequences) {
-      this.drawMetres(() => sequence.drawTraces(this.ctx, minTraceWidth, minBladeLength, minDrawIncrement, viewport));
+      this.drawMetres(() =>
+        sequence.drawTraces(this.ctx, minTraceWidth, minBladeLength, minMarkSize, minDrawIncrement, viewport),
+      );
     }
   }
 
@@ -470,6 +474,7 @@ export class Editor {
     const minTraceWidth = MIN_TRACE_WIDTH / this.view.zoom;
     const minBladeLength =
       this.scaleElements && this.mode !== "elements" ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
+    const minMarkSize = MIN_MARK_SIZE / this.view.zoom;
     const pathColor = this.mode === "elements" ? ELEMENTS_PATH_COLOR : undefined;
     const minDrawIncrement = MIN_DRAW_INCREMENT / this.view.zoom;
     const viewport = this.getTraceViewport(minBladeLength);
@@ -483,6 +488,7 @@ export class Editor {
           undefined,
           minTraceWidth,
           minBladeLength,
+          minMarkSize,
           minDrawIncrement,
           viewport,
         ),
@@ -499,6 +505,7 @@ export class Editor {
           undefined,
           minTraceWidth,
           minBladeLength,
+          minMarkSize,
           minDrawIncrement,
           viewport,
         ),
@@ -513,6 +520,7 @@ export class Editor {
           pathColor,
           minTraceWidth,
           minBladeLength,
+          minMarkSize,
           minDrawIncrement,
           viewport,
         ),
@@ -983,7 +991,11 @@ export class Editor {
     for (const element of sequence.elements) {
       const geometry = this.getElementLabelGeometry(sequence, element);
       if (!geometry) continue;
-      this.drawShiftedLabel(element.shortName, geometry.point, geometry.outside);
+      if (isJumpType(element.type)) {
+        this.drawCenteredLabel(element.shortName, geometry.point);
+      } else {
+        this.drawShiftedLabel(element.shortName, geometry.point, geometry.outside);
+      }
       if (isStrokeElement(element) && element.crossed) {
         const text = this.crossedLabel(sequence, element);
         if (text) {
@@ -1008,6 +1020,15 @@ export class Editor {
     const [startCurve, startU] = path.getCurveAndCurvilinearCoord(element.start);
     const [endCurve, endU] = path.getCurveAndCurvilinearCoord(element.end);
     return startCurve.getCurvature(startU) * endCurve.getCurvature(endU) < 0;
+  }
+
+  private drawCenteredLabel(text: string, point: Vector<2>, fontSize = LABEL_FONT_SIZE) {
+    const ctx = this.ctx;
+    ctx.font = `${(fontSize * CANVAS_SCALE) / this.view.zoom}px sans-serif`;
+    ctx.fillStyle = "#000";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, point.x * CANVAS_SCALE, -point.y * CANVAS_SCALE);
   }
 
   private drawShiftedLabel(text: string, point: Vector<2>, outside: Vector<2>, fontSize = LABEL_FONT_SIZE) {

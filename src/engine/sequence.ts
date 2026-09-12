@@ -48,8 +48,9 @@ export interface SequenceJSON {
 type Relative = number & { readonly __tag: unique symbol };
 
 const drawIncrement = 0.02; // path coordinate increment for drawing traces, in meters
-const traceWidth = 0.004;
+export const traceWidth = 0.004;
 const skidWidth = 0.03;
+const markSize = 0.03; // m cross diameter of toe-pick marks
 const defaultPathColor = "black";
 const defaultTraceColorL = "#3030d2";
 const defaultTraceColorR = "#9c0000";
@@ -270,19 +271,21 @@ export class Sequence {
     pathColor: string = defaultPathColor,
     minTraceWidth?: number,
     minBladeLength?: number,
+    minMarkSize?: number,
     minDrawIncrement?: number,
     viewport?: AxisRect,
   ) {
     uEnd ??= this.path.length as PathCoordinate;
 
     this.drawPath(ctx, pathWidth, uStart, uEnd, pathColor);
-    this.drawFootTraces(ctx, uStart, uEnd, minTraceWidth, minBladeLength, minDrawIncrement, viewport);
+    this.drawFootTraces(ctx, uStart, uEnd, minTraceWidth, minBladeLength, minMarkSize, minDrawIncrement, viewport);
   }
 
   drawTraces(
     ctx: CanvasRenderingContext2DSized,
     minTraceWidth?: number,
     minBladeLength?: number,
+    minMarkSize?: number,
     minDrawIncrement?: number,
     viewport?: AxisRect,
   ) {
@@ -292,6 +295,7 @@ export class Sequence {
       this.path.length as PathCoordinate,
       minTraceWidth,
       minBladeLength,
+      minMarkSize,
       minDrawIncrement,
       viewport,
     );
@@ -399,18 +403,47 @@ export class Sequence {
     uEnd?: PathCoordinate,
     minTraceWidth?: number,
     minBladeLength?: number,
+    minMarkSize?: number,
     minDrawIncrement?: number,
     viewport?: AxisRect,
   ) {
     uEnd ??= this.path.length as PathCoordinate;
 
-    this.drawFootTrace(ctx, "footL", uStart, uEnd, minTraceWidth, minBladeLength, minDrawIncrement, viewport);
-    this.drawFootTrace(ctx, "footR", uStart, uEnd, minTraceWidth, minBladeLength, minDrawIncrement, viewport);
+    this.drawFootTrace(
+      ctx,
+      "footL",
+      uStart,
+      uEnd,
+      minTraceWidth,
+      minBladeLength,
+      minMarkSize,
+      minDrawIncrement,
+      viewport,
+    );
+    this.drawFootTrace(
+      ctx,
+      "footR",
+      uStart,
+      uEnd,
+      minTraceWidth,
+      minBladeLength,
+      minMarkSize,
+      minDrawIncrement,
+      viewport,
+    );
   }
 
   private getDrawBladeLength(minBladeLength?: number): number {
     if (minBladeLength === undefined) return bladeLength;
     return Math.min(maxBladeLength, Math.max(bladeLength, minBladeLength));
+  }
+
+  private getMarkSize(minMarkSize?: number, minBladeLength?: number): number {
+    let size = Math.max(markSize, minMarkSize ?? markSize);
+    if (minBladeLength !== undefined && minMarkSize !== undefined) {
+      size = Math.min(size, maxBladeLength * (minMarkSize / minBladeLength));
+    }
+    return size;
   }
 
   getBladeLengthScale(minBladeLength?: number): number {
@@ -465,6 +498,7 @@ export class Sequence {
     uEnd?: PathCoordinate,
     minTraceWidth?: number,
     minBladeLength?: number,
+    minMarkSize?: number,
     minDrawIncrement?: number,
     viewport?: AxisRect,
   ) {
@@ -489,6 +523,29 @@ export class Sequence {
 
     const step = Math.max(drawIncrement, minDrawIncrement ?? 0);
     const visibleRanges = this.getVisibleTraceRanges(uStart, uEnd, viewport, minBladeLength);
+
+    const toePicked = (drawKeyframes ?? this.keyframes[footKey]).filter(
+      (keyframe) => keyframe.data.toePick === true && keyframe.coordinate >= uStart && keyframe.coordinate <= uEnd,
+    );
+    const toePickSamples = new Map<number, FootKeyframe[]>();
+    for (const keyframe of toePicked) {
+      const u = keyframe.coordinate as number;
+      for (const [rangeStart, rangeEnd] of visibleRanges) {
+        if (u < rangeStart || u > rangeEnd) continue;
+        // Replicate the sampling accumulation below so the lookup keys match the drawn samples.
+        let nearest: number | undefined;
+        for (let sample = rangeStart as number; sample <= rangeEnd; sample += step) {
+          if (nearest === undefined || Math.abs(u - sample) < Math.abs(u - nearest)) nearest = sample;
+        }
+        if (nearest === undefined || Math.abs(nearest - u) > step / 2) continue;
+        const samples = toePickSamples.get(nearest) ?? [];
+        samples.push(keyframe);
+        toePickSamples.set(nearest, samples);
+        break;
+      }
+    }
+    const toePickKeyframes = new Set<FootKeyframe>();
+
     let previousRangeEnd: number | undefined;
     for (const [rangeStart, rangeEnd] of visibleRanges) {
       if (previousRangeEnd !== undefined && Math.abs(rangeStart - previousRangeEnd) > 1e-9) {
@@ -500,6 +557,10 @@ export class Sequence {
         pathCoordinate <= rangeEnd;
         pathCoordinate = (pathCoordinate + step) as PathCoordinate
       ) {
+        const samples = toePickSamples.get(pathCoordinate as number);
+        if (samples) {
+          for (const keyframe of samples) toePickKeyframes.add(keyframe);
+        }
         const contactPoint = this.getInterpolatedValue(
           footKey,
           "contactPoint",
@@ -574,6 +635,30 @@ export class Sequence {
 
         previousContactPosition = contactPosition;
       }
+    }
+
+    for (const keyframe of toePickKeyframes) {
+      const data = keyframe.data;
+      if (data.position === undefined || data.orientation === undefined || data.contactPoint === undefined) continue;
+      const pathOrientation = this.getPathOrientation(keyframe.coordinate);
+      const pathPosition = this.path.getPosition(keyframe.coordinate);
+      let contactRelativePosition = data.position.copy();
+      contactRelativePosition.x += (data.contactPoint - 0.5) * drawBladeLength;
+      const footOrientation = data.orientation.times(pathOrientation);
+      contactRelativePosition = contactRelativePosition.rotate(footOrientation);
+      const contactPosition = pathPosition.plus(contactRelativePosition as unknown as Vector<2>);
+      const half = this.getMarkSize(minMarkSize, minBladeLength) / 2;
+      const dx = half / Math.SQRT2;
+      ctx.strokeStyle = footKey === "footL" ? this.traceColorL : this.traceColorR;
+      ctx.lineWidth = minTraceWidth === undefined ? traceWidth : Math.max(traceWidth, minTraceWidth);
+      ctx.beginPath();
+      ctx.moveTo(contactPosition.x - dx, -(contactPosition.y - dx));
+      ctx.lineTo(contactPosition.x + dx, -(contactPosition.y + dx));
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(contactPosition.x - dx, -(contactPosition.y + dx));
+      ctx.lineTo(contactPosition.x + dx, -(contactPosition.y - dx));
+      ctx.stroke();
     }
   }
 

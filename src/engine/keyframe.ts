@@ -4,7 +4,7 @@ import { Quaternion } from "./quaternion.js";
 import { Vector } from "./vector.js";
 
 export type Transition = "linear" | "smooth";
-type KeyframeData = { [key: string]: Interpolable };
+type KeyframeData = { [key: string]: Interpolable | boolean };
 
 export type TimeData = {
   pathCoordinate: PathCoordinate;
@@ -17,6 +17,7 @@ export type PositionAndOrientation3D = {
 
 export type FootData = PositionAndOrientation3D & {
   contactPoint?: number; // 0: heel, 1: toe
+  toePick?: boolean;
 };
 
 interface VectorJSON {
@@ -30,7 +31,7 @@ interface QuaternionJSON {
 export interface FootKeyframeJSON {
   kind: "FootKeyframe";
   coordinate: PathCoordinate;
-  data: { position?: VectorJSON; orientation?: QuaternionJSON; contactPoint?: number };
+  data: { position?: VectorJSON; orientation?: QuaternionJSON; contactPoint?: number; toePick?: boolean };
   transitionIn: Transition;
   transitionOut: Transition;
 }
@@ -89,6 +90,7 @@ export class FootKeyframe extends Keyframe<FootData, PathCoordinate> {
         position: this.data.position?.toJSON(),
         orientation: this.data.orientation?.toJSON(),
         contactPoint: this.data.contactPoint,
+        toePick: this.data.toePick,
       },
       transitionIn: this.transitionIn,
       transitionOut: this.transitionOut,
@@ -100,6 +102,7 @@ export class FootKeyframe extends Keyframe<FootData, PathCoordinate> {
     if (json.data?.position) data.position = Vector.fromJSON(json.data.position) as Vector<3>;
     if (json.data?.orientation) data.orientation = Quaternion.fromJSON(json.data.orientation);
     if (json.data?.contactPoint !== undefined) data.contactPoint = json.data.contactPoint;
+    data.toePick = json.data?.toePick ?? false;
     return new FootKeyframe(json.coordinate as PathCoordinate, data, json.transitionIn, json.transitionOut);
   }
 }

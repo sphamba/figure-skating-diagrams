@@ -194,7 +194,7 @@ test("foot trace culling skips curves outside the viewport", () => {
   const sequence = makeSequenceWithBothFeetOnPath(makeTwoCurveStraightPath(), 2);
   const full = makeMockContext();
   const culled = makeMockContext();
-  sequence.drawTraces(culled.ctx as never, undefined, undefined, undefined, {
+  sequence.drawTraces(culled.ctx as never, undefined, undefined, undefined, undefined, {
     minX: -100,
     maxX: 0.7,
     minY: -100,
@@ -215,7 +215,7 @@ test("a fully visible viewport draws the same trace as no viewport", () => {
   const plain = makeMockContext();
   const viewport = makeMockContext();
   sequence.drawTraces(plain.ctx as never);
-  sequence.drawTraces(viewport.ctx as never, undefined, undefined, undefined, {
+  sequence.drawTraces(viewport.ctx as never, undefined, undefined, undefined, undefined, {
     minX: -100,
     maxX: 100,
     minY: -100,
