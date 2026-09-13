@@ -2,6 +2,7 @@ import type { Curvilinear, Curve } from "../curve.js";
 import { type AxisRect } from "../curve.js";
 import { bladeLength } from "../constants.js";
 import type { PathCoordinate, Time } from "../coordinates.js";
+import { fullTimeExtentSeconds } from "../diagram.js";
 import { Annotation } from "../annotation.js";
 import type { Element } from "../element/element.js";
 import type { DynamicGlide } from "../element/stroke.js";
@@ -17,6 +18,8 @@ import { Vector } from "../vector.js";
 const WARNING_TRIANGLE_COLOR = "#c25205";
 const WARNING_TRIANGLE_SIZE = 30; // px, side length of the filled warning triangle
 const HIDDEN_SEQUENCE_ALPHA = 0.3; // hidden sequences keep their foot traces at this opacity
+const OUTSIDE_DRAW_RANGE_ALPHA = 0.3; // path opacity outside the rendered draw range
+const OUTSIDE_DRAW_RANGE_COLOR = "#000";
 
 export type ControlPointKey = "p0" | "p1" | "p2" | "p3";
 
@@ -137,6 +140,19 @@ export class Editor {
   mode: EditMode = "view";
   scaleElements = true;
   activeSequence: Sequence | null = null;
+
+  private _drawRange = 1;
+  // Draw range fraction (0: only around the time cursor, 1: full extent).
+  get drawRange(): number {
+    return this._drawRange;
+  }
+  set drawRange(value: number) {
+    const clamped = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1;
+    if (clamped === this._drawRange) return;
+    this._drawRange = clamped;
+    this.requestDraw();
+  }
+
   bpm: number = DEFAULT_BPM;
   videoTimeSeconds: number | null = null;
   hiddenSequences: Set<Sequence> = new Set();
@@ -150,6 +166,7 @@ export class Editor {
   onAnnotationChangeRequest?: (annotation: Annotation) => void;
   onSequenceChange?: () => void;
   private sequenceMutated = false;
+  private ctxTransformApplied = false;
   private selectedCurves = new Map<Sequence, Set<number>>();
   private selectedElements = new Set<Element>();
   private isPanning = false;
@@ -441,53 +458,59 @@ export class Editor {
   draw() {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.width, this.height);
+    // A mid-frame error must not leave ctx.save() on the stack.
     this.transformContext();
-    this.drawRink();
-    // Annotations render just above the rink, behind everything else, in every mode.
-    this.drawAnnotations();
-    // The time cursor stays behind everything else: it draws over the rink and the
-    // annotations, before the paths, traces, and elements draw above it.
-    this.drawVideoCircle();
-    if (this.mode !== "view") {
-      for (const sequence of this.sequences) {
-        this.drawPath(sequence);
+    this.ctxTransformApplied = true;
+    try {
+      this.drawRink();
+      // Annotations render just above the rink, behind everything else, in every mode.
+      this.drawAnnotations();
+      this.drawVideoCircle();
+      if (this.mode !== "view") {
+        for (const sequence of this.sequences) {
+          this.drawPath(sequence);
+        }
       }
-    }
-    this.drawSelectedCurves();
-    if (this.mode === "path") {
+      this.drawSelectedCurves();
+      if (this.mode === "path") {
+        for (const sequence of this.editSequences()) {
+          this.drawControlHandles(sequence);
+        }
+        this.drawAddButtons();
+        this.drawSplitButtons();
+        this.drawDeleteButtons();
+      } else if (this.mode === "elements") {
+        this.drawElements();
+      } else if (this.mode === "view") {
+        this.drawTraces();
+        this.drawTimingBeatLabels();
+      } else if (this.mode === "timing") {
+        this.drawTimingElements();
+        this.drawTimingKeyframes();
+        this.drawTimingButtons();
+        this.drawTimingTimeLabels();
+        this.drawTimingBeatLabels();
+      } else if (this.mode === "annotations") {
+        this.drawAnnotationButtons();
+      }
+      if (this.mode === "path" || this.mode === "elements") {
+        this.drawCurvatureWarnings();
+      }
       for (const sequence of this.editSequences()) {
-        this.drawControlHandles(sequence);
+        this.drawElementLabels(sequence);
       }
-      this.drawAddButtons();
-      this.drawSplitButtons();
-      this.drawDeleteButtons();
-    } else if (this.mode === "elements") {
-      this.drawElements();
-    } else if (this.mode === "view") {
-      this.drawTraces();
-      this.drawTimingBeatLabels();
-    } else if (this.mode === "timing") {
-      this.drawTimingElements();
-      this.drawTimingKeyframes();
-      this.drawTimingButtons();
-      this.drawTimingTimeLabels();
-      this.drawTimingBeatLabels();
-    } else if (this.mode === "annotations") {
-      this.drawAnnotationButtons();
+      for (const sequence of this.editSequences()) {
+        this.drawAnnotationLabels(sequence);
+      }
+      this.drawInflectionLabels();
+      this.drawStartLabels();
+    } finally {
+      if (this.ctxTransformApplied) {
+        this.ctxTransformApplied = false;
+        ctx.restore();
+        this.drawSelectionRectangle();
+      }
     }
-    if (this.mode === "path" || this.mode === "elements") {
-      this.drawCurvatureWarnings();
-    }
-    for (const sequence of this.editSequences()) {
-      this.drawElementLabels(sequence);
-    }
-    for (const sequence of this.editSequences()) {
-      this.drawAnnotationLabels(sequence);
-    }
-    this.drawInflectionLabels();
-    this.drawStartLabels();
-    ctx.restore();
-    this.drawSelectionRectangle();
   }
 
   requestDraw() {
@@ -604,7 +627,7 @@ export class Editor {
   }
 
   private drawAnnotations() {
-    // Inside drawMetres the stroke width is read in metres, so no CANVAS_SCALE conversion: the linewidth is already in metres.
+    // Inside drawMetres the stroke width is read in metres: no CANVAS_SCALE conversion.
     const lineWidth = this.getAnnotationLineWidth();
     for (const sequence of this.editSequences()) {
       if (sequence.path.curves.length === 0) continue;
@@ -630,7 +653,7 @@ export class Editor {
     if (span.hi <= span.lo) return;
     const ctx = this.ctx;
     ctx.save();
-    ctx.lineCap = "butt"; // square ends
+    ctx.lineCap = "butt";
     if (selected) {
       ctx.strokeStyle = ANNOTATION_SELECTED_COLOR;
       ctx.globalAlpha = 1;
@@ -643,7 +666,6 @@ export class Editor {
     this.drawMetres(() => path.drawRange(ctx, span.lo as PathCoordinate, span.hi as PathCoordinate));
     ctx.restore();
     if (selected) {
-      // Red circular handles at the ends, same size as for elements, to indicate that they can be dragged.
       const nodeSize = (NODE_SIZE * CANVAS_SCALE) / this.view.zoom;
       ctx.fillStyle = ANNOTATION_SELECTED_COLOR;
       for (const u of [span.lo, span.hi]) {
@@ -958,14 +980,107 @@ export class Editor {
     const minMarkSize = MIN_MARK_SIZE / this.view.zoom;
     const minDrawIncrement = MIN_DRAW_INCREMENT / this.view.zoom;
     const viewport = this.getTraceViewport(minBladeLength);
+    const window = this.traceDrawWindow();
     for (const sequence of this.sequences) {
-      const hidden = this.hiddenSequences.has(sequence);
-      if (hidden) this.ctx.globalAlpha = HIDDEN_SEQUENCE_ALPHA;
+      const hiddenAlpha = this.hiddenSequences.has(sequence) ? HIDDEN_SEQUENCE_ALPHA : 1;
+      if (window === null) {
+        this.ctx.globalAlpha = hiddenAlpha;
+        this.drawMetres(() =>
+          sequence.drawTraces(this.ctx, minTraceWidth, minBladeLength, minMarkSize, minDrawIncrement, viewport),
+        );
+        this.ctx.globalAlpha = 1;
+        continue;
+      }
+      if (sequence.path.curves.length === 0) continue;
+      if (!hasTimeEvolution(sequence)) {
+        // No computable time along the path: keep it fully drawn.
+        this.ctx.globalAlpha = hiddenAlpha;
+        this.drawMetres(() =>
+          sequence.drawTraces(this.ctx, minTraceWidth, minBladeLength, minMarkSize, minDrawIncrement, viewport),
+        );
+        this.ctx.globalAlpha = 1;
+        continue;
+      }
+      const timeRange = sequenceTimeRange(sequence, this.bpm);
+      if (!timeRange) {
+        this.ctx.globalAlpha = hiddenAlpha;
+        this.drawMetres(() =>
+          sequence.drawTraces(this.ctx, minTraceWidth, minBladeLength, minMarkSize, minDrawIncrement, viewport),
+        );
+        this.ctx.globalAlpha = 1;
+        continue;
+      }
+      const path = sequence.path;
+      const overlapT0 = Math.max(window[0], timeRange[0]);
+      const overlapT1 = Math.min(window[1], timeRange[1]);
+      if (overlapT1 <= overlapT0) {
+        this.drawOutsideDrawRangeStroke(path, 0 as PathCoordinate, undefined, hiddenAlpha);
+        continue;
+      }
+      const uLoRaw = sequence.getPathCoordinateFromTime(overlapT0 as Time, this.bpm);
+      const uHiRaw = sequence.getPathCoordinateFromTime(overlapT1 as Time, this.bpm);
+      const uLo = Math.min(uLoRaw, uHiRaw);
+      const uHi = Math.max(uLoRaw, uHiRaw);
+      this.drawOutsideDrawRangeStroke(path, 0 as PathCoordinate, uLo as PathCoordinate, hiddenAlpha);
+      this.drawOutsideDrawRangeStroke(path, uHi as PathCoordinate, undefined, hiddenAlpha);
+      this.ctx.globalAlpha = hiddenAlpha;
       this.drawMetres(() =>
-        sequence.drawTraces(this.ctx, minTraceWidth, minBladeLength, minMarkSize, minDrawIncrement, viewport),
+        sequence.drawFootTraces(
+          this.ctx,
+          uLo as PathCoordinate,
+          uHi as PathCoordinate,
+          minTraceWidth,
+          minBladeLength,
+          minMarkSize,
+          minDrawIncrement,
+          viewport,
+        ),
       );
-      if (hidden) this.ctx.globalAlpha = 1;
+      this.ctx.globalAlpha = 1;
     }
+  }
+
+  // Hides when the element time span lies entirely outside the drawing range.
+  private elementNameHidden(sequence: Sequence, element: Element): boolean {
+    if (this.mode !== "view") return false;
+    const window = this.traceDrawWindow();
+    if (window === null) return false;
+    const loU = Math.min(element.start as number, element.end as number);
+    const hiU = Math.max(element.start as number, element.end as number);
+    const lo = sequence.getTimeFromPathCoordinate(loU as PathCoordinate, this.bpm);
+    const hi = sequence.getTimeFromPathCoordinate(hiU as PathCoordinate, this.bpm);
+    return Math.max(lo, hi) < window[0] || Math.min(lo, hi) > window[1];
+  }
+
+  private drawOutsideDrawRangeStroke(
+    path: Path,
+    uStart: PathCoordinate,
+    uEnd: PathCoordinate | undefined,
+    hiddenAlpha: number,
+  ) {
+    const start = Math.max(0, uStart as number);
+    const end = Math.min(path.length, uEnd ?? path.length);
+    if (end <= start) return;
+    const ctx = this.ctx;
+    ctx.globalAlpha = OUTSIDE_DRAW_RANGE_ALPHA * hiddenAlpha;
+    ctx.strokeStyle = OUTSIDE_DRAW_RANGE_COLOR;
+    ctx.lineWidth = PATH_WIDTH / this.view.zoom;
+    this.drawMetres(() => path.drawRange(ctx, uStart, (uEnd ?? path.length) as PathCoordinate));
+    ctx.globalAlpha = 1;
+  }
+
+  // The time window the draw range renders around the time cursor.
+  private traceDrawWindow(): [number, number] | null {
+    if (this.drawRange >= 1) return null;
+    const extent = fullTimeExtentSeconds(this.sequences, this.bpm);
+    if (!extent) return null;
+    if (this.videoTimeSeconds === null) return null;
+    const center = this.videoTimeSeconds;
+    const halfWindow = (extent[1] - extent[0]) * this.drawRange;
+    const t0 = Math.max(extent[0], center - halfWindow);
+    const t1 = Math.min(extent[1], center + halfWindow);
+    if (t1 <= t0) return null;
+    return [t0, t1];
   }
 
   private getTraceViewport(minBladeLength?: number): AxisRect {
@@ -1010,12 +1125,8 @@ export class Editor {
     ctx.fillRect(-width / 2, -height / 2, width, height);
     ctx.strokeRect(-width / 2, -height / 2, width, height);
 
-    // White dotted center lines crossing the rink horizontally and vertically.
-    // drawMetres cancels the CANVAS_SCALE factor, so both the width and the dash
-    // pattern divided by zoom stay constant in px on screen at any zoom level.
-    // Each line starts at the rink center and is stroked separately, shifted by
-    // half a dash, so the pattern is mirrored around the rink center rather
-    // than starting with a full dash at the rink border.
+    // drawMetres cancels CANVAS_SCALE, so the dash pattern divided by zoom stays constant on-screen;
+    // a half-dash offset from each line start mirrors the dashes around the rink center.
     this.drawMetres(() => {
       ctx.strokeStyle = RINK_CENTERLINE_COLOR;
       ctx.lineWidth = RINK_CENTERLINE_WIDTH / this.view.zoom;
@@ -1602,8 +1713,8 @@ export class Editor {
 
   private drawElementLabels(sequence: Sequence) {
     if (sequence.path.curves.length === 0) return;
-
     for (const element of sequence.elements) {
+      if (this.elementNameHidden(sequence, element)) continue;
       const geometry = this.getElementLabelGeometry(sequence, element);
       if (!geometry) continue;
       if (isJumpType(element.type)) {
@@ -1718,10 +1829,20 @@ export class Editor {
         ...this.getUncoveredInflectionCoordinates(sequence),
         ...this.getUncoveredJointEdgeChangeCoordinates(sequence),
       ]) {
+        if (this.changeEdgeHidden(sequence, u)) continue;
         const geometry = this.getLabelGeometryAt(sequence.path, u);
         this.drawShiftedLabel(CHANGE_EDGE_LABEL, geometry.point, geometry.outside, LABEL_FONT_SIZE_SMALL);
       }
     }
+  }
+
+  // Hides when the time lies outside the drawing range.
+  private changeEdgeHidden(sequence: Sequence, u: PathCoordinate): boolean {
+    if (this.mode !== "view") return false;
+    const window = this.traceDrawWindow();
+    if (window === null) return false;
+    const t = sequence.getTimeFromPathCoordinate(u, this.bpm);
+    return t < window[0] || t > window[1];
   }
 
   private getUncoveredInflectionCoordinates(sequence: Sequence): PathCoordinate[] {

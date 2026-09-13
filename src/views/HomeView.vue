@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Button from "openvue/button";
+import Checkbox from "openvue/checkbox";
 import Card from "openvue/card";
 import Tag from "openvue/tag";
 import Fieldset from "openvue/fieldset";
@@ -9,6 +10,7 @@ import ToggleSwitch from "openvue/toggleswitch";
 import Splitter from "openvue/splitter";
 import SplitterPanel from "openvue/splitterpanel";
 import SelectButton from "openvue/selectbutton";
+import Slider from "openvue/slider";
 import ConfirmDialog from "openvue/confirmdialog";
 import { useConfirm } from "openvue/useconfirm";
 import DiagramTree, { type DiagramTreeSource } from "@/components/DiagramTree.vue";
@@ -22,6 +24,8 @@ import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
 import { usePlaybackSpeed } from "@/composables/usePlaybackSpeed";
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
+
+const scaleElements = ref(true);
 
 const isMobile = useMediaQuery("(max-width: 767.98px)");
 const sidebarOpen = ref(true);
@@ -124,6 +128,32 @@ watch(
 
 let editor: Editor | null = null;
 
+const drawRange = computed({
+  get: () => store.getDrawRange(),
+  set: (value) => store.setDrawRange(value),
+});
+
+watch(
+  drawRange,
+  (value) => {
+    if (!editor) return;
+    editor.drawRange = value;
+    editor.requestDraw();
+  },
+  { immediate: true },
+);
+
+watch(
+  scaleElements,
+  (value) => {
+    if (editor) {
+      editor.scaleElements = value;
+      editor.draw();
+    }
+  },
+  { immediate: true },
+);
+
 function getBpm(): number {
   return store.getDiagram().bpm || 120;
 }
@@ -187,8 +217,7 @@ const viewportWidth = ref(0);
 const viewportHeight = ref(0);
 
 const splitLayout = computed(() => {
-  // The docked sidebar takes space from the horizontal screen ratio, so it is
-  // subtracted before the 1:1 threshold decides the split direction.
+  // Sidebar space is subtracted before the 1:1 threshold decides the split direction.
   const sidebarSpace = !isMobile.value && sidebarOpen.value ? 360 : 0;
   return (viewportWidth.value - sidebarSpace) / viewportHeight.value > 1 ? "horizontal" : "vertical";
 });
@@ -207,6 +236,8 @@ onMounted(() => {
   const editorInstance = new Editor(canvasRef.value, sequences.value);
   editor = editorInstance;
   editorInstance.mode = "view";
+  editorInstance.scaleElements = scaleElements.value;
+  editorInstance.drawRange = store.getDrawRange();
   editorInstance.setHiddenSequences(hiddenSequenceSet.value);
   editorInstance.onVideoTimeChange = (seconds) => setTimestamp(seconds);
   editorInstance.activeSequence = activeSequence.value;
@@ -324,6 +355,26 @@ onBeforeUnmount(() => {
               </template>
             </Listbox>
           </div>
+
+          <Fieldset legend="View parameters" toggleable class="home-view__help">
+            <div class="home-view__scale-checkbox">
+              <Checkbox v-model="scaleElements" binary input-id="scale-elements-zoom" />
+              <label for="scale-elements-zoom">Scale elements with zoom</label>
+            </div>
+            <label class="home-view__mode-label home-view__view-param-label">Draw range</label>
+            <div class="home-view__slider-param">
+              <span class="home-view__slider-label">short</span>
+              <Slider
+                v-model="drawRange"
+                :min="0.001"
+                :max="1"
+                :step="0.001"
+                aria-label="Draw range"
+                class="home-view__slider"
+              />
+              <span class="home-view__slider-label">long</span>
+            </div>
+          </Fieldset>
 
           <Fieldset legend="Input help" toggleable class="home-view__help">
             <ul class="home-view__hint">
@@ -508,6 +559,32 @@ onBeforeUnmount(() => {
   line-height: 1;
   pointer-events: none;
   user-select: none;
+}
+
+.home-view__scale-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.home-view__slider-param {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.home-view__slider-label {
+  color: var(--p-text-muted-color);
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+.home-view__view-param-label {
+  margin-top: 0.75rem;
+}
+
+.home-view__slider {
+  flex: 1;
 }
 
 .home-view__help {

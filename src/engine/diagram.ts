@@ -1,4 +1,4 @@
-import { Sequence } from "./sequence.js";
+import { Sequence, DEFAULT_BPM, hasTimeEvolution, sequenceTimeRange } from "./sequence.js";
 import type { SequenceJSON } from "./sequence.js";
 
 export function earliestTimeKeyframeSeconds(diagram: Diagram): number | null {
@@ -10,6 +10,21 @@ export function earliestTimeKeyframeSeconds(diagram: Diagram): number | null {
     }
   }
   return best;
+}
+
+// Union of every sequence time range; null when no sequence can compute a time.
+export function fullTimeExtentSeconds(sequences: Sequence[], bpm: number = DEFAULT_BPM): [number, number] | null {
+  let lo: number | null = null;
+  let hi: number | null = null;
+  for (const sequence of sequences) {
+    if (!hasTimeEvolution(sequence)) continue;
+    const range = sequenceTimeRange(sequence, bpm);
+    if (!range) continue;
+    if (lo === null || range[0] < lo) lo = range[0];
+    if (hi === null || range[1] > hi) hi = range[1];
+  }
+  if (lo === null || hi === null || hi <= lo) return null;
+  return [lo, hi];
 }
 
 export interface DiagramJSON {

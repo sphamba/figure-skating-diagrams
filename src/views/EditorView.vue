@@ -5,6 +5,7 @@ import Card from "openvue/card";
 import Tag from "openvue/tag";
 import Fieldset from "openvue/fieldset";
 import SelectButton from "openvue/selectbutton";
+import Slider from "openvue/slider";
 import Checkbox from "openvue/checkbox";
 import Dialog from "openvue/dialog";
 import InputText from "openvue/inputtext";
@@ -341,10 +342,7 @@ function oldValueAt(branch: ElementKind, level: number, value: string): boolean 
   return level === 3 && value === flags.openness;
 }
 
-// Marks the flag values the geometry computes as valid at the element start
-// point. The side and direction levels apply to both turn branches; the edge
-// level only exists in the one-foot turn branch, so openness and the twizzle
-// turn counts get no check.
+// Valid flags from the geometry at the element start; the edge check only applies to one-foot turns.
 function validFlagAt(branch: ElementKind, level: number, value: string): boolean {
   const v = validVariant.value;
   if (!v) return false;
@@ -354,10 +352,7 @@ function validFlagAt(branch: ElementKind, level: number, value: string): boolean
   return false;
 }
 
-// Marks the jump type names the geometry computes as valid for the take-off
-// foot at the element start point. The foot and direction gate like the turn
-// branches; the edge check only applies on a curved path. The take-off foot
-// mirrors by handedness like the jump getters.
+// Valid jumps from the geometry; the take-off foot and direction are gated by handedness-mirrored take-off foot.
 function jumpTypeValid(name: string): boolean {
   const v = validVariant.value;
   if (!v) return false;
@@ -545,6 +540,21 @@ const diagramBpm = computed({
 const isUnsaved = computed(() => store.isUnsaved());
 const loadFailed = ref(false);
 
+const drawRange = computed({
+  get: () => store.getDrawRange(),
+  set: (value) => store.setDrawRange(value),
+});
+
+watch(
+  drawRange,
+  (value) => {
+    if (!editor) return;
+    editor.drawRange = value;
+    editor.requestDraw();
+  },
+  { immediate: true },
+);
+
 async function loadDiagramSource({ path }: DiagramTreeSource) {
   loadFailed.value = false;
   try {
@@ -692,8 +702,7 @@ const viewportWidth = ref(0);
 const viewportHeight = ref(0);
 
 const splitLayout = computed(() => {
-  // The docked sidebar takes space from the horizontal screen ratio, so it is
-  // subtracted before the 1:1 threshold decides the split direction.
+  // Sidebar space is subtracted before the 1:1 threshold decides the split direction.
   const sidebarSpace = !isMobile.value && sidebarOpen.value ? 360 : 0;
   return (viewportWidth.value - sidebarSpace) / viewportHeight.value > 1 ? "horizontal" : "vertical";
 });
@@ -985,6 +994,7 @@ onMounted(() => {
   editorInstance.activeSequence = activeSequence.value;
   editorInstance.bpm = getBpm();
   editorInstance.videoTimeSeconds = videoTime.value;
+  editorInstance.drawRange = store.getDrawRange();
   editorInstance.onElementChangeRequest = (element) => {
     elementToChange.value = element;
     isProvisionalTarget.value = editorInstance.isProvisional(element);
@@ -1478,13 +1488,6 @@ function closeElementChange() {
             </small>
           </div>
 
-          <div v-if="editMode !== 'elements'" class="editor-view__actions">
-            <div class="editor-view__scale-checkbox">
-              <Checkbox v-model="scaleElements" binary input-id="scale-elements" />
-              <label for="scale-elements">Scale elements</label>
-            </div>
-          </div>
-
           <div class="editor-view__actions">
             <label class="editor-view__mode-label">Diagram name</label>
             <InputText v-model="diagramName" class="w-full" />
@@ -1597,6 +1600,26 @@ function closeElementChange() {
             />
             <Button label="New" icon="pi pi-plus" class="w-full" severity="secondary" @click="confirmNew" />
           </div>
+
+          <Fieldset v-if="editMode !== 'elements'" legend="View parameters" toggleable class="editor-view__help">
+            <div class="editor-view__scale-checkbox">
+              <Checkbox v-model="scaleElements" binary input-id="scale-elements-zoom" />
+              <label for="scale-elements-zoom">Scale elements with zoom</label>
+            </div>
+            <label class="editor-view__mode-label editor-view__view-param-label">Draw range</label>
+            <div class="editor-view__slider-param">
+              <span class="editor-view__slider-label">short</span>
+              <Slider
+                v-model="drawRange"
+                :min="0.001"
+                :max="1"
+                :step="0.001"
+                aria-label="Draw range"
+                class="editor-view__slider"
+              />
+              <span class="editor-view__slider-label">long</span>
+            </div>
+          </Fieldset>
 
           <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFileSelected" />
 
@@ -2103,6 +2126,26 @@ function closeElementChange() {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.editor-view__slider-param {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.editor-view__slider-label {
+  color: var(--p-text-muted-color);
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+.editor-view__view-param-label {
+  margin-top: 0.75rem;
+}
+
+.editor-view__slider {
+  flex: 1;
 }
 
 .editor-view__hint {
