@@ -1,3 +1,4 @@
+import { Annotation, type AnnotationJSON } from "./annotation.js";
 import { bladeLength, maxBladeLength } from "./constants.js";
 import type { PathCoordinate, Time } from "./coordinates.js";
 import type { AxisRect } from "./curve.js";
@@ -43,6 +44,7 @@ export interface SequenceJSON {
     time: TimingKeyframeJSON[];
   };
   elements: (FootTurnJSON | { type: string; start: number; end: number })[];
+  annotations?: AnnotationJSON[];
 }
 
 type Relative = number & { readonly __tag: unique symbol };
@@ -85,6 +87,7 @@ export class Sequence {
   path: Path;
   keyframes: SequenceKeyframes;
   elements: Element[];
+  annotations: Annotation[] = [];
 
   private elementKeyframes = new WeakMap<Element, ElementKeyframes>();
 
@@ -119,6 +122,15 @@ export class Sequence {
   addElement(element: Element) {
     this.elements.push(element);
     this.refreshElementKeyframes(element);
+  }
+
+  addAnnotation(annotation: Annotation) {
+    this.annotations.push(annotation);
+    this.annotations.sort((a, b) => (a.start as number) - (b.start as number));
+  }
+
+  removeAnnotation(annotation: Annotation) {
+    this.annotations = this.annotations.filter((candidate) => candidate !== annotation);
   }
 
   removeElement(element: Element) {
@@ -238,6 +250,7 @@ export class Sequence {
         time: this.keyframes.time.map((keyframe) => keyframe.toJSON()),
       },
       elements: this.elements.map((element) => element.toJSON() as FootTurnJSON),
+      annotations: this.annotations.map((annotation) => annotation.toJSON()),
     };
   }
 
@@ -264,6 +277,7 @@ export class Sequence {
     for (const element of sequence.elements) {
       sequence.registerLoadedElementKeyframes(element);
     }
+    sequence.annotations = (json.annotations ?? []).map((annotation) => Annotation.fromJSON(annotation));
     return sequence;
   }
 

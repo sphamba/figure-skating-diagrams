@@ -9,6 +9,7 @@ import Checkbox from "openvue/checkbox";
 import Dialog from "openvue/dialog";
 import InputText from "openvue/inputtext";
 import InputNumber from "openvue/inputnumber";
+import Textarea from "openvue/textarea";
 import InputGroup from "openvue/inputgroup";
 import InputGroupAddon from "openvue/inputgroupaddon";
 import Listbox from "openvue/listbox";
@@ -21,6 +22,7 @@ import SplitterPanel from "openvue/splitterpanel";
 import { useConfirm } from "openvue/useconfirm";
 import { Editor, formatTimingLabel, type EditMode } from "@/engine/sequenceEditor/editor";
 import { TimingKeyframe, type TimingKind } from "@/engine/keyframe";
+import { DEFAULT_ANNOTATION_COLOR, type Annotation } from "@/engine/annotation";
 import type { Sequence, SequenceJSON, FootKey } from "@/engine/sequence";
 import {
   changeElementType,
@@ -52,6 +54,7 @@ const editModeOptions = [
   { label: "Path", value: "path" },
   { label: "Elements", value: "elements" },
   { label: "Timing", value: "timing" },
+  { label: "Annotations", value: "annotations" },
 ];
 const editMode = ref<EditMode>("view");
 const scaleElements = ref(true);
@@ -428,32 +431,47 @@ const helpItems = computed<HelpItem[]>(() =>
           { keys: ["−"], description: "button beside a selected timing point: remove it" },
           ...touchHelpItems,
         ]
-      : editMode.value === "elements"
+      : editMode.value === "annotations"
         ? [
             { keys: ["wheel"], description: "zoom" },
             { keys: ["right drag"], description: "move the view" },
             { keys: ["left drag"], description: "on empty space: draw a selection rectangle" },
-            { keys: ["left click"], description: "on the path: create a provisional element" },
-            { keys: ["left drag"], description: "on the path: create a provisional element over the dragged range" },
-            { keys: ["drag"], description: "a provisional element: move it or its ends" },
-            { keys: ["+"], description: "on the provisional element: open the element selection dialog" },
+            { keys: ["left click"], description: "on the path: create a provisional annotation" },
+            { keys: ["left drag"], description: "on the path: create a provisional annotation over the dragged range" },
+            { keys: ["drag"], description: "an annotation: move it or its ends" },
+            { keys: ["left click"], description: "on an annotation: select it" },
+            { keys: ["ctrl", "left click"], description: "add or remove from the selection" },
+            { keys: ["+"], description: "on the provisional annotation: open the annotation dialog" },
+            { keys: ["cog"], description: "on a selected annotation: open the annotation dialog" },
+            { keys: ["−"], description: "button beside a selected annotation: remove it" },
             ...touchHelpItems,
           ]
-        : [
-            { keys: ["wheel"], description: "zoom" },
-            { keys: ["left click"], description: "on a control point: select it" },
-            { keys: ["left click"], description: "on a line: select that curve" },
-            { keys: ["drag"], description: "a selected curve: move it (and the others selected)" },
-            { keys: ["left drag"], description: "on empty space: draw a selection rectangle" },
-            { keys: ["drag"], description: "one of the selected points: move all selected points" },
-            { keys: ["ctrl", "left click"], description: "add or remove from the selection" },
-            { keys: ["ctrl", "A"], description: "select all" },
-            { keys: ["right drag"], description: "move the view" },
-            { keys: ["+"], description: "button near the end of the path: add a segment" },
-            { keys: ["+"], description: "button at the midpoint of a selected curve: split it" },
-            { keys: ["−"], description: "button beside a selected point: remove that point" },
-            ...touchHelpItems,
-          ],
+        : editMode.value === "elements"
+          ? [
+              { keys: ["wheel"], description: "zoom" },
+              { keys: ["right drag"], description: "move the view" },
+              { keys: ["left drag"], description: "on empty space: draw a selection rectangle" },
+              { keys: ["left click"], description: "on the path: create a provisional element" },
+              { keys: ["left drag"], description: "on the path: create a provisional element over the dragged range" },
+              { keys: ["drag"], description: "a provisional element: move it or its ends" },
+              { keys: ["+"], description: "on the provisional element: open the element selection dialog" },
+              ...touchHelpItems,
+            ]
+          : [
+              { keys: ["wheel"], description: "zoom" },
+              { keys: ["left click"], description: "on a control point: select it" },
+              { keys: ["left click"], description: "on a line: select that curve" },
+              { keys: ["drag"], description: "a selected curve: move it (and the others selected)" },
+              { keys: ["left drag"], description: "on empty space: draw a selection rectangle" },
+              { keys: ["drag"], description: "one of the selected points: move all selected points" },
+              { keys: ["ctrl", "left click"], description: "add or remove from the selection" },
+              { keys: ["ctrl", "A"], description: "select all" },
+              { keys: ["right drag"], description: "move the view" },
+              { keys: ["+"], description: "button near the end of the path: add a segment" },
+              { keys: ["+"], description: "button at the midpoint of a selected curve: split it" },
+              { keys: ["−"], description: "button beside a selected point: remove that point" },
+              ...touchHelpItems,
+            ],
 );
 
 let editor: Editor | null = null;
@@ -527,6 +545,50 @@ function formatTimingValue(value: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+const annotationOpen = ref(false);
+const annotationTarget = shallowRef<Annotation | null>(null);
+const annotationIsProvisional = ref(false);
+const annotationTitleDraft = ref("Annotation");
+const annotationDescriptionDraft = ref("");
+const annotationColorDraft = ref(DEFAULT_ANNOTATION_COLOR);
+const annotationColor = computed({
+  get: () => annotationColorDraft.value.replace(/^#/, ""),
+  set: (value: string) => {
+    annotationColorDraft.value = `#${value}`;
+  },
+});
+
+function openAnnotationChange(annotation: Annotation) {
+  annotationTarget.value = annotation;
+  annotationIsProvisional.value = editor?.isProvisionalAnnotation(annotation) ?? false;
+  annotationTitleDraft.value = annotation.title;
+  annotationDescriptionDraft.value = annotation.description;
+  annotationColorDraft.value = annotation.color;
+  annotationOpen.value = true;
+}
+
+function closeAnnotationChange() {
+  annotationOpen.value = false;
+  annotationTarget.value = null;
+}
+
+function commitAnnotationChange() {
+  const target = annotationTarget.value;
+  if (!target) {
+    closeAnnotationChange();
+    return;
+  }
+  target.title = annotationTitleDraft.value.trim() || "Annotation";
+  target.description = annotationDescriptionDraft.value;
+  target.color = annotationColorDraft.value;
+  if (annotationIsProvisional.value) {
+    editor?.commitProvisionalAnnotation(target);
+  }
+  store.saveToStorage();
+  editor?.draw();
+  closeAnnotationChange();
 }
 
 const confirm = useConfirm();
@@ -853,6 +915,9 @@ onMounted(() => {
   editorInstance.onTimingKeyframeChangeRequest = (keyframe, isProvisional, previous) => {
     timingPreviousValue.value = previous ? previous.value : null;
     openTimingKeyframeChange(keyframe, isProvisional);
+  };
+  editorInstance.onAnnotationChangeRequest = (annotation) => {
+    openAnnotationChange(annotation);
   };
 });
 
@@ -1709,6 +1774,38 @@ function closeElementChange() {
       </template>
     </Dialog>
 
+    <Dialog
+      v-model:visible="annotationOpen"
+      header="Annotation"
+      modal
+      class="editor-view__annotation-dialog"
+      @hide="closeAnnotationChange"
+    >
+      <div class="editor-view__annotation-fields">
+        <label class="editor-view__mode-label" for="annotation-title">Title</label>
+        <InputText
+          id="annotation-title"
+          v-model="annotationTitleDraft"
+          class="w-full"
+          @keyup.enter="commitAnnotationChange"
+        />
+        <label class="editor-view__mode-label" for="annotation-description">Description</label>
+        <Textarea
+          id="annotation-description"
+          v-model="annotationDescriptionDraft"
+          class="w-full"
+          rows="3"
+          auto-resize
+        />
+        <label class="editor-view__mode-label" for="annotation-color">Color</label>
+        <ColorPicker id="annotation-color" v-model="annotationColor" />
+      </div>
+      <template #footer>
+        <Button label="OK" icon="pi pi-check" @click="commitAnnotationChange" />
+        <Button label="Close" severity="secondary" icon="pi pi-times" @click="closeAnnotationChange" />
+      </template>
+    </Dialog>
+
     <ConfirmPopup ref="confirmPopupRef" group="editor-delete" />
   </div>
 </template>
@@ -2021,6 +2118,27 @@ function closeElementChange() {
   width: 320px;
   max-width: 90vw;
   min-width: 0;
+}
+
+.editor-view__annotation-dialog {
+  width: 320px;
+  max-width: 90vw;
+  min-width: 0;
+}
+
+.editor-view__annotation-dialog .p-dialog-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-view__annotation-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.editor-view__annotation-fields label {
+  margin-top: 0.5rem;
 }
 
 .editor-view__timing-dialog .p-dialog-content {

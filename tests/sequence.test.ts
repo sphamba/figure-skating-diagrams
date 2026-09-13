@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { Curve } from "../src/engine/curve";
 import type { PathCoordinate, Time } from "../src/engine/coordinates";
+import { Annotation } from "../src/engine/annotation";
 import { FootKeyframe, TimingKeyframe } from "../src/engine/keyframe";
 import { Path } from "../src/engine/path";
 import { Quaternion } from "../src/engine/quaternion";
@@ -286,4 +287,57 @@ test("Legacy time keyframe entries load as time-type timing keyframes", () => {
   for (const keyframe of loaded.keyframes.time) expect(keyframe.kind).toBe("time");
   expect(loaded.keyframes.time[1]?.pathCoordinate).toBeCloseTo(1);
   expect(loaded.keyframes.time[1]?.value).toBeCloseTo(2);
+});
+
+test("Annotations round-trip through JSON", () => {
+  const sequence = new Sequence(makeStraightLengthOnePath());
+  sequence.addAnnotation(
+    new Annotation(0.25 as PathCoordinate, 0.75 as PathCoordinate, "Spiral", "long spiral", "#00ff00"),
+  );
+
+  const json = sequence.toJSON();
+  const loaded = Sequence.fromJSON(JSON.parse(JSON.stringify(json)));
+  expect(loaded.annotations).toHaveLength(1);
+  const annotation = loaded.annotations[0]!;
+  expect(annotation.start as number).toBeCloseTo(0.25);
+  expect(annotation.end as number).toBeCloseTo(0.75);
+  expect(annotation.title).toBe("Spiral");
+  expect(annotation.description).toBe("long spiral");
+  expect(annotation.color).toBe("#00ff00");
+  expect(loaded.toJSON()).toEqual(json);
+});
+
+test("Annotation fields fall back to the defaults when missing", () => {
+  const sequence = new Sequence(makeStraightLengthOnePath());
+  sequence.addAnnotation(new Annotation(0.25 as PathCoordinate, 0.5 as PathCoordinate));
+
+  expect(sequence.annotations).toHaveLength(1);
+  expect(sequence.annotations[0]!.title).toBe("Annotation");
+  expect(sequence.annotations[0]!.description).toBe("");
+  expect(sequence.annotations[0]!.color).toBe("#ffff00");
+
+  const json = sequence.toJSON();
+  const loaded = Sequence.fromJSON(JSON.parse(JSON.stringify(json)));
+  expect(loaded.annotations[0]!.title).toBe("Annotation");
+  expect(loaded.annotations[0]!.color).toBe("#ffff00");
+});
+
+test("A sequence without annotations loads when the list is absent", () => {
+  const sequence = new Sequence(makeStraightLengthOnePath());
+  const json = sequence.toJSON();
+  delete json.annotations;
+
+  const loaded = Sequence.fromJSON(json);
+  expect(loaded.annotations).toEqual([]);
+});
+
+test("removeAnnotation drops the annotation", () => {
+  const sequence = new Sequence(makeStraightLengthOnePath());
+  const annotation = new Annotation(0 as PathCoordinate, 0.5 as PathCoordinate);
+  sequence.addAnnotation(annotation);
+
+  sequence.removeAnnotation(annotation);
+
+  expect(sequence.annotations).toHaveLength(0);
+  expect(sequence.toJSON().annotations).toEqual([]);
 });

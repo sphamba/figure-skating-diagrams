@@ -2,6 +2,7 @@ import type { Curvilinear, Curve } from "../curve.js";
 import { type AxisRect } from "../curve.js";
 import { bladeLength } from "../constants.js";
 import type { PathCoordinate, Time } from "../coordinates.js";
+import { Annotation } from "../annotation.js";
 import type { Element } from "../element/element.js";
 import type { DynamicGlide } from "../element/stroke.js";
 import type { Path } from "../path.js";
@@ -17,6 +18,29 @@ const WARNING_TRIANGLE_COLOR = "#c25205";
 const WARNING_TRIANGLE_SIZE = 30; // px, side length of the filled warning triangle
 
 export type ControlPointKey = "p0" | "p1" | "p2" | "p3";
+
+export function annotationNeighbourBounds(
+  annotations: Annotation[],
+  start: number,
+  end: number,
+  exclude?: Annotation | ReadonlySet<Annotation> | null,
+): { left: number; right: number } {
+  let left = 0;
+  let right = Infinity;
+  for (const other of annotations) {
+    if (other === exclude || (exclude instanceof Set && exclude.has(other))) continue;
+    const os = Math.min(other.start as number, other.end as number);
+    const oe = Math.max(other.start as number, other.end as number);
+    if (oe <= start) left = Math.max(left, oe);
+    else if (os >= end) right = Math.min(right, os);
+  }
+  return { left, right };
+}
+
+// Clamps a dragged annotation span into the neighbour bounds, so annotations never overlap.
+export function clampAnnotationSpan(start: number, end: number, left: number, right: number): [number, number] {
+  return [Math.min(Math.max(start, left), right), Math.min(Math.max(end, left), right)];
+}
 
 const RINK_COLOR = "#ccc";
 const RINK_CENTERLINE_COLOR = "#fff";
@@ -65,6 +89,13 @@ const VIDEO_CIRCLE_RADIUS = 0.25; // m, half of the 0.5 m timestamp circle diame
 const VIDEO_CIRCLE_MIN_SIZE = 50; // px, minimum on-screen diameter when zoomed out
 const VIDEO_CIRCLE_FILL = "rgba(0, 0, 0, 0.15)";
 
+const ANNOTATION_SCALE = 0.6; // 0.3 m line width with the 30 px minimum on-screen when zoomed out
+const ANNOTATION_PICK_RADIUS = 15; // px, half of the 30 px highlight line diameter
+const ANNOTATION_BUTTON_GAP = 3; // px, screen gap between the button edge and the highlight band edge
+const ANNOTATION_ALPHA = 0.3;
+const ANNOTATION_OUTLINE_WIDTH = 2; // px on screen, each side of the highlight line
+const ANNOTATION_SELECTED_COLOR = "#d33";
+
 const MIN_ZOOM = 2;
 const MAX_ZOOM = 5000;
 const CANVAS_SCALE = 20; // canvas units per metre, editor drawing only
@@ -74,7 +105,7 @@ type ViewState = {
   zoom: number; // pixel per meter
 };
 
-export type EditMode = "view" | "path" | "elements" | "timing";
+export type EditMode = "view" | "path" | "elements" | "timing" | "annotations";
 
 export type ControlPointSelection = {
   sequence: Sequence;
@@ -88,6 +119,7 @@ type MoveSnapshot = {
   curveLengths: number[];
   items: Array<{ element: Element; start: number; end: number }>;
   timingKeyframes: Array<{ keyframe: TimingKeyframe; u0: number }>;
+  annotations: Array<{ annotation: Annotation; start: number; end: number }>;
 };
 
 type JointDeletionSnapshot = MoveSnapshot & {
@@ -112,6 +144,7 @@ export class Editor {
 
   private selectedPoints = new Map<Sequence, Set<string>>();
   onElementChangeRequest?: (element: Element) => void;
+  onAnnotationChangeRequest?: (annotation: Annotation) => void;
   onSequenceChange?: () => void;
   private sequenceMutated = false;
   private selectedCurves = new Map<Sequence, Set<number>>();
@@ -126,6 +159,19 @@ export class Editor {
   private provisionalOriginU = 0;
   private provisionalTimingKeyframes = new Map<Sequence, TimingKeyframe>();
   private selectedTimingKeyframes = new Set<TimingKeyframe>();
+  private provisionalAnnotations = new Map<Sequence, Annotation>();
+  private selectedAnnotations = new Set<Annotation>();
+  private isCreatingProvisionalAnnotation = false;
+  private annotationCreatingSequence: Sequence | null = null;
+  private provisionalAnnotationOriginU = 0;
+  private isDraggingAnnotationPoint = false;
+  private dragAnnotation: Annotation | null = null;
+  private dragAnnotationPointIsStart = false;
+  private isDraggingAnnotationSegment = false;
+  private annotationSegmentItems: Array<{ annotation: Annotation; start0: number; end0: number }> = [];
+  private annotationSegmentDeltaMin = -Infinity;
+  private annotationSegmentDeltaMax = Infinity;
+  private annotationSegmentGrabU = 0;
   private isCreatingProvisionalTiming = false;
   private timingCreatingSequence: Sequence | null = null;
   private timingDragGrabU = 0;
@@ -155,6 +201,7 @@ export class Editor {
   private rectAddToSelection = false;
   private rectTargetsElements = false;
   private rectTargetsTiming = false;
+  private rectTargetsAnnotations = false;
   private rectDidMove = false;
   private rectStartX = 0;
   private rectStartY = 0;
@@ -259,6 +306,14 @@ export class Editor {
     this.dragTimingItems = [];
     this.draggingTimingKeyframe = null;
     this.dragTimingSequence = null;
+    this.provisionalAnnotations.clear();
+    this.selectedAnnotations.clear();
+    this.isCreatingProvisionalAnnotation = false;
+    this.annotationCreatingSequence = null;
+    this.isDraggingAnnotationPoint = false;
+    this.isDraggingAnnotationSegment = false;
+    this.dragAnnotation = null;
+    this.annotationSegmentItems = [];
     this.draw();
   }
 
@@ -274,6 +329,33 @@ export class Editor {
       if (provisional === element) return sequence;
     }
     return null;
+  }
+
+  getSequenceOfAnnotation(annotation: Annotation): Sequence | null {
+    for (const sequence of this.sequences) {
+      if (sequence.annotations.includes(annotation)) return sequence;
+    }
+    for (const [sequence, provisional] of this.provisionalAnnotations) {
+      if (provisional === annotation) return sequence;
+    }
+    return null;
+  }
+
+  isProvisionalAnnotation(annotation: Annotation): boolean {
+    for (const provisional of this.provisionalAnnotations.values()) {
+      if (provisional === annotation) return true;
+    }
+    return false;
+  }
+
+  private ownedAnnotations(sequence: Sequence): Annotation[] {
+    const provisional = this.provisionalAnnotations.get(sequence);
+    return provisional ? [provisional, ...sequence.annotations] : [...sequence.annotations];
+  }
+
+  private getSingleSelectedAnnotation(): Annotation | null {
+    if (this.selectedAnnotations.size !== 1) return null;
+    return [...this.selectedAnnotations][0]!;
   }
 
   getSelectedPointsFor(sequence: Sequence): Set<string> {
@@ -299,12 +381,16 @@ export class Editor {
     this.selectedCurves.clear();
     this.selectedElements.clear();
     this.selectedTimingKeyframes.clear();
+    this.selectedAnnotations.clear();
     this.provisionalElements.clear();
     this.provisionalTimingKeyframes.clear();
+    this.provisionalAnnotations.clear();
     this.creatingSequence = null;
     this.isCreatingProvisional = false;
     this.timingCreatingSequence = null;
     this.isCreatingProvisionalTiming = false;
+    this.annotationCreatingSequence = null;
+    this.isCreatingProvisionalAnnotation = false;
   }
 
   replaceSelectedElement(oldElement: Element, newElement: Element) {
@@ -332,8 +418,10 @@ export class Editor {
     ctx.clearRect(0, 0, this.width, this.height);
     this.transformContext();
     this.drawRink();
-    // The time cursor stays behind everything else: it draws over the rink
-    // before the paths, traces, and elements draw above it.
+    // Annotations render just above the rink, behind everything else, in every mode.
+    this.drawAnnotations();
+    // The time cursor stays behind everything else: it draws over the rink and the
+    // annotations, before the paths, traces, and elements draw above it.
     this.drawVideoCircle();
     if (this.mode !== "view") {
       for (const sequence of this.sequences) {
@@ -359,12 +447,17 @@ export class Editor {
       this.drawTimingButtons();
       this.drawTimingTimeLabels();
       this.drawTimingBeatLabels();
+    } else if (this.mode === "annotations") {
+      this.drawAnnotationButtons();
     }
     if (this.mode === "path" || this.mode === "elements") {
       this.drawCurvatureWarnings();
     }
     for (const sequence of this.sequences) {
       this.drawElementLabels(sequence);
+    }
+    for (const sequence of this.sequences) {
+      this.drawAnnotationLabels(sequence);
     }
     this.drawInflectionLabels();
     this.drawStartLabels();
@@ -388,6 +481,10 @@ export class Editor {
 
   private getVideoCircleRadius(): number {
     return Math.max(VIDEO_CIRCLE_RADIUS, VIDEO_CIRCLE_MIN_SIZE / 2 / this.view.zoom);
+  }
+
+  private getAnnotationLineWidth(): number {
+    return 2 * this.getVideoCircleRadius() * ANNOTATION_SCALE;
   }
 
   private setTimeCursorToElementCenter(element: Element) {
@@ -437,6 +534,355 @@ export class Editor {
       ctx.arc(circle.point.x, -circle.point.y, this.getVideoCircleRadius(), 0, 2 * Math.PI);
       ctx.fill();
     });
+  }
+
+  private drawAnnotations() {
+    // Inside drawMetres the stroke width is read in metres, so no CANVAS_SCALE conversion: the linewidth is already in metres.
+    const lineWidth = this.getAnnotationLineWidth();
+    for (const sequence of this.sequences) {
+      if (sequence.path.curves.length === 0) continue;
+      for (const annotation of sequence.annotations) {
+        this.drawAnnotationHighlight(sequence, annotation, lineWidth, this.selectedAnnotations.has(annotation), false);
+      }
+      const provisional = this.provisionalAnnotations.get(sequence);
+      if (provisional) {
+        this.drawAnnotationHighlight(sequence, provisional, lineWidth, false, true);
+      }
+    }
+  }
+
+  private drawAnnotationHighlight(
+    sequence: Sequence,
+    annotation: Annotation,
+    lineWidth: number,
+    selected: boolean,
+    provisional: boolean,
+  ) {
+    const path = sequence.path;
+    const span = this.clampedAnnotationSpan(sequence, annotation);
+    if (span.hi <= span.lo) return;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.lineCap = "butt"; // square ends
+    if (selected) {
+      ctx.strokeStyle = ANNOTATION_SELECTED_COLOR;
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = lineWidth + (2 * ANNOTATION_OUTLINE_WIDTH) / this.view.zoom;
+      this.drawMetres(() => path.drawRange(ctx, span.lo as PathCoordinate, span.hi as PathCoordinate));
+    }
+    ctx.strokeStyle = provisional ? PROVISIONAL_COLOR : annotation.color;
+    ctx.globalAlpha = ANNOTATION_ALPHA;
+    ctx.lineWidth = lineWidth;
+    this.drawMetres(() => path.drawRange(ctx, span.lo as PathCoordinate, span.hi as PathCoordinate));
+    ctx.restore();
+    if (selected) {
+      // Red circular handles at the ends, same size as for elements, to indicate that they can be dragged.
+      const nodeSize = (NODE_SIZE * CANVAS_SCALE) / this.view.zoom;
+      ctx.fillStyle = ANNOTATION_SELECTED_COLOR;
+      for (const u of [span.lo, span.hi]) {
+        const point = path.getPosition(u as PathCoordinate);
+        ctx.beginPath();
+        ctx.arc(point.x * CANVAS_SCALE, -point.y * CANVAS_SCALE, nodeSize / 2, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    }
+  }
+
+  private clampedAnnotationSpan(sequence: Sequence, annotation: Annotation): { lo: number; hi: number } {
+    const pathLength = sequence.path.length;
+    const lo = Math.max(0, Math.min(annotation.start as number, annotation.end as number));
+    const hi = Math.min(pathLength, Math.max(annotation.start as number, annotation.end as number));
+    return { lo, hi };
+  }
+
+  private annotationBounds(
+    sequence: Sequence,
+    start: number,
+    end: number,
+    exclude?: Annotation | ReadonlySet<Annotation> | null,
+  ): { left: number; right: number } {
+    const bounds = annotationNeighbourBounds(sequence.annotations, start, end, exclude);
+    return { left: bounds.left, right: Math.min(bounds.right, sequence.path.length) };
+  }
+
+  private getAnnotationPoints(sequence: Sequence, annotation: Annotation): Vector<2>[] {
+    const path = sequence.path;
+    const { lo, hi } = this.clampedAnnotationSpan(sequence, annotation);
+    const span = hi - lo;
+    const step = Math.min(ELEMENT_DRAW_INCREMENT, span / 4) || ELEMENT_DRAW_INCREMENT;
+    const points: Vector<2>[] = [];
+    for (let u = lo; u <= hi; u += step) {
+      points.push(path.getPosition(u as PathCoordinate));
+    }
+    return points;
+  }
+
+  private selectableAnnotations(sequence: Sequence): Annotation[] {
+    const provisional = this.provisionalAnnotations.get(sequence);
+    const annotations = [...sequence.annotations];
+    if (provisional) annotations.push(provisional);
+    return annotations;
+  }
+
+  private selectAnnotation(annotation: Annotation, ctrlKey: boolean) {
+    if (ctrlKey) {
+      if (this.selectedAnnotations.has(annotation)) this.selectedAnnotations.delete(annotation);
+      else this.selectedAnnotations.add(annotation);
+    } else if (!this.selectedAnnotations.has(annotation)) {
+      this.selectedAnnotations = new Set([annotation]);
+    }
+  }
+
+  private pickAnnotation(screenX: number, screenY: number): Annotation | null {
+    const cursor = this.screenToWorld(screenX, screenY);
+    const tolerance = ANNOTATION_PICK_RADIUS / this.view.zoom;
+    let best: Annotation | null = null;
+    let bestDistance = Infinity;
+    for (const sequence of this.sequences) {
+      for (const annotation of this.selectableAnnotations(sequence)) {
+        const points = this.getAnnotationPoints(sequence, annotation);
+        if (points.length === 0) continue;
+        for (const point of [points[0], points[points.length - 1]]) {
+          if (!point) continue;
+          const distance = point.minus(cursor).length();
+          if (distance <= tolerance && distance < bestDistance) {
+            bestDistance = distance;
+            best = annotation;
+          }
+        }
+        for (let i = 0; i < points.length - 1; i++) {
+          const distance = distanceToSegment(cursor, points[i]!, points[i + 1]!);
+          if (distance <= tolerance && distance < bestDistance) {
+            bestDistance = distance;
+            best = annotation;
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  private pickAnnotationControlPoint(
+    screenX: number,
+    screenY: number,
+  ): { annotation: Annotation; isStart: boolean } | null {
+    const cursor = this.screenToWorld(screenX, screenY);
+    const tolerance = ANNOTATION_PICK_RADIUS / this.view.zoom;
+    let best: { annotation: Annotation; isStart: boolean } | null = null;
+    let bestDistance = Infinity;
+    for (const sequence of this.sequences) {
+      for (const annotation of this.selectableAnnotations(sequence)) {
+        const points = this.getAnnotationPoints(sequence, annotation);
+        if (points.length === 0) continue;
+        for (const [isStart, point] of [
+          [true, points[0]!],
+          [false, points[points.length - 1]!],
+        ] as Array<[boolean, Vector<2>]>) {
+          const distance = point.minus(cursor).length();
+          if (distance <= tolerance && distance <= bestDistance) {
+            bestDistance = distance;
+            best = { annotation, isStart };
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  private snapAnnotationPointToPath(
+    annotation: Annotation,
+    isStart: boolean,
+    cursor: Vector<2>,
+  ): PathCoordinate | null {
+    const sequence = this.getSequenceOfAnnotation(annotation);
+    if (!sequence) return null;
+    const path = sequence.path;
+    if (path.curves.length === 0) return null;
+    const u = this.snapCursorToPathAnywhere(sequence, cursor);
+    if (u == null) return null;
+    let clamped = Math.max(0, Math.min(path.length, u));
+    const other = (isStart ? annotation.end : annotation.start) as number;
+    clamped = isStart ? Math.min(clamped, other) : Math.max(clamped, other);
+    const { left, right } = this.annotationBounds(
+      sequence,
+      Math.min(annotation.start as number, annotation.end as number),
+      Math.max(annotation.start as number, annotation.end as number),
+      annotation,
+    );
+    clamped = isStart ? Math.max(clamped, left) : Math.min(clamped, right);
+    return clamped as PathCoordinate;
+  }
+
+  private startAnnotationSegmentDrag(annotation: Annotation, screenX: number, screenY: number) {
+    const sequence = this.getSequenceOfAnnotation(annotation);
+    if (!sequence || sequence.path.curves.length === 0) return;
+    const cursor = this.screenToWorld(screenX, screenY);
+    const anchorIndex = this.curveIndexAt(sequence.path, annotation.start as number);
+    const grabbedU = this.snapCursorToPathNearCurve(sequence, anchorIndex, cursor);
+    if (grabbedU == null) return;
+
+    const lo = Math.min(annotation.start as number, annotation.end as number);
+    const hi = Math.max(annotation.start as number, annotation.end as number);
+    const clampedGrab = Math.min(Math.max(grabbedU as number, lo), hi);
+
+    this.isDraggingAnnotationSegment = true;
+    this.dragAnnotation = annotation;
+    this.annotationSegmentGrabU = clampedGrab;
+
+    const moving = new Set<Annotation>([annotation]);
+    if (
+      !this.isProvisionalAnnotation(annotation) &&
+      this.selectedAnnotations.has(annotation) &&
+      this.selectedAnnotations.size > 1
+    ) {
+      for (const selected of this.selectedAnnotations) moving.add(selected);
+    }
+
+    this.annotationSegmentItems = [];
+    let dMin = -Infinity;
+    let dMax = Infinity;
+    for (const moved of moving) {
+      const movedSequence = this.getSequenceOfAnnotation(moved);
+      if (!movedSequence) continue;
+      const s0 = Math.min(moved.start as number, moved.end as number);
+      const e0 = Math.max(moved.start as number, moved.end as number);
+      this.annotationSegmentItems.push({ annotation: moved, start0: s0, end0: e0 });
+      const bounds = this.annotationBounds(movedSequence, s0, e0, moving);
+      const left = Math.min(bounds.left, s0);
+      const right = Math.min(bounds.right, movedSequence.path.length);
+      dMin = Math.max(dMin, -movedSequence.path.arcLengthBetween(left as PathCoordinate, s0 as PathCoordinate));
+      dMax = Math.min(dMax, movedSequence.path.arcLengthBetween(e0 as PathCoordinate, right as PathCoordinate));
+    }
+    this.annotationSegmentDeltaMin = dMin;
+    this.annotationSegmentDeltaMax = dMax;
+  }
+
+  private startProvisionalAnnotationCreation(sequence: Sequence, u: number) {
+    this.placeProvisionalAnnotation(sequence, u);
+    this.isCreatingProvisionalAnnotation = true;
+    this.annotationCreatingSequence = sequence;
+    this.provisionalAnnotationOriginU = u;
+  }
+
+  private placeProvisionalAnnotation(sequence: Sequence, u: number) {
+    const half = PROVISIONAL_TOTAL_LENGTH / 2;
+    this.setProvisionalAnnotationSpan(sequence, u - half, u + half);
+  }
+
+  private updateProvisionalAnnotationCreation(cursor: Vector<2>) {
+    const sequence = this.annotationCreatingSequence;
+    if (!sequence) return;
+    const provisional = this.provisionalAnnotations.get(sequence);
+    if (!provisional || sequence.path.curves.length === 0) return;
+    const u = this.snapCursorToPathAnywhere(sequence, cursor);
+    if (u == null) return;
+    const origin = this.provisionalAnnotationOriginU;
+    if (Math.abs(u - origin) < 1e-9) {
+      this.placeProvisionalAnnotation(sequence, origin);
+    } else {
+      this.setProvisionalAnnotationSpan(sequence, Math.min(origin, u), Math.max(origin, u), origin);
+    }
+  }
+
+  private setProvisionalAnnotationSpan(sequence: Sequence, start: number, end: number, anchor?: number) {
+    const path = sequence.path;
+    if (path.curves.length === 0) return;
+    const clampedStart = Math.max(0, start);
+    const clampedEnd = Math.min(path.length, end);
+    const mid = anchor ?? (clampedStart + clampedEnd) / 2;
+    const existing = this.provisionalAnnotations.get(sequence) ?? null;
+    let left = 0;
+    let right = path.length;
+    for (const other of sequence.annotations) {
+      if (other === existing) continue;
+      const os = Math.min(other.start as number, other.end as number);
+      const oe = Math.max(other.start as number, other.end as number);
+      if (oe <= mid) left = Math.max(left, oe);
+      else right = Math.min(right, os);
+    }
+    const lo = Math.max(clampedStart, left);
+    const hi = Math.min(clampedEnd, right);
+    const finalStart = Math.min(lo, hi);
+    if (!existing) {
+      this.provisionalAnnotations.set(sequence, new Annotation(finalStart as PathCoordinate, hi as PathCoordinate));
+    } else {
+      existing.start = finalStart as PathCoordinate;
+      existing.end = hi as PathCoordinate;
+    }
+    this.selectedAnnotations = new Set(
+      [...this.selectedAnnotations].filter((item) => this.getSequenceOfAnnotation(item) !== sequence),
+    );
+    this.requestDraw();
+  }
+
+  commitProvisionalAnnotation(annotation: Annotation): Sequence | null {
+    const sequence = this.getSequenceOfAnnotation(annotation);
+    if (!sequence || !this.isProvisionalAnnotation(annotation)) return null;
+    this.provisionalAnnotations.delete(sequence);
+    this.annotationCreatingSequence = null;
+    this.isCreatingProvisionalAnnotation = false;
+    sequence.addAnnotation(annotation);
+    this.notifySequenceChange();
+    this.draw();
+    return sequence;
+  }
+
+  private annotationButtonOffset(): number {
+    return this.getAnnotationLineWidth() / 2 + (DELETE_BUTTON_RADIUS + ANNOTATION_BUTTON_GAP) / this.view.zoom;
+  }
+
+  private drawAnnotationButtons() {
+    const offset = this.annotationButtonOffset();
+    for (const [sequence, provisional] of this.provisionalAnnotations) {
+      if (sequence.path.curves.length === 0) continue;
+      const geometry = this.midpointNormal(sequence, provisional);
+      if (!geometry) continue;
+      this.drawPlusInCircleWithColor(geometry.point.plus(geometry.perp.times(-offset)), PROVISIONAL_COLOR);
+    }
+    const selected = this.getSingleSelectedAnnotation();
+    if (!selected || this.isProvisionalAnnotation(selected)) return;
+    const owner = this.getSequenceOfAnnotation(selected);
+    if (!owner || owner.path.curves.length === 0) return;
+    const geometry = this.midpointNormal(owner, selected);
+    if (!geometry) return;
+    this.drawMinusInCircle(geometry.point.plus(geometry.perp.times(offset)));
+    this.drawCogInCircle(geometry.point.plus(geometry.perp.times(-offset)));
+  }
+
+  private hitAnnotationActionButton(annotation: Annotation, side: 1 | -1, screenX: number, screenY: number): boolean {
+    const owner = this.getSequenceOfAnnotation(annotation);
+    if (!owner || owner.path.curves.length === 0) return false;
+    const geometry = this.midpointNormal(owner, annotation);
+    if (!geometry) return false;
+    const offset = this.annotationButtonOffset();
+    const [iconX, iconY] = this.worldToScreen(geometry.point.plus(geometry.perp.times(offset * side)));
+    return Math.hypot(screenX - iconX, screenY - iconY) <= DELETE_BUTTON_HIT_RADIUS;
+  }
+
+  private hitProvisionalAnnotationPlus(screenX: number, screenY: number): Annotation | null {
+    for (const [sequence, provisional] of this.provisionalAnnotations) {
+      if (sequence.path.curves.length === 0) continue;
+      if (this.hitAnnotationActionButton(provisional, -1, screenX, screenY)) return provisional;
+    }
+    return null;
+  }
+
+  private getAnnotationActionButtonAnnotation(): Annotation | null {
+    const selected = this.getSingleSelectedAnnotation();
+    if (!selected || this.isProvisionalAnnotation(selected)) return null;
+    return selected;
+  }
+
+  private hitAnnotationCogButton(screenX: number, screenY: number): boolean {
+    const selected = this.getAnnotationActionButtonAnnotation();
+    if (!selected) return false;
+    return this.hitAnnotationActionButton(selected, -1, screenX, screenY);
+  }
+
+  private hitAnnotationDeleteButton(screenX: number, screenY: number): boolean {
+    const selected = this.getAnnotationActionButtonAnnotation();
+    if (!selected) return false;
+    return this.hitAnnotationActionButton(selected, 1, screenX, screenY);
   }
 
   private drawTraces() {
@@ -539,7 +985,7 @@ export class Editor {
     const pathColor = this.mode === "elements" ? ELEMENTS_PATH_COLOR : undefined;
     const minDrawIncrement = MIN_DRAW_INCREMENT / this.view.zoom;
     const viewport = this.getTraceViewport(minBladeLength);
-    if ((this.mode === "path" || this.mode === "timing") && !pathColor) {
+    if ((this.mode === "path" || this.mode === "timing" || this.mode === "annotations") && !pathColor) {
       this.drawMetres(() => sequence.drawPath(this.ctx, pathWidth, 0 as PathCoordinate, undefined, pathColor));
       this.ctx.globalAlpha = 0.3;
       this.drawMetres(() =>
@@ -1109,9 +1555,16 @@ export class Editor {
     ctx.fillText(text, point.x * CANVAS_SCALE, -point.y * CANVAS_SCALE);
   }
 
-  private drawShiftedLabel(text: string, point: Vector<2>, outside: Vector<2>, fontSize = LABEL_FONT_SIZE) {
+  private drawShiftedLabel(
+    text: string,
+    point: Vector<2>,
+    outside: Vector<2>,
+    fontSize = LABEL_FONT_SIZE,
+    extraOffset = 0,
+  ) {
     const ctx = this.ctx;
-    const offset = (LABEL_OFFSET * CANVAS_SCALE) / this.view.zoom; // px -> canvas units
+    // extraOffset comes in metres, scaled the same way as the px offset.
+    const offset = (LABEL_OFFSET * CANVAS_SCALE) / this.view.zoom + extraOffset * CANVAS_SCALE; // px -> canvas units
 
     ctx.font = `${(fontSize * CANVAS_SCALE) / this.view.zoom}px sans-serif`;
     ctx.fillStyle = "#000";
@@ -1134,6 +1587,26 @@ export class Editor {
   private drawStartLabels() {
     for (const sequence of this.sequences) {
       this.drawStartLabel(sequence);
+    }
+  }
+
+  private drawAnnotationLabels(sequence: Sequence) {
+    if (sequence.path.curves.length === 0) return;
+    const ctx = this.ctx;
+    const annotations = [...sequence.annotations];
+    const provisional = this.provisionalAnnotations.get(sequence);
+    if (provisional) annotations.push(provisional);
+    for (const annotation of annotations) {
+      const { lo, hi } = this.clampedAnnotationSpan(sequence, annotation);
+      if (hi <= lo) continue;
+      const geometry = this.getLabelGeometryAt(sequence.path, ((lo + hi) / 2) as PathCoordinate);
+      if (!geometry) continue;
+      // The title clears the highlight band before the normal label offset.
+      const extraOffset = this.getAnnotationLineWidth() / 2 + ANNOTATION_BUTTON_GAP / this.view.zoom;
+      const previousAlpha = ctx.globalAlpha;
+      ctx.globalAlpha = previousAlpha * 0.3;
+      this.drawShiftedLabel(annotation.title, geometry.point, geometry.outside, LABEL_FONT_SIZE, extraOffset);
+      ctx.globalAlpha = previousAlpha;
     }
   }
 
@@ -1617,11 +2090,14 @@ export class Editor {
     return this.midpointNormal(sequence, element);
   }
 
-  private midpointNormal(sequence: Sequence, element: Element): { point: Vector<2>; perp: Vector<2> } | null {
+  private midpointNormal(
+    sequence: Sequence,
+    spanned: { start: PathCoordinate; end: PathCoordinate },
+  ): { point: Vector<2>; perp: Vector<2> } | null {
     const path = sequence.path;
     if (path.curves.length === 0) return null;
-    const lo = Math.min(element.start as number, element.end as number);
-    const hi = Math.max(element.start as number, element.end as number);
+    const lo = Math.min(spanned.start as number, spanned.end as number);
+    const hi = Math.max(spanned.start as number, spanned.end as number);
     const midU = ((lo + hi) / 2) as PathCoordinate;
     const [curve, curvilinear] = path.getCurveAndCurvilinearCoord(midU);
     const point = curve.getPosition(curvilinear);
@@ -2239,6 +2715,69 @@ export class Editor {
       return;
     }
 
+    if (this.mode === "annotations") {
+      const plusHit = this.hitProvisionalAnnotationPlus(screenX, screenY);
+      if (plusHit) {
+        this.onAnnotationChangeRequest?.(plusHit);
+        return;
+      }
+      if (this.hitAnnotationCogButton(screenX, screenY) && this.onAnnotationChangeRequest) {
+        const annotation = this.getAnnotationActionButtonAnnotation();
+        if (annotation) this.onAnnotationChangeRequest(annotation);
+        return;
+      }
+      if (this.hitAnnotationDeleteButton(screenX, screenY)) {
+        const annotation = this.getAnnotationActionButtonAnnotation();
+        if (annotation) {
+          const sequence = this.getSequenceOfAnnotation(annotation);
+          if (sequence) sequence.removeAnnotation(annotation);
+          this.selectedAnnotations.delete(annotation);
+          this.notifySequenceChange();
+          this.draw();
+        }
+        return;
+      }
+      const annotation = this.pickAnnotation(screenX, screenY);
+      if (annotation) {
+        const isProvisional = this.isProvisionalAnnotation(annotation);
+        if (!isProvisional) {
+          const owner = this.getSequenceOfAnnotation(annotation);
+          if (owner) this.provisionalAnnotations.delete(owner);
+          this.selectAnnotation(annotation, ctrlKey);
+        }
+        const pointHit = this.pickAnnotationControlPoint(screenX, screenY);
+        if (pointHit?.annotation === annotation) {
+          this.isDraggingAnnotationPoint = true;
+          this.dragAnnotation = annotation;
+          this.dragAnnotationPointIsStart = pointHit.isStart;
+        } else {
+          this.startAnnotationSegmentDrag(annotation, screenX, screenY);
+        }
+      } else {
+        const pathHit = this.pickPathCoordinate(screenX, screenY);
+        if (pathHit) {
+          this.startProvisionalAnnotationCreation(pathHit.sequence, pathHit.u);
+        } else {
+          if (this.hitVideoCircle(screenX, screenY)) {
+            this.isDraggingVideoCircle = true;
+            return;
+          }
+          this.isSelectingRect = true;
+          this.rectDidMove = false;
+          this.rectTargetsAnnotations = true;
+          this.rectAddToSelection = ctrlKey;
+          this.rectStartX = screenX;
+          this.rectStartY = screenY;
+          this.rectEndX = screenX;
+          this.rectEndY = screenY;
+        }
+        this.draw();
+        return;
+      }
+      this.draw();
+      return;
+    }
+
     if (this.mode !== "path") {
       const provisionalPlusHit = this.hitProvisionalPlusButton(screenX, screenY);
       if (provisionalPlusHit) {
@@ -2451,6 +2990,52 @@ export class Editor {
       return;
     }
 
+    if (this.isCreatingProvisionalAnnotation) {
+      this.updateProvisionalAnnotationCreation(this.screenToWorld(screenX, screenY));
+      return;
+    }
+
+    if (this.isDraggingAnnotationPoint && this.dragAnnotation) {
+      const world = this.screenToWorld(screenX, screenY);
+      const u = this.snapAnnotationPointToPath(this.dragAnnotation, this.dragAnnotationPointIsStart, world);
+      if (u != null) {
+        if (this.dragAnnotationPointIsStart) this.dragAnnotation.start = u;
+        else this.dragAnnotation.end = u;
+        this.sequenceMutated = true;
+      }
+      this.requestDraw();
+      return;
+    }
+
+    if (this.isDraggingAnnotationSegment) {
+      const dragSequence = this.dragAnnotation ? this.getSequenceOfAnnotation(this.dragAnnotation) : null;
+      if (!dragSequence) return;
+      const world = this.screenToWorld(screenX, screenY);
+      const currentGrab = this.snapCursorToPathAnywhere(dragSequence, world);
+      if (currentGrab != null) {
+        const delta =
+          (currentGrab as number) >= this.annotationSegmentGrabU
+            ? dragSequence.path.arcLengthBetween(
+                this.annotationSegmentGrabU as PathCoordinate,
+                currentGrab as PathCoordinate,
+              )
+            : -dragSequence.path.arcLengthBetween(
+                currentGrab as PathCoordinate,
+                this.annotationSegmentGrabU as PathCoordinate,
+              );
+        const clamped = Math.min(Math.max(delta, this.annotationSegmentDeltaMin), this.annotationSegmentDeltaMax);
+        for (const item of this.annotationSegmentItems) {
+          const sequence = this.getSequenceOfAnnotation(item.annotation);
+          if (!sequence) continue;
+          item.annotation.start = sequence.path.moveAlongByArcLength(item.start0 as PathCoordinate, clamped);
+          item.annotation.end = sequence.path.moveAlongByArcLength(item.end0 as PathCoordinate, clamped);
+        }
+        this.sequenceMutated = true;
+      }
+      this.requestDraw();
+      return;
+    }
+
     if (this.isDraggingElementPoint) {
       if (!this.dragElement) return;
       const world = this.screenToWorld(screenX, screenY);
@@ -2635,6 +3220,10 @@ export class Editor {
       this.finishTimingSelectionRectangle();
       return;
     }
+    if (this.rectTargetsAnnotations) {
+      this.finishAnnotationSelectionRectangle();
+      return;
+    }
     if (this.rectTargetsElements) {
       this.finishElementSelectionRectangle();
       return;
@@ -2697,6 +3286,33 @@ export class Editor {
     this.provisionalElements.clear();
   }
 
+  private finishAnnotationSelectionRectangle() {
+    const x0 = Math.min(this.rectStartX, this.rectEndX);
+    const x1 = Math.max(this.rectStartX, this.rectEndX);
+    const y0 = Math.min(this.rectStartY, this.rectEndY);
+    const y1 = Math.max(this.rectStartY, this.rectEndY);
+
+    const hits = new Set<Annotation>();
+    if (this.rectAddToSelection) {
+      for (const annotation of this.selectedAnnotations) hits.add(annotation);
+    }
+    for (const sequence of this.sequences) {
+      for (const annotation of this.selectableAnnotations(sequence)) {
+        const inside = this.getAnnotationPoints(sequence, annotation).some((point) => {
+          const [screenX, screenY] = this.worldToScreen(point);
+          return screenX >= x0 && screenX <= x1 && screenY >= y0 && screenY <= y1;
+        });
+        if (inside) hits.add(annotation);
+      }
+    }
+    this.selectedAnnotations = hits;
+    this.selectedPoints.clear();
+    this.selectedCurves.clear();
+    this.selectedElements.clear();
+    this.selectedTimingKeyframes.clear();
+    this.provisionalElements.clear();
+  }
+
   private finishElementSelectionRectangle() {
     const x0 = Math.min(this.rectStartX, this.rectEndX);
     const x1 = Math.max(this.rectStartX, this.rectEndX);
@@ -2743,7 +3359,7 @@ export class Editor {
     return provisional ? [provisional, ...sequence.keyframes.time] : [...sequence.keyframes.time];
   }
 
-  private makeItemsAndKeyframes(sequence: Sequence): Pick<MoveSnapshot, "items" | "timingKeyframes"> {
+  private makeItemsAndKeyframes(sequence: Sequence): Pick<MoveSnapshot, "items" | "timingKeyframes" | "annotations"> {
     const items: Array<{ element: Element; start: number; end: number }> = [];
     for (const element of this.selectableElements(sequence)) {
       items.push({ element, start: element.start as number, end: element.end as number });
@@ -2752,7 +3368,11 @@ export class Editor {
     for (const keyframe of this.ownedTimingKeyframes(sequence)) {
       timingKeyframes.push({ keyframe, u0: keyframe.pathCoordinate as number });
     }
-    return { items, timingKeyframes };
+    const annotations: Array<{ annotation: Annotation; start: number; end: number }> = [];
+    for (const annotation of this.ownedAnnotations(sequence)) {
+      annotations.push({ annotation, start: annotation.start as number, end: annotation.end as number });
+    }
+    return { items, timingKeyframes, annotations };
   }
 
   private makeMoveSnapshots(sequences: Iterable<Sequence>) {
@@ -2808,6 +3428,23 @@ export class Editor {
     for (const item of snapshot.timingKeyframes) {
       item.keyframe.pathCoordinate = remapUniformAtJoint(
         item.u0,
+        snapshot.curveStarts,
+        snapshot.curveLengths,
+        newCurveStarts,
+        newCurveLengths,
+      ) as PathCoordinate;
+    }
+
+    for (const item of snapshot.annotations) {
+      item.annotation.start = remapUniformAtJoint(
+        item.start,
+        snapshot.curveStarts,
+        snapshot.curveLengths,
+        newCurveStarts,
+        newCurveLengths,
+      ) as PathCoordinate;
+      item.annotation.end = remapUniformAtJoint(
+        item.end,
         snapshot.curveStarts,
         snapshot.curveLengths,
         newCurveStarts,
@@ -2873,6 +3510,27 @@ export class Editor {
         2,
       ) as PathCoordinate;
     }
+
+    for (const item of snapshot.annotations) {
+      item.annotation.start = remapUniformAtRemoval(
+        item.start,
+        snapshot.curveStarts,
+        snapshot.curveLengths,
+        curveStarts,
+        curveLengths,
+        snapshot.jointOldIndex,
+        2,
+      ) as PathCoordinate;
+      item.annotation.end = remapUniformAtRemoval(
+        item.end,
+        snapshot.curveStarts,
+        snapshot.curveLengths,
+        curveStarts,
+        curveLengths,
+        snapshot.jointOldIndex,
+        2,
+      ) as PathCoordinate;
+    }
     this.jointDeletionSnapshot = null;
   }
 
@@ -2907,6 +3565,9 @@ export class Editor {
       } else if (this.rectTargetsTiming) {
         this.provisionalTimingKeyframes.clear();
         this.selectedTimingKeyframes.clear();
+      } else if (this.rectTargetsAnnotations) {
+        this.provisionalAnnotations.clear();
+        this.selectedAnnotations.clear();
       }
       this.isSelectingRect = false;
     }
@@ -2924,6 +3585,12 @@ export class Editor {
     this.draggingTimingKeyframe = null;
     this.dragTimingSequence = null;
     this.dragTimingItems = [];
+    this.isDraggingAnnotationPoint = false;
+    this.isDraggingAnnotationSegment = false;
+    this.isCreatingProvisionalAnnotation = false;
+    this.annotationCreatingSequence = null;
+    this.dragAnnotation = null;
+    this.annotationSegmentItems = [];
     this.dragSnapshots.clear();
     this.dragElement = null;
     this.dragSequence = null;
