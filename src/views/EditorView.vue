@@ -513,7 +513,7 @@ const store = useSequenceEditorStore();
 
 const sequences = computed(() => store.getSequences());
 const activeSequence = computed(() => store.getActiveSequence());
-const visibleSequences = computed(() => sequences.value.filter((sequence) => store.isVisible(sequence)));
+const hiddenSequenceSet = computed(() => new Set(sequences.value.filter((sequence) => !store.isVisible(sequence))));
 const diagramName = computed({
   get: () => store.getDiagram().name,
   set: (value) => store.setDiagramName(value),
@@ -916,9 +916,10 @@ watch(
 
 onMounted(() => {
   if (!canvasRef.value) return;
-  if (visibleSequences.value.length === 0) return;
-  const editorInstance = new Editor(canvasRef.value, visibleSequences.value);
+  if (sequences.value.length === 0) return;
+  const editorInstance = new Editor(canvasRef.value, sequences.value);
   editor = editorInstance;
+  editorInstance.setHiddenSequences(hiddenSequenceSet.value);
 
   editorInstance.onVideoTimeChange = (seconds) => setTimestamp(seconds);
   editorInstance.activeSequence = activeSequence.value;
@@ -954,12 +955,15 @@ onMounted(() => {
   };
 });
 
-let previousVisibleSequences: Sequence[] = [];
-watch(visibleSequences, (list) => {
-  const sameMembers =
-    list.length === previousVisibleSequences.length && list.every((s, i) => s === previousVisibleSequences[i]);
-  previousVisibleSequences = list;
+let previousSequences: Sequence[] = [];
+watch(sequences, (list) => {
+  const sameMembers = list.length === previousSequences.length && list.every((s, i) => s === previousSequences[i]);
+  previousSequences = list;
   if (!sameMembers && editor) editor.setSequences(list);
+});
+
+watch(hiddenSequenceSet, (next) => {
+  editor?.setHiddenSequences(next);
 });
 
 watch([videoTime, activeSequence] as const, () => {

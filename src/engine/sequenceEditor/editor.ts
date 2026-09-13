@@ -16,6 +16,7 @@ import { Vector } from "../vector.js";
 
 const WARNING_TRIANGLE_COLOR = "#c25205";
 const WARNING_TRIANGLE_SIZE = 30; // px, side length of the filled warning triangle
+const HIDDEN_SEQUENCE_ALPHA = 0.3; // hidden sequences keep their foot traces at this opacity
 
 export type ControlPointKey = "p0" | "p1" | "p2" | "p3";
 
@@ -138,6 +139,7 @@ export class Editor {
   activeSequence: Sequence | null = null;
   bpm: number = DEFAULT_BPM;
   videoTimeSeconds: number | null = null;
+  hiddenSequences: Set<Sequence> = new Set();
   onVideoTimeChange?: (seconds: number) => void;
   private isDraggingVideoCircle = false;
   private view: ViewState;
@@ -288,6 +290,11 @@ export class Editor {
   setSequences(sequences: Sequence[]) {
     this.sequences = sequences;
     this.sequenceMutated = false;
+    this.clearEditingState();
+    this.draw();
+  }
+
+  private clearEditingState() {
     this.dragSnapshots.clear();
     this.jointDeletionSnapshot = null;
     this.selectedPoints.clear();
@@ -299,6 +306,12 @@ export class Editor {
     this.dragSequence = null;
     this.dragElement = null;
     this.touchMode = "none";
+    this.isDraggingVideoCircle = false;
+    this.isDraggingPoint = false;
+    this.isDraggingCurve = false;
+    this.isDraggingTimingPoint = false;
+    this.isDraggingElementPoint = false;
+    this.isDraggingElementSegment = false;
     this.provisionalTimingKeyframes.clear();
     this.selectedTimingKeyframes.clear();
     this.isCreatingProvisionalTiming = false;
@@ -314,7 +327,17 @@ export class Editor {
     this.isDraggingAnnotationSegment = false;
     this.dragAnnotation = null;
     this.annotationSegmentItems = [];
+  }
+
+  setHiddenSequences(next: Set<Sequence>) {
+    const hasNewlyHidden = this.sequences.some((sequence) => next.has(sequence) && !this.hiddenSequences.has(sequence));
+    this.hiddenSequences = next;
+    if (hasNewlyHidden) this.clearEditingState();
     this.draw();
+  }
+
+  private editSequences(): Sequence[] {
+    return this.sequences.filter((sequence) => !this.hiddenSequences.has(sequence));
   }
 
   getSequences(): Sequence[] {
@@ -430,7 +453,7 @@ export class Editor {
     }
     this.drawSelectedCurves();
     if (this.mode === "path") {
-      for (const sequence of this.sequences) {
+      for (const sequence of this.editSequences()) {
         this.drawControlHandles(sequence);
       }
       this.drawAddButtons();
@@ -453,10 +476,10 @@ export class Editor {
     if (this.mode === "path" || this.mode === "elements") {
       this.drawCurvatureWarnings();
     }
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       this.drawElementLabels(sequence);
     }
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       this.drawAnnotationLabels(sequence);
     }
     this.drawInflectionLabels();
@@ -539,7 +562,7 @@ export class Editor {
   private drawAnnotations() {
     // Inside drawMetres the stroke width is read in metres, so no CANVAS_SCALE conversion: the linewidth is already in metres.
     const lineWidth = this.getAnnotationLineWidth();
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       if (sequence.path.curves.length === 0) continue;
       for (const annotation of sequence.annotations) {
         this.drawAnnotationHighlight(sequence, annotation, lineWidth, this.selectedAnnotations.has(annotation), false);
@@ -638,7 +661,7 @@ export class Editor {
     const tolerance = ANNOTATION_PICK_RADIUS / this.view.zoom;
     let best: Annotation | null = null;
     let bestDistance = Infinity;
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       for (const annotation of this.selectableAnnotations(sequence)) {
         const points = this.getAnnotationPoints(sequence, annotation);
         if (points.length === 0) continue;
@@ -670,7 +693,7 @@ export class Editor {
     const tolerance = ANNOTATION_PICK_RADIUS / this.view.zoom;
     let best: { annotation: Annotation; isStart: boolean } | null = null;
     let bestDistance = Infinity;
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       for (const annotation of this.selectableAnnotations(sequence)) {
         const points = this.getAnnotationPoints(sequence, annotation);
         if (points.length === 0) continue;
@@ -892,9 +915,12 @@ export class Editor {
     const minDrawIncrement = MIN_DRAW_INCREMENT / this.view.zoom;
     const viewport = this.getTraceViewport(minBladeLength);
     for (const sequence of this.sequences) {
+      const hidden = this.hiddenSequences.has(sequence);
+      if (hidden) this.ctx.globalAlpha = HIDDEN_SEQUENCE_ALPHA;
       this.drawMetres(() =>
         sequence.drawTraces(this.ctx, minTraceWidth, minBladeLength, minMarkSize, minDrawIncrement, viewport),
       );
+      if (hidden) this.ctx.globalAlpha = 1;
     }
   }
 
@@ -977,6 +1003,30 @@ export class Editor {
     if (sequence.path.curves.length == 0) {
       return;
     }
+    const hidden = this.hiddenSequences.has(sequence);
+    if (hidden) {
+      const minTraceWidth = MIN_TRACE_WIDTH / this.view.zoom;
+      const minBladeLength =
+        this.scaleElements && this.mode !== "elements" ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
+      const minMarkSize = MIN_MARK_SIZE / this.view.zoom;
+      const minDrawIncrement = MIN_DRAW_INCREMENT / this.view.zoom;
+      const viewport = this.getTraceViewport(minBladeLength);
+      this.ctx.globalAlpha = HIDDEN_SEQUENCE_ALPHA;
+      this.drawMetres(() =>
+        sequence.drawFootTraces(
+          this.ctx,
+          0 as PathCoordinate,
+          undefined,
+          minTraceWidth,
+          minBladeLength,
+          minMarkSize,
+          minDrawIncrement,
+          viewport,
+        ),
+      );
+      this.ctx.globalAlpha = 1;
+      return;
+    }
     const pathWidth = PATH_WIDTH / this.view.zoom;
     const minTraceWidth = MIN_TRACE_WIDTH / this.view.zoom;
     const minBladeLength =
@@ -1041,7 +1091,7 @@ export class Editor {
 
   private drawTimingKeyframes() {
     const nodeSize = (NODE_SIZE * CANVAS_SCALE) / this.view.zoom;
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       if (sequence.path.curves.length === 0) continue;
       for (const keyframe of this.sortedTimingKeyframes(sequence)) {
         const point = sequence.path.getPosition(keyframe.pathCoordinate);
@@ -1129,7 +1179,7 @@ export class Editor {
   }
 
   private drawTimingTimeLabels() {
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       if (sequence.path.curves.length === 0) continue;
       for (const keyframe of this.sortedTimingKeyframes(sequence)) {
         if (keyframe.kind !== "time") continue;
@@ -1140,7 +1190,7 @@ export class Editor {
   }
 
   private drawTimingBeatLabels() {
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       if (sequence.path.curves.length === 0) continue;
       const sorted = this.sortedTimingKeyframes(sequence);
       for (let index = 1; index < sorted.length; index++) {
@@ -1221,7 +1271,7 @@ export class Editor {
     const tolerance = PICK_RADIUS / this.view.zoom;
     let best: TimingKeyframe | null = null;
     let bestDistance = Infinity;
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       if (sequence.path.curves.length === 0) continue;
       const candidates = [...sequence.keyframes.time];
       const provisional = this.provisionalTimingKeyframes.get(sequence);
@@ -1327,6 +1377,7 @@ export class Editor {
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     for (const [sequence, curveIndices] of this.selectedCurves) {
+      if (this.hiddenSequences.has(sequence)) continue;
       for (const curveIndex of curveIndices) {
         const curve = sequence.path.curves[curveIndex];
         if (!curve) continue;
@@ -1339,7 +1390,7 @@ export class Editor {
     const nodeSize = (NODE_SIZE * CANVAS_SCALE) / this.view.zoom;
     let drewElements = false;
 
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       if (sequence.path.curves.length === 0) continue;
       for (const element of sequence.elements) {
         drewElements = true;
@@ -1384,7 +1435,7 @@ export class Editor {
   }
 
   private drawTimingElements() {
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       if (sequence.path.curves.length === 0) continue;
       this.ctx.strokeStyle = "#000";
       this.ctx.lineWidth = (PATH_WIDTH + 2) / this.view.zoom;
@@ -1477,7 +1528,7 @@ export class Editor {
   }
 
   private drawCurvatureWarnings() {
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       const checks = checkSequenceCurvatures(sequence);
       for (const check of checks) {
         if (!check.invalid) continue;
@@ -1585,7 +1636,7 @@ export class Editor {
   }
 
   private drawStartLabels() {
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       this.drawStartLabel(sequence);
     }
   }
@@ -1617,7 +1668,7 @@ export class Editor {
   }
 
   private drawInflectionLabels() {
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       if (sequence.path.curves.length === 0) continue;
       for (const u of [
         ...this.getUncoveredInflectionCoordinates(sequence),
@@ -1700,7 +1751,7 @@ export class Editor {
     let best: { element: Element; isStart: boolean } | null = null;
     let bestDistance = Infinity;
 
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       for (const element of this.selectableElements(sequence)) {
         const points = this.getElementPoints(element);
         if (points.length === 0) continue;
@@ -1871,7 +1922,7 @@ export class Editor {
     let best: Element | null = null;
     let bestDistance = Infinity;
 
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       for (const element of this.selectableElements(sequence)) {
         const points = this.getElementPoints(element);
         if (points.length === 0) continue;
@@ -1985,14 +2036,14 @@ export class Editor {
   }
 
   private drawAddButtons() {
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       if (sequence.path.curves.length === 0) continue;
       this.drawPlusInCircle(this.getAddButtonPosition(sequence));
     }
   }
 
   private hitAddButton(screenX: number, screenY: number): Sequence | null {
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       if (sequence.path.curves.length === 0) continue;
       const [iconX, iconY] = this.worldToScreen(this.getAddButtonPosition(sequence));
       const dx = screenX - iconX;
@@ -2070,7 +2121,7 @@ export class Editor {
   }
 
   private drawDeleteButtons() {
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       const data = this.getDeleteButtonData(sequence);
       if (!data) continue;
       this.drawMinusInCircle(data.center);
@@ -2233,7 +2284,7 @@ export class Editor {
     const tolerance = PICK_RADIUS / this.view.zoom;
 
     let best: { sequence: Sequence; u: number; distance: number } | null = null;
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       const hit = sequence.path.pickCurve(cursor, tolerance);
       if (!hit) continue;
       const { t } = hit.curve.getClosestPoint(cursor);
@@ -2373,7 +2424,7 @@ export class Editor {
     screenX: number,
     screenY: number,
   ): { sequence: Sequence; removable: NonNullable<ReturnType<Editor["getRemovablePoint"]>> } | null {
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       const data = this.getDeleteButtonData(sequence);
       if (!data) continue;
       const [iconX, iconY] = this.worldToScreen(data.center);
@@ -2387,6 +2438,7 @@ export class Editor {
   private getSplitButtonData(): { sequence: Sequence; curveIndex: number; center: Vector<2> }[] {
     const result: { sequence: Sequence; curveIndex: number; center: Vector<2> }[] = [];
     for (const [sequence, curveIndices] of this.selectedCurves) {
+      if (this.hiddenSequences.has(sequence)) continue;
       for (const curveIndex of curveIndices) {
         const curve = sequence.path.curves[curveIndex];
         if (!curve) continue;
@@ -2460,7 +2512,7 @@ export class Editor {
     let best: ControlPointSelection | null = null;
     let bestDistance = Infinity;
 
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       sequence.path.curves.forEach((curve, curveIndex) => {
         keys.forEach((pointKey) => {
           if ((pointKey === "p1" || pointKey === "p2") && !this.isHandleVisible(sequence, curveIndex, pointKey)) {
@@ -2483,7 +2535,7 @@ export class Editor {
     const tolerance = PICK_RADIUS / this.view.zoom;
 
     let best: { sequence: Sequence; curveIndex: number; distance: number } | null = null;
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       const result = sequence.path.pickCurve(cursor, tolerance);
       if (!result) continue;
       if (!best || result.distance < best.distance) {
@@ -3238,7 +3290,7 @@ export class Editor {
     if (this.rectAddToSelection) {
       for (const [sequence, selected] of this.selectedPoints) hits.set(sequence, new Set(selected));
     }
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       const sequenceHits = hits.get(sequence) ?? new Set<string>();
       sequence.path.curves.forEach((curve, curveIndex) => {
         for (const pointKey of keys) {
@@ -3272,7 +3324,7 @@ export class Editor {
     if (this.rectAddToSelection) {
       for (const keyframe of this.selectedTimingKeyframes) hits.add(keyframe);
     }
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       if (sequence.path.curves.length === 0) continue;
       for (const keyframe of sequence.keyframes.time) {
         const [screenX, screenY] = this.worldToScreen(sequence.path.getPosition(keyframe.pathCoordinate));
@@ -3296,7 +3348,7 @@ export class Editor {
     if (this.rectAddToSelection) {
       for (const annotation of this.selectedAnnotations) hits.add(annotation);
     }
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       for (const annotation of this.selectableAnnotations(sequence)) {
         const inside = this.getAnnotationPoints(sequence, annotation).some((point) => {
           const [screenX, screenY] = this.worldToScreen(point);
@@ -3321,7 +3373,7 @@ export class Editor {
 
     const hits = new Set<Element>();
     if (this.rectAddToSelection) for (const element of this.selectedElements) hits.add(element);
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       for (const element of this.selectableElements(sequence)) {
         const inside = this.getElementPoints(element).some((point) => {
           const [screenX, screenY] = this.worldToScreen(point);
@@ -3337,7 +3389,7 @@ export class Editor {
 
   private selectAll() {
     const keys: ControlPointKey[] = ["p0", "p3"];
-    for (const sequence of this.sequences) {
+    for (const sequence of this.editSequences()) {
       const selected = this.getSelectedPointsFor(sequence);
       sequence.path.curves.forEach((curve, curveIndex) => {
         for (const pointKey of keys) selected.add(this.keyOf(curveIndex, pointKey));

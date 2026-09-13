@@ -98,7 +98,7 @@ const CTX_RESULT: Record<string, () => unknown> = {
 };
 
 function makeEditor() {
-  const ctx: Record<string, unknown> = { width: 0, height: 0 };
+  const ctx: Record<string, unknown> = { width: 0, height: 0, globalAlpha: 1 };
   for (const m of CTX_METHODS) ctx[m] = () => {};
   for (const [m, fn] of Object.entries(CTX_RESULT)) ctx[m] = fn;
   const canvas = document.createElement("canvas") as HTMLCanvasElement & {
@@ -115,7 +115,7 @@ function makeEditor() {
   path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
   const editor = new Editor(canvas, [new Sequence(path)]);
   editor.mode = "path";
-  return { editor, canvas };
+  return { editor, canvas, ctx: ctx as { globalAlpha: number | unknown; arc: unknown } };
 }
 
 function mouse(eventName: string, target: EventTarget, init: MouseEventInit) {
@@ -350,6 +350,92 @@ test("interaction works on every visible sequence and setSequences drops the hid
   expect(editor.getSelectedPointsFor(second).size).toBe(0);
   expect(editor.getSelectedPointsFor(first).size).toBe(0);
   expect(editor.getSequences()).toHaveLength(1);
+
+  editor.destroy();
+});
+
+test("setHiddenSequences keeps the draw list and clears the hidden sequence's edit state", () => {
+  const { editor, canvas } = makeEditor();
+
+  const first = editor.getSequences()[0];
+  const path2 = new Path();
+  path2.addCurveEnd(new Curve(new Vector(0, 4), new Vector(1 / 3, 4), new Vector(2 / 3, 4), new Vector(1, 4)));
+  const second = new Sequence(path2);
+  editor.setSequences([first, second]);
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(4), button: 0, ctrlKey: true });
+  mouse("mouseup", window, {});
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(0), button: 0, ctrlKey: true });
+  mouse("mouseup", window, {});
+  expect(editor.getSelectedPointsFor(second).size).toBe(1);
+  expect(editor.getSelectedPointsFor(first).size).toBe(1);
+
+  editor.setHiddenSequences(new Set([second]));
+  expect(editorRef(editor).hiddenSequences.has(second)).toBe(true);
+  expect(editor.getSequences()).toHaveLength(2);
+  expect(editor.getSequences()[0]).toBe(first);
+  expect(editor.getSequences()[1]).toBe(second);
+  expect(editor.getSelectedPointsFor(second).size).toBe(0);
+  expect(editor.getSelectedPointsFor(first).size).toBe(0);
+
+  // The hidden path no longer picks control points or curve clicks.
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(4), button: 0, ctrlKey: true });
+  mouse("mouseup", window, {});
+  expect(editor.getSelectedPointsFor(second).size).toBe(0);
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(0), button: 0, ctrlKey: false });
+  mouse("mousemove", window, { clientX: sx(0.5), clientY: sy(0) });
+  mouse("mouseup", window, {});
+  expect(first.path.curves[0]!.p0.x).toBeCloseTo(0.5, 6);
+
+  editor.setHiddenSequences(new Set());
+  expect(editorRef(editor).hiddenSequences.size).toBe(0);
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(4), button: 0, ctrlKey: true });
+  mouse("mouseup", window, {});
+  expect(editor.getSelectedPointsFor(second).size).toBe(1);
+
+  editor.destroy();
+});
+
+test("a hidden sequence draws dim traces and skips the mode overlays", () => {
+  const { editor, canvas, ctx } = makeEditor();
+
+  const first = editor.getSequences()[0];
+  const glideType = glideConstructorsByType["LeftForwardOutsideGlide"] as unknown as {
+    new (start: PathCoordinate, end: PathCoordinate): Element;
+  };
+  first.addElement(new glideType(0 as PathCoordinate, 1 as PathCoordinate));
+  const path2 = new Path();
+  path2.addCurveEnd(new Curve(new Vector(0, 4), new Vector(1 / 3, 4), new Vector(2 / 3, 4), new Vector(1, 4)));
+  const second = new Sequence(path2);
+  second.addElement(new glideType(0 as PathCoordinate, 1 as PathCoordinate));
+  editor.setSequences([first, second]);
+
+  let arcs = 0;
+  const drawArc = ctx.arc as (...args: unknown[]) => void;
+  (ctx as Record<string, unknown>).arc = (...args: unknown[]) => {
+    arcs++;
+    drawArc(...args);
+  };
+
+  editor.mode = "elements";
+  editor.draw();
+  const visibleVertices = arcs;
+  expect(visibleVertices).toBeGreaterThan(0);
+
+  editor.setHiddenSequences(new Set([second]));
+  arcs = 0;
+  editor.draw();
+  expect(arcs, "the hidden geometry draws no vertices").toBeLessThan(visibleVertices);
+  expect((ctx as { globalAlpha: number }).globalAlpha, "no dim alpha leaks after the draw").toBe(1);
+
+  editor.setHiddenSequences(new Set());
+  arcs = 0;
+  editor.draw();
+  expect(arcs).toBe(visibleVertices);
 
   editor.destroy();
 });
