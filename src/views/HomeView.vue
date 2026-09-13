@@ -275,8 +275,10 @@ onBeforeUnmount(() => {
                 <i class="pi pi-external-link pi-sm" aria-label="Open the video in a new tab" />
               </a>
             </template>
-            <label class="home-view__mode-label">BPM</label>
-            <span class="home-view__value">{{ diagramBpm }}</span>
+            <template v-if="diagramBpm !== undefined">
+              <label class="home-view__mode-label">BPM</label>
+              <span class="home-view__value">{{ diagramBpm }}</span>
+            </template>
           </div>
 
           <div class="home-view__actions">

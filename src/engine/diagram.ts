@@ -1,4 +1,4 @@
-import { DEFAULT_BPM, Sequence } from "./sequence.js";
+import { Sequence } from "./sequence.js";
 import type { SequenceJSON } from "./sequence.js";
 
 export function earliestTimeKeyframeSeconds(diagram: Diagram): number | null {
@@ -21,11 +21,11 @@ export interface DiagramJSON {
 
 export class Diagram {
   name: string;
-  bpm: number;
+  bpm?: number;
   videoUrl?: string;
   sequences: Sequence[];
 
-  constructor(name: string, sequences: Sequence[] = [], bpm: number = DEFAULT_BPM) {
+  constructor(name: string, sequences: Sequence[] = [], bpm?: number) {
     this.name = name;
     this.bpm = bpm;
     this.sequences = sequences;
@@ -53,7 +53,7 @@ export class Diagram {
     const diagram = new Diagram(
       json.name ?? "Diagram",
       (json.sequences ?? []).map((sequence) => Sequence.fromJSON(sequence)),
-      json.bpm ?? DEFAULT_BPM,
+      json.bpm,
     );
     diagram.videoUrl = json.videoUrl;
     return diagram;

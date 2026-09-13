@@ -533,6 +533,8 @@ const diagramBpm = computed({
     if (typeof value === "number") {
       store.setDiagramBpm(value);
       if (editor) editor.bpm = getBpm();
+    } else {
+      store.setDiagramBpm(undefined);
     }
     editor?.draw();
   },
@@ -1477,7 +1479,15 @@ function closeElementChange() {
             <label class="editor-view__mode-label">Diagram name</label>
             <InputText v-model="diagramName" class="w-full" />
             <label class="editor-view__mode-label" for="diagram-bpm">BPM</label>
-            <InputNumber id="diagram-bpm" v-model="diagramBpm" :min="1" :step="1" :use-grouping="false" fluid />
+            <InputNumber
+              id="diagram-bpm"
+              v-model="diagramBpm"
+              :min="1"
+              :step="1"
+              :use-grouping="false"
+              placeholder="120"
+              fluid
+            />
             <label class="editor-view__mode-label" for="diagram-video-url">Video URL</label>
             <InputText
               id="diagram-video-url"

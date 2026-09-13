@@ -138,8 +138,8 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     saveToStorage();
   }
 
-  function setDiagramBpm(bpm: number) {
-    if (!Number.isFinite(bpm) || bpm <= 0) return;
+  function setDiagramBpm(bpm: number | undefined) {
+    if (bpm !== undefined && (!Number.isFinite(bpm) || bpm <= 0)) return;
     diagram.value.bpm = bpm;
     triggerRef(diagram);
     saveToStorage();

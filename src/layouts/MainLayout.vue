@@ -9,7 +9,7 @@ const isFullBleed = computed(() => Boolean(route.meta.fullBleed));
 
 const items = ref([
   { label: "Home", icon: "pi pi-home", route: "/" },
-  { label: "Editor", icon: "pi pi-pencil", route: "/editor" },
+  { label: "Diagram editor", icon: "pi pi-pencil", route: "/editor" },
 ]);
 
 const year = new Date().getFullYear();

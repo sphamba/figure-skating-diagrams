@@ -70,14 +70,14 @@ export abstract class DynamicGlide extends Glide {
     if (gliding) {
       const centered = onIceData(new Vector<3>(0, 0, 0));
       return [
-        new FootKeyframe(start, centered, "linear", "linear"),
+        new FootKeyframe(start, centered, "smooth", "smooth"),
         new FootKeyframe(t95, centered, "linear", "linear"),
         new FootKeyframe(end, centered, "linear", "linear"),
       ];
     }
     const doubleSide = side * 2;
     return [
-      new FootKeyframe(start, onIceData(new Vector<3>(0, side, 0)), "linear", "linear"),
+      new FootKeyframe(start, onIceData(new Vector<3>(0, side, 0)), "smooth", "smooth"),
       new FootKeyframe(t95, onIceData(new Vector<3>(offset, doubleSide, 0)), "linear", "linear"),
       new FootKeyframe(end, onIceData(new Vector<3>(offset, doubleSide, offIceFootHeight)), "linear", "linear"),
     ];
