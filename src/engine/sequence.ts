@@ -60,6 +60,10 @@ export const DEFAULT_BPM = 120;
 
 const boundaryDelta = 0.001; // m gap kept between consecutive element keyframes
 
+// Subdivide a drawn trace segment until its length is at most 1.5 x the target step.
+const segmentThreshold = 1.5;
+const MAX_SEGMENT_DEPTH = 10; // depth guard; each cut halves the path coordinate interval
+
 function boundaryCoordinates(
   end: number,
   start: number,
@@ -514,6 +518,7 @@ export class Sequence {
     }
 
     let previousContactPosition: Vector<2> | undefined;
+    let previousU: PathCoordinate | undefined;
     let backwardSegmentCount = 0;
     const drawBladeLength = this.getDrawBladeLength(minBladeLength);
     const drawKeyframes =
@@ -546,10 +551,106 @@ export class Sequence {
     const toePickKeyframes = new Set<FootKeyframe>();
     const spinKeyframes = new Set<FootKeyframe>();
 
+    const maxSquaredSegmentLength = segmentThreshold ** 2 * step * step;
+
+    const computeContactData = (pathCoordinate: PathCoordinate) => {
+      const contactPoint = this.getInterpolatedValue(footKey, "contactPoint", pathCoordinate, drawKeyframes) as number;
+      const footRelativeOrientation = this.getInterpolatedValue(
+        footKey,
+        "orientation",
+        pathCoordinate,
+        drawKeyframes,
+      ) as Quaternion;
+      const pathOrientation = this.getPathOrientation(pathCoordinate);
+      const pathPosition = this.path.getPosition(pathCoordinate);
+      const footRelativePosition = this.getInterpolatedValue(
+        footKey,
+        "position",
+        pathCoordinate,
+        drawKeyframes,
+      ) as Vector<3>;
+
+      const footRelativeDirection = new Vector<3>(1, 0, 0).rotate(footRelativeOrientation);
+
+      let contactRelativePosition = footRelativePosition.copy();
+      contactRelativePosition.x += (contactPoint - 0.5) * drawBladeLength;
+      contactRelativePosition = contactRelativePosition.rotate(
+        footRelativeOrientation.times(pathOrientation),
+      ) as Vector<3>;
+
+      const contactPosition = pathPosition.plus(contactRelativePosition as unknown as Vector<2>);
+      const footDirection = footRelativeDirection.rotate(pathOrientation);
+      return { contactPosition, footDirection, onGround: contactRelativePosition.z <= 0 };
+    };
+
+    const drawTraceSegment = (
+      uPrev: PathCoordinate,
+      uCur: PathCoordinate,
+      pPrev: Vector<2>,
+      pCur: Vector<2>,
+      footDirectionCur: Vector<3>,
+      onGroundCur: boolean,
+      depth: number,
+    ) => {
+      const traceIncrement = pCur.minus(pPrev as Vector<2>);
+      if (depth > 0 && traceIncrement.lengthSquared() > maxSquaredSegmentLength) {
+        const uMid = ((uPrev + uCur) / 2) as PathCoordinate;
+        const midData = computeContactData(uMid);
+        drawTraceSegment(
+          uPrev,
+          uMid,
+          pPrev,
+          midData.contactPosition as Vector<2>,
+          midData.footDirection,
+          midData.onGround,
+          depth - 1,
+        );
+        drawTraceSegment(
+          uMid,
+          uCur,
+          midData.contactPosition as Vector<2>,
+          pCur,
+          footDirectionCur,
+          onGroundCur,
+          depth - 1,
+        );
+        return;
+      }
+
+      if (!onGroundCur) return;
+
+      if (footKey == "footL") {
+        ctx.strokeStyle = this.traceColorL;
+      } else {
+        ctx.strokeStyle = this.traceColorR;
+      }
+      const { width: lineWidth, alignment } = getTraceWidth(footDirectionCur, traceIncrement, traceWidth, skidWidth);
+      const backward = alignment < 0;
+      if (backward) {
+        backwardSegmentCount++;
+        if (backwardSegmentCount % 2 === 0) return;
+      } else {
+        backwardSegmentCount = 0;
+      }
+
+      ctx.lineWidth = minTraceWidth === undefined ? lineWidth : Math.max(lineWidth, minTraceWidth);
+
+      const previousAlpha = ctx.globalAlpha;
+      ctx.globalAlpha = backward ? previousAlpha : previousAlpha * traceOpacityForward;
+
+      ctx.beginPath();
+      ctx.moveTo(pPrev.x, -pPrev.y);
+      ctx.lineTo(pCur.x, -pCur.y);
+      ctx.stroke();
+
+      ctx.globalAlpha = previousAlpha;
+    };
+
     let previousRangeEnd: number | undefined;
     for (const [rangeStart, rangeEnd] of visibleRanges) {
       if (previousRangeEnd !== undefined && Math.abs(rangeStart - previousRangeEnd) > 1e-9) {
         previousContactPosition = undefined;
+        previousU = undefined;
       }
       previousRangeEnd = rangeEnd;
       for (
@@ -565,79 +666,32 @@ export class Sequence {
         if (spinMatches) {
           for (const keyframe of spinMatches) spinKeyframes.add(keyframe);
         }
-        const contactPoint = this.getInterpolatedValue(
-          footKey,
-          "contactPoint",
-          pathCoordinate,
-          drawKeyframes,
-        ) as number;
-        const footRelativeOrientation = this.getInterpolatedValue(
-          footKey,
-          "orientation",
-          pathCoordinate,
-          drawKeyframes,
-        ) as Quaternion;
-        const pathOrientation = this.getPathOrientation(pathCoordinate);
-        const pathPosition = this.path.getPosition(pathCoordinate);
-        const footRelativePosition = this.getInterpolatedValue(
-          footKey,
-          "position",
-          pathCoordinate,
-          drawKeyframes,
-        ) as Vector<3>;
-
-        let footRelativeDirection = new Vector<3>(1, 0, 0);
-        footRelativeDirection = footRelativeDirection.rotate(footRelativeOrientation);
-
-        let contactRelativePosition = footRelativePosition.copy();
-        contactRelativePosition.x += (contactPoint - 0.5) * drawBladeLength;
-
-        const footOrientation = footRelativeOrientation.times(pathOrientation);
-        contactRelativePosition = contactRelativePosition.rotate(footOrientation);
-        const contactPosition = pathPosition.plus(contactRelativePosition as unknown as Vector<2>);
-        const footDirection = footRelativeDirection.rotate(pathOrientation);
+        const data = computeContactData(pathCoordinate);
 
         if (previousContactPosition === undefined) {
-          previousContactPosition = contactPosition;
+          previousContactPosition = data.contactPosition;
+          previousU = pathCoordinate;
           continue;
         }
 
-        const onGround = contactRelativePosition.z <= 0;
-        if (!onGround) {
-          previousContactPosition = contactPosition;
+        if (!data.onGround) {
+          previousContactPosition = data.contactPosition;
+          previousU = pathCoordinate;
           continue;
         }
-        if (footKey == "footL") {
-          ctx.strokeStyle = this.traceColorL;
-        } else {
-          ctx.strokeStyle = this.traceColorR;
-        }
-        const traceIncrement = contactPosition.minus(previousContactPosition);
-        const { width: lineWidth, alignment } = getTraceWidth(footDirection, traceIncrement, traceWidth, skidWidth);
-        const backward = alignment < 0;
-        if (backward) {
-          backwardSegmentCount++;
-          if (backwardSegmentCount % 2 === 0) {
-            previousContactPosition = contactPosition;
-            continue;
-          }
-        } else {
-          backwardSegmentCount = 0;
-        }
 
-        ctx.lineWidth = minTraceWidth === undefined ? lineWidth : Math.max(lineWidth, minTraceWidth);
+        drawTraceSegment(
+          previousU!,
+          pathCoordinate,
+          previousContactPosition,
+          data.contactPosition,
+          data.footDirection,
+          true,
+          MAX_SEGMENT_DEPTH,
+        );
 
-        const previousAlpha = ctx.globalAlpha;
-        ctx.globalAlpha = backward ? previousAlpha : previousAlpha * traceOpacityForward;
-
-        ctx.beginPath();
-        ctx.moveTo(previousContactPosition.x, -previousContactPosition.y);
-        ctx.lineTo(contactPosition.x, -contactPosition.y);
-        ctx.stroke();
-
-        ctx.globalAlpha = previousAlpha;
-
-        previousContactPosition = contactPosition;
+        previousContactPosition = data.contactPosition;
+        previousU = pathCoordinate;
       }
     }
 
