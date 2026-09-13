@@ -524,27 +524,27 @@ export class Sequence {
     const step = Math.max(drawIncrement, minDrawIncrement ?? 0);
     const visibleRanges = this.getVisibleTraceRanges(uStart, uEnd, viewport, minBladeLength);
 
-    const toePicked = (drawKeyframes ?? this.keyframes[footKey]).filter(
-      (keyframe) => keyframe.data.toePick === true && keyframe.coordinate >= uStart && keyframe.coordinate <= uEnd,
+    const drawable = drawKeyframes ?? this.keyframes[footKey];
+    const toePickSamples = this.getSampledKeyframes(
+      drawable.filter(
+        (keyframe) => keyframe.data.toePick === true && keyframe.coordinate >= uStart && keyframe.coordinate <= uEnd,
+      ),
+      visibleRanges,
+      step,
     );
-    const toePickSamples = new Map<number, FootKeyframe[]>();
-    for (const keyframe of toePicked) {
-      const u = keyframe.coordinate as number;
-      for (const [rangeStart, rangeEnd] of visibleRanges) {
-        if (u < rangeStart || u > rangeEnd) continue;
-        // Replicate the sampling accumulation below so the lookup keys match the drawn samples.
-        let nearest: number | undefined;
-        for (let sample = rangeStart as number; sample <= rangeEnd; sample += step) {
-          if (nearest === undefined || Math.abs(u - sample) < Math.abs(u - nearest)) nearest = sample;
-        }
-        if (nearest === undefined || Math.abs(nearest - u) > step / 2) continue;
-        const samples = toePickSamples.get(nearest) ?? [];
-        samples.push(keyframe);
-        toePickSamples.set(nearest, samples);
-        break;
-      }
-    }
+    const spinSamples = this.getSampledKeyframes(
+      drawable.filter(
+        (keyframe) =>
+          keyframe.data.spins !== undefined &&
+          keyframe.data.spins !== 0 &&
+          keyframe.coordinate >= uStart &&
+          keyframe.coordinate <= uEnd,
+      ),
+      visibleRanges,
+      step,
+    );
     const toePickKeyframes = new Set<FootKeyframe>();
+    const spinKeyframes = new Set<FootKeyframe>();
 
     let previousRangeEnd: number | undefined;
     for (const [rangeStart, rangeEnd] of visibleRanges) {
@@ -560,6 +560,10 @@ export class Sequence {
         const samples = toePickSamples.get(pathCoordinate as number);
         if (samples) {
           for (const keyframe of samples) toePickKeyframes.add(keyframe);
+        }
+        const spinMatches = spinSamples.get(pathCoordinate as number);
+        if (spinMatches) {
+          for (const keyframe of spinMatches) spinKeyframes.add(keyframe);
         }
         const contactPoint = this.getInterpolatedValue(
           footKey,
@@ -660,6 +664,54 @@ export class Sequence {
       ctx.lineTo(contactPosition.x + dx, -(contactPosition.y - dx));
       ctx.stroke();
     }
+
+    for (const keyframe of spinKeyframes) {
+      const data = keyframe.data;
+      if (data.orientation === undefined || data.spinShift === undefined || data.spinShift === 0) continue;
+      // The circle sits at the path frame lateral offset "spinShift" of the centerline,
+      // so it touches the centerline. The foot orientation is not applied: the keyframe
+      // shift goes to the geographic edge side, independent of the foot orientation.
+      const radius = Math.abs(data.spinShift);
+      const pathOrientation = this.getPathOrientation(keyframe.coordinate);
+      const center = this.path
+        .getPosition(keyframe.coordinate)
+        .plus(new Vector<3>(0, data.spinShift, 0).rotate(pathOrientation) as unknown as Vector<2>);
+      ctx.strokeStyle = footKey === "footL" ? this.traceColorL : this.traceColorR;
+      ctx.lineWidth = minTraceWidth === undefined ? traceWidth : Math.max(traceWidth, minTraceWidth);
+      // A backwards foot uses a dashed line: dash length "step", space "step",
+      // where "step" is the real-length draw increment of the current zoom level.
+      const backwards = new Vector<3>(1, 0, 0).rotate(data.orientation).x < 0;
+      ctx.setLineDash(backwards ? [step, step] : []);
+      ctx.beginPath();
+      ctx.arc(center.x, -center.y, radius, 0, 2 * Math.PI);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  private getSampledKeyframes(
+    marked: FootKeyframe[],
+    visibleRanges: Array<[PathCoordinate, PathCoordinate]>,
+    step: number,
+  ): Map<number, FootKeyframe[]> {
+    const keyframesBySample = new Map<number, FootKeyframe[]>();
+    for (const keyframe of marked) {
+      const u = keyframe.coordinate as number;
+      for (const [rangeStart, rangeEnd] of visibleRanges) {
+        if (u < rangeStart || u > rangeEnd) continue;
+        // Replicate the sampling accumulation below so the lookup keys match the drawn samples.
+        let nearest: number | undefined;
+        for (let sample = rangeStart as number; sample <= rangeEnd; sample += step) {
+          if (nearest === undefined || Math.abs(u - sample) < Math.abs(u - nearest)) nearest = sample;
+        }
+        if (nearest === undefined || Math.abs(nearest - u) > step / 2) continue;
+        const samples = keyframesBySample.get(nearest) ?? [];
+        samples.push(keyframe);
+        keyframesBySample.set(nearest, samples);
+        break;
+      }
+    }
+    return keyframesBySample;
   }
 
   private getVisibleTraceRanges(

@@ -11,6 +11,7 @@ import { mohawkConstructorsByType, mohawkKindChoices } from "./mohawk.js";
 import { choctawConstructorsByType, choctawKindChoices } from "./choctaw.js";
 import { jumpConstructorsByType } from "./jump.js";
 import type { Jump } from "./jump.js";
+import { spinConstructorsByType, isSpinType, type SpinType } from "./spin.js";
 import type { Element } from "./element.js";
 import { footTurnConstructorsByType, changeFootTurnType } from "./turn.js";
 import type { FootTurnJSON } from "./turn.js";
@@ -49,6 +50,7 @@ export function isJumpType(type: string): boolean {
 }
 
 export { parseJumpType } from "./jump.js";
+export { parseSpinType, isSpinType } from "./spin.js";
 
 export const jumpTypeChoices: { value: string; label: string }[] = [
   { value: "ToeLoop", label: "Toe loop" },
@@ -69,11 +71,13 @@ export function changeElementType(
     footKey?: string;
     shortName?: string;
     leftHanded?: boolean;
+    spinType?: string;
   },
 ): Element {
   const start = template.start as PathCoordinate;
   const end = template.end as PathCoordinate;
   const glideConstructor = glideConstructorsByType[type];
+  const spinConstructor = spinConstructorsByType[type];
   const element = glideConstructor
     ? new glideConstructor(start, end)
     : isJumpType(type)
@@ -82,13 +86,15 @@ export function changeElementType(
           end: PathCoordinate,
           leftHanded?: boolean,
         ) => Jump)(start, end, template.leftHanded)
-      : changeFootTurnType(type, {
-          ...template,
-          start,
-          end,
-          type,
-          footKey: footKeyFromType(type),
-        } as FootTurnJSON);
+      : spinConstructor && isSpinType(type)
+        ? new spinConstructor(start, end, template.leftHanded, template.spinType as SpinType | undefined)
+        : changeFootTurnType(type, {
+            ...template,
+            start,
+            end,
+            type,
+            footKey: footKeyFromType(type),
+          } as FootTurnJSON);
   if (typeof template.shortName === "string") element.shortName = template.shortName;
   return element;
 }

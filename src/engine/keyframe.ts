@@ -18,6 +18,8 @@ export type PositionAndOrientation3D = {
 export type FootData = PositionAndOrientation3D & {
   contactPoint?: number; // 0: heel, 1: toe
   toePick?: boolean;
+  spins?: number;
+  spinShift?: number;
 };
 
 interface VectorJSON {
@@ -31,7 +33,14 @@ interface QuaternionJSON {
 export interface FootKeyframeJSON {
   kind: "FootKeyframe";
   coordinate: PathCoordinate;
-  data: { position?: VectorJSON; orientation?: QuaternionJSON; contactPoint?: number; toePick?: boolean };
+  data: {
+    position?: VectorJSON;
+    orientation?: QuaternionJSON;
+    contactPoint?: number;
+    toePick?: boolean;
+    spins?: number;
+    spinShift?: number;
+  };
   transitionIn: Transition;
   transitionOut: Transition;
 }
@@ -91,6 +100,8 @@ export class FootKeyframe extends Keyframe<FootData, PathCoordinate> {
         orientation: this.data.orientation?.toJSON(),
         contactPoint: this.data.contactPoint,
         toePick: this.data.toePick,
+        spins: this.data.spins ?? 0,
+        spinShift: this.data.spinShift ?? 0,
       },
       transitionIn: this.transitionIn,
       transitionOut: this.transitionOut,
@@ -103,6 +114,7 @@ export class FootKeyframe extends Keyframe<FootData, PathCoordinate> {
     if (json.data?.orientation) data.orientation = Quaternion.fromJSON(json.data.orientation);
     if (json.data?.contactPoint !== undefined) data.contactPoint = json.data.contactPoint;
     data.toePick = json.data?.toePick ?? false;
+    data.spins = 0;
     return new FootKeyframe(json.coordinate as PathCoordinate, data, json.transitionIn, json.transitionOut);
   }
 }

@@ -20,9 +20,17 @@ import { useConfirm } from "openvue/useconfirm";
 import { Editor, formatTimingLabel, type EditMode } from "@/engine/sequenceEditor/editor";
 import { TimingKeyframe, type TimingKind } from "@/engine/keyframe";
 import type { Sequence, SequenceJSON, FootKey } from "@/engine/sequence";
-import { changeElementType, isJumpType, jumpTypeChoices, parseJumpType } from "@/engine/element/turnTypes";
+import {
+  changeElementType,
+  isJumpType,
+  isSpinType,
+  jumpTypeChoices,
+  parseJumpType,
+  parseSpinType,
+} from "@/engine/element/turnTypes";
 import { getJumpBaseConfig } from "@/engine/element/jump";
 import type { Jump } from "@/engine/element/jump";
+import { Spin, type SpinType } from "@/engine/element/spin";
 import { parseVariantFlags, type VariantFlags } from "@/engine/element/variantFlags";
 import { checkTurnVariantValidity, type TurnVariantValidity } from "@/engine/sequenceEditor/variantValidation";
 import { OneFootTurn } from "@/engine/element/oneFootTurn";
@@ -54,11 +62,11 @@ watch(isMobile, (mobile) => {
 
 const elementChangeOpen = ref(false);
 const elementToChange = shallowRef<Element | null>(null);
-const elementChangeBranch = ref<"glide" | "stroke" | "turn" | "twoFeetTurn" | "jump" | null>(null);
+const elementChangeBranch = ref<"glide" | "stroke" | "turn" | "twoFeetTurn" | "jump" | "spin" | null>(null);
 const isProvisionalTarget = ref(false);
 const oldVariant = ref<VariantFlags | null>(null);
 const validVariant = ref<TurnVariantValidity | null>(null);
-const oldKind = ref<"glide" | "stroke" | "turn" | "twoFeetTurn" | "jump" | null>(null);
+const oldKind = ref<"glide" | "stroke" | "turn" | "twoFeetTurn" | "jump" | "spin" | null>(null);
 const pendingReplacement = shallowRef<Element | null>(null);
 const shortNameDraft = ref("");
 const glidePath = ref<string[]>([]);
@@ -66,6 +74,7 @@ const strokePath = ref<string[]>([]);
 const turnPath = ref<string[]>([]);
 const twoFeetPath = ref<string[]>([]);
 const jumpPath = ref<string[]>([]);
+const spinPath = ref<string[]>([]);
 
 const elementKindGroupOptions = [
   { label: "Glide", value: "glide" },
@@ -73,6 +82,7 @@ const elementKindGroupOptions = [
   { label: "One-foot turn", value: "turn" },
   { label: "Two-feet turn", value: "twoFeetTurn" },
   { label: "Jump", value: "jump" },
+  { label: "Spin", value: "spin" },
 ];
 
 const glideLevelOptions: { label: string; value: string }[][] = [
@@ -220,10 +230,11 @@ const strokeStepFinal = computed(() => strokePath.value.length >= strokeLevelOpt
 
 const currentStrokeOptions = computed(() => (strokeStepFinal.value ? [] : strokeLevelOptions[strokePath.value.length]));
 
-type ElementKind = "glide" | "stroke" | "turn" | "twoFeetTurn" | "jump";
+type ElementKind = "glide" | "stroke" | "turn" | "twoFeetTurn" | "jump" | "spin";
 
 function kindOfType(type: string): ElementKind {
   if (isJumpType(type)) return "jump";
+  if (isSpinType(type)) return "spin";
   const flags = parseVariantFlags(type);
   if (flags.stroke) return "stroke";
   if (flags.openness) return "twoFeetTurn";
@@ -239,6 +250,19 @@ function oldValueAt(branch: ElementKind, level: number, value: string): boolean 
     if (level === 0) return parsed !== undefined && value === (leftHanded ? "Left" : "Right");
     if (level === 1) return parsed !== undefined && parsed.jump === value;
     if (level === 2) return parsed !== undefined && String(parsed.revolutions) === value;
+    return false;
+  }
+  if (branch === "spin") {
+    const element = elementToChange.value;
+    const parsed = parseSpinType(element?.type ?? "");
+    const leftHanded = element instanceof Spin && element.leftHanded;
+    if (level === 0) return parsed !== undefined && value === (leftHanded ? "Left" : "Right");
+    if (level === 1) return parsed !== undefined && value === (parsed.leftFoot ? "LeftFoot" : "RightFoot");
+    if (level === 2) return parsed !== undefined && value === (parsed.inside ? "Inside" : "Outside");
+    if (level === 3) {
+      const spinType = element instanceof Spin ? element.spinType : undefined;
+      return parsed !== undefined && spinType !== undefined && value === spinType;
+    }
     return false;
   }
   const flags = oldVariant.value;
@@ -318,6 +342,22 @@ const chosenLabels = computed<string[]>(() => {
       const options: { label: string; value: string }[] | undefined =
         level === 0 ? twoFeetTurnGroupOptions : twoFeetTurnLevelOptionsByGroup[twoFeetTurnGroup.value]?.[level - 1];
       const option = options?.find((choice) => choice.value === value);
+      if (option) labels.push(option.label);
+    });
+    return labels;
+  }
+  if (elementChangeBranch.value === "spin") {
+    const labels = ["Spin"];
+    spinPath.value.forEach((value, level) => {
+      const options =
+        level === 0
+          ? jumpHandednessOptions
+          : level === 1
+            ? spinFootLevelOptions
+            : level === 2
+              ? spinEdgeLevelOptions
+              : spinTypeLevelOptions;
+      const option = options.find((choice) => choice.value === value);
       if (option) labels.push(option.label);
     });
     return labels;
@@ -726,6 +766,7 @@ onMounted(() => {
     strokePath.value = [];
     turnPath.value = [];
     twoFeetPath.value = [];
+    spinPath.value = [];
     clearPendingChoice();
     if (!isProvisionalTarget.value) openAtExistingVariant();
     elementChangeOpen.value = true;
@@ -811,6 +852,8 @@ const currentStepFinal = computed(() => {
       return twoFeetTurnStepFinal.value;
     case "jump":
       return jumpStepFinal.value;
+    case "spin":
+      return spinStepFinal.value;
     default:
       return false;
   }
@@ -819,6 +862,23 @@ const currentStepFinal = computed(() => {
 const jumpHandednessOptions: { label: string; value: string }[] = [
   { label: "Right-handed", value: "Right" },
   { label: "Left-handed", value: "Left" },
+];
+
+const spinFootLevelOptions: { label: string; value: string }[] = [
+  { label: "Left foot", value: "LeftFoot" },
+  { label: "Right foot", value: "RightFoot" },
+];
+
+const spinEdgeLevelOptions: { label: string; value: string }[] = [
+  { label: "Inside", value: "Inside" },
+  { label: "Outside", value: "Outside" },
+];
+
+const spinTypeLevelOptions: { label: string; value: string }[] = [
+  { label: "Upright", value: "upright" },
+  { label: "Layback", value: "layback" },
+  { label: "Camel", value: "camel" },
+  { label: "Sit", value: "sit" },
 ];
 
 const jumpRevolutionOptions: { label: string; value: string }[] = [
@@ -837,6 +897,25 @@ const currentJumpOptions = computed(() => {
   return jumpRevolutionOptions;
 });
 
+const spinStepFinal = computed(() => spinPath.value.length >= 4);
+
+const currentSpinOptions = computed(() => {
+  if (spinStepFinal.value) return [];
+  if (spinPath.value.length === 0) return jumpHandednessOptions;
+  if (spinPath.value.length === 1) return spinFootLevelOptions;
+  if (spinPath.value.length === 2) return spinEdgeLevelOptions;
+  return spinTypeLevelOptions;
+});
+
+function onSpinChange(value: string) {
+  spinPath.value = [...spinPath.value, value];
+  if (spinPath.value.length >= 4) {
+    const [, foot, edgeName] = spinPath.value;
+    const side = foot === "LeftFoot" ? "Left" : "Right";
+    onFinalChoice(`${side}${edgeName}Spin`);
+  }
+}
+
 function onJumpChange(value: string) {
   const next = [...jumpPath.value, value];
   // Euler only exists as a single rotation, so the revolution level is skipped.
@@ -852,6 +931,21 @@ function onJumpChange(value: string) {
 
 function openAtExistingVariant() {
   const element = elementToChange.value;
+  if (element instanceof Spin) {
+    const parsed = parseSpinType(element.type);
+    const handedness = element.leftHanded ? "Left" : "Right";
+    elementChangeBranch.value = "spin";
+    spinPath.value = parsed
+      ? [
+          handedness,
+          parsed.leftFoot ? "LeftFoot" : "RightFoot",
+          parsed.inside ? "Inside" : "Outside",
+          (element as Spin).spinType,
+        ]
+      : [];
+    if (parsed) onFinalChoice(element.type);
+    return;
+  }
   if (element?.type && isJumpType(element.type)) {
     const parsed = parseJumpType(element.type);
     const handedness = (element as Jump).leftHanded ? "Left" : "Right";
@@ -913,14 +1007,27 @@ function chooseElementBranch(branch: ElementKind) {
   turnPath.value = [];
   twoFeetPath.value = [];
   jumpPath.value = [];
+  spinPath.value = [];
   clearPendingChoice();
 }
 
 function onFinalChoice(type: string) {
   const target = elementToChange.value;
   if (!target) return;
-  const leftHanded = isJumpType(type) ? jumpPath.value[0] === "Left" : undefined;
-  const candidate = changeElementType(type, { type, start: target.start, end: target.end, leftHanded });
+  const leftHanded =
+    elementChangeBranch.value === "jump"
+      ? jumpPath.value[0] === "Left"
+      : elementChangeBranch.value === "spin"
+        ? spinPath.value[0] === "Left"
+        : undefined;
+  const spinType = elementChangeBranch.value === "spin" ? (spinPath.value[3] as SpinType | undefined) : undefined;
+  const candidate = changeElementType(type, {
+    type,
+    start: target.start,
+    end: target.end,
+    leftHanded,
+    spinType,
+  });
   pendingReplacement.value = candidate;
   shortNameDraft.value =
     !isProvisionalTarget.value && type === target.type ? target.shortName : candidate.defaultShortName;
@@ -997,6 +1104,8 @@ function startElementChange() {
   strokePath.value = [];
   turnPath.value = [];
   twoFeetPath.value = [];
+  jumpPath.value = [];
+  spinPath.value = [];
   clearPendingChoice();
 }
 
@@ -1028,6 +1137,11 @@ function previousElementChangeStep() {
   }
   if (elementChangeBranch.value === "twoFeetTurn" && twoFeetPath.value.length > 0) {
     twoFeetPath.value = twoFeetPath.value.slice(0, -1);
+    clearPendingChoice();
+    return;
+  }
+  if (elementChangeBranch.value === "spin" && spinPath.value.length > 0) {
+    spinPath.value = spinPath.value.slice(0, -1);
     clearPendingChoice();
     return;
   }
@@ -1317,6 +1431,22 @@ function closeElementChange() {
                 class="pi pi-check-circle editor-view__valid-check"
                 aria-label="Valid jump type"
               ></i>
+            </span>
+          </template>
+        </Listbox>
+
+        <Listbox
+          v-else-if="elementChangeBranch === 'spin' && !spinStepFinal"
+          :model-value="null"
+          :options="currentSpinOptions"
+          option-value="value"
+          scroll-height=""
+          class="w-full"
+          @change="(event) => onSpinChange(event.value)"
+        >
+          <template #option="{ option }">
+            <span :class="{ 'editor-view__option-old': oldValueAt('spin', spinPath.length, option.value) }">
+              {{ option.label }}
             </span>
           </template>
         </Listbox>
