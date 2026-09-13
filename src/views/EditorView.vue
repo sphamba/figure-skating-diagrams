@@ -16,6 +16,8 @@ import ColorPicker from "openvue/colorpicker";
 import ToggleSwitch from "openvue/toggleswitch";
 import Inplace from "openvue/inplace";
 import ConfirmPopup from "openvue/confirmpopup";
+import Splitter from "openvue/splitter";
+import SplitterPanel from "openvue/splitterpanel";
 import { useConfirm } from "openvue/useconfirm";
 import { Editor, formatTimingLabel, type EditMode } from "@/engine/sequenceEditor/editor";
 import { TimingKeyframe, type TimingKind } from "@/engine/keyframe";
@@ -40,6 +42,7 @@ import type { PatternJSON } from "@/engine/pattern";
 import type { DiagramJSON } from "@/engine/diagram";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import { useMediaQuery } from "@/composables/useMediaQuery";
+import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -59,6 +62,10 @@ const sidebarOpen = ref(true);
 watch(isMobile, (mobile) => {
   sidebarOpen.value = !mobile;
 });
+
+function onVideoError() {
+  if (videoSet.value) videoStatus.value = "invalid";
+}
 
 const elementChangeOpen = ref(false);
 const elementToChange = shallowRef<Element | null>(null);
@@ -464,10 +471,41 @@ const diagramName = computed({
 const diagramBpm = computed({
   get: () => store.getDiagram().bpm,
   set: (value) => {
-    if (typeof value === "number") store.setDiagramBpm(value);
+    if (typeof value === "number") {
+      store.setDiagramBpm(value);
+      if (editor) editor.bpm = getBpm();
+    }
     editor?.draw();
   },
 });
+
+const videoRef = ref<HTMLVideoElement | null>(null);
+const videoUrl = computed<string>({
+  get: () => store.getDiagram().videoUrl ?? "",
+  set: (value) => store.setDiagramVideoUrl(value),
+});
+const videoSet = computed(() => videoUrl.value.trim() !== "");
+const videoStatus = ref<"empty" | "pending" | "valid" | "invalid">("empty");
+const videoValid = computed(() => videoStatus.value === "valid");
+const { seconds: videoTime, setTimestamp } = useVideoTimestamp(videoRef);
+
+watch(
+  videoUrl,
+  (value) => {
+    videoStatus.value = value.trim() !== "" ? "pending" : "empty";
+  },
+  { immediate: true },
+);
+
+watch(
+  videoValid,
+  (valid) => {
+    if (!valid || !editor) return;
+    editor.videoTimeSeconds = videoTime.value;
+    editor.requestDraw();
+  },
+  { immediate: true },
+);
 
 const timingTypeOptions = [
   { label: "Time", value: "time" },
@@ -492,6 +530,21 @@ function formatTimingValue(value: number): string {
 }
 
 const confirm = useConfirm();
+
+const viewportWidth = ref(0);
+const viewportHeight = ref(0);
+
+const splitLayout = computed(() => {
+  // The docked sidebar takes space from the horizontal screen ratio, so it is
+  // subtracted before the 1:1 threshold decides the split direction.
+  const sidebarSpace = !isMobile.value && sidebarOpen.value ? 360 : 0;
+  return (viewportWidth.value - sidebarSpace) / viewportHeight.value > 1 ? "horizontal" : "vertical";
+});
+
+function updateViewportSizes() {
+  viewportWidth.value = window.innerWidth;
+  viewportHeight.value = window.innerHeight;
+}
 
 const sequenceInfos = computed(
   () =>
@@ -611,6 +664,26 @@ async function focusTimingValueInput() {
   timingBeatsInput.value?.$el?.querySelector<HTMLInputElement>("input")?.focus();
 }
 
+function prefillVideoTimestamp() {
+  if (!videoValid.value) return;
+  const seconds = videoTime.value;
+  if (seconds <= 0) return;
+  const target = timingTarget.value;
+  if (!target || !editor) return;
+  const owner = editor.getSequenceOfTimingKeyframe(target);
+  if (!owner) return;
+  if (timingPreviousValue.value !== null && seconds <= timingPreviousValue.value) return;
+  const resolved = owner.resolveTimes(getBpm());
+  const next = [...owner.keyframes.time]
+    .filter((other) => other.pathCoordinate > target.pathCoordinate)
+    .sort((a, b) => a.pathCoordinate - b.pathCoordinate)[0];
+  if (next) {
+    const nextTime = resolved.find((entry) => entry.keyframe === next)?.time ?? null;
+    if (nextTime !== null && seconds >= nextTime) return;
+  }
+  timingValueDraft.value = formatTimingLabel(seconds);
+}
+
 function openTimingKeyframeChange(keyframe: TimingKeyframe, isProvisional: boolean) {
   timingTarget.value = keyframe;
   timingIsProvisional.value = isProvisional;
@@ -619,6 +692,7 @@ function openTimingKeyframeChange(keyframe: TimingKeyframe, isProvisional: boole
   timingKind.value = keyframe.kind;
   timingValueDraft.value = keyframe.kind === "time" ? formatTimingLabel(keyframe.value) : String(keyframe.value);
   timingValueError.value = null;
+  if (isProvisional && keyframe.kind === "time") prefillVideoTimestamp();
   timingKeyframeOpen.value = true;
   focusTimingValueInput();
 }
@@ -751,6 +825,10 @@ onMounted(() => {
   const editorInstance = new Editor(canvasRef.value, visibleSequences.value);
   editor = editorInstance;
 
+  editorInstance.onVideoTimeChange = (seconds) => setTimestamp(seconds);
+  editorInstance.activeSequence = activeSequence.value;
+  editorInstance.bpm = getBpm();
+  editorInstance.videoTimeSeconds = videoTime.value;
   editorInstance.onElementChangeRequest = (element) => {
     elementToChange.value = element;
     isProvisionalTarget.value = editorInstance.isProvisional(element);
@@ -784,6 +862,23 @@ watch(visibleSequences, (list) => {
     list.length === previousVisibleSequences.length && list.every((s, i) => s === previousVisibleSequences[i]);
   previousVisibleSequences = list;
   if (!sameMembers && editor) editor.setSequences(list);
+});
+
+watch([videoTime, activeSequence] as const, () => {
+  if (!editor) return;
+  editor.videoTimeSeconds = videoTime.value;
+  editor.activeSequence = activeSequence.value;
+  editor.bpm = getBpm();
+  editor.requestDraw();
+});
+
+onMounted(() => {
+  updateViewportSizes();
+  window.addEventListener("resize", updateViewportSizes);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("resize", updateViewportSizes);
 });
 
 onBeforeUnmount(() => {
@@ -1186,6 +1281,17 @@ function closeElementChange() {
             <InputText v-model="diagramName" class="w-full" />
             <label class="editor-view__mode-label" for="diagram-bpm">BPM</label>
             <InputNumber id="diagram-bpm" v-model="diagramBpm" :min="1" :step="1" :use-grouping="false" fluid />
+            <label class="editor-view__mode-label" for="diagram-video-url">Video url</label>
+            <InputText
+              id="diagram-video-url"
+              v-model="videoUrl"
+              class="w-full"
+              :invalid="videoStatus === 'invalid'"
+              placeholder="https://example.com/video.mp4"
+            />
+            <small v-if="videoStatus === 'invalid'" class="editor-view__timing-error">
+              The video could not be loaded. Use a direct link to an .mp4 file.
+            </small>
           </div>
 
           <div class="editor-view__actions">
@@ -1285,24 +1391,45 @@ function closeElementChange() {
     <div v-if="isMobile && sidebarOpen" class="editor-view__backdrop" @click="sidebarOpen = false"></div>
 
     <div class="editor-view__canvas">
-      <div class="editor-view__floating">
-        <Button
-          v-if="isMobile && !sidebarOpen"
-          icon="pi pi-bars"
-          aria-label="Open panel"
-          severity="secondary"
-          rounded
-          @click="sidebarOpen = true"
-        />
-        <SelectButton
-          v-model="editMode"
-          :options="editModeOptions"
-          option-label="label"
-          option-value="value"
-          :allow-empty="false"
-        />
-      </div>
-      <canvas ref="canvasRef" class="editor-view__canvas-element"></canvas>
+      <Splitter
+        :layout="splitLayout"
+        :gutter-size="videoSet ? 10 : 0"
+        class="editor-view__splitter"
+        :class="{ 'editor-view__splitter--no-video': !videoSet }"
+      >
+        <SplitterPanel class="editor-view__video-pane" :size="videoSet ? 40 : 0" :min-size="videoSet ? 10 : 0">
+          <video
+            v-if="videoSet"
+            ref="videoRef"
+            class="editor-view__video"
+            :src="videoUrl"
+            controls
+            playsinline
+            @loadeddata="videoStatus = 'valid'"
+            @error="onVideoError"
+          ></video>
+        </SplitterPanel>
+        <SplitterPanel class="editor-view__canvas-pane" :min-size="20">
+          <div class="editor-view__floating">
+            <Button
+              v-if="isMobile && !sidebarOpen"
+              icon="pi pi-bars"
+              aria-label="Open panel"
+              severity="secondary"
+              rounded
+              @click="sidebarOpen = true"
+            />
+            <SelectButton
+              v-model="editMode"
+              :options="editModeOptions"
+              option-label="label"
+              option-value="value"
+              :allow-empty="false"
+            />
+          </div>
+          <canvas ref="canvasRef" class="editor-view__canvas-element"></canvas>
+        </SplitterPanel>
+      </Splitter>
     </div>
 
     <Dialog
@@ -1747,6 +1874,46 @@ function closeElementChange() {
   min-width: 0;
   height: 100%;
   position: relative;
+  background: white;
+}
+
+.editor-view__splitter {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  background: white;
+}
+
+.editor-view__splitter--no-video :deep(.p-splitter-gutter) {
+  display: none;
+}
+
+/* The splitter panels grow by default: pin the video panel when the url is empty. */
+.editor-view__splitter--no-video :deep(.editor-view__video-pane) {
+  flex-grow: 0;
+  width: 0;
+  min-width: 0;
+}
+
+.editor-view__video-pane {
+  display: flex;
+  background: black;
+  overflow: hidden;
+}
+
+.editor-view__video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.editor-view__canvas-pane {
+  position: relative;
+  overflow: hidden;
   background: white;
 }
 

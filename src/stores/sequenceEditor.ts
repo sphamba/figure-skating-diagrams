@@ -146,6 +146,12 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     saveToStorage();
   }
 
+  function setDiagramVideoUrl(videoUrl: string) {
+    diagram.value.videoUrl = videoUrl.trim() !== "" ? videoUrl : undefined;
+    triggerRef(diagram);
+    saveToStorage();
+  }
+
   function saveToStorage() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(diagram.value.toJSON()));
@@ -193,6 +199,7 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     setTraceColor,
     setDiagramName,
     setDiagramBpm,
+    setDiagramVideoUrl,
     saveToStorage,
     loadFromJSON,
     toJSON,

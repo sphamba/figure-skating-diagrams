@@ -945,10 +945,7 @@ test("a jump label is shifted in path, elements and timing modes and centered in
   };
 
   const sequence = editor.getSequences()[0];
-  const jump = new (jumpConstructorsByType["ToeLoop1"] as unknown as new (
-    start: number,
-    end: number,
-  ) => Element)(0, 1);
+  const jump = new (jumpConstructorsByType["ToeLoop1"] as unknown as new (start: number, end: number) => Element)(0, 1);
   sequence.addElement(jump);
 
   let shiftedFont = "";
@@ -975,5 +972,81 @@ test("a jump label is shifted in path, elements and timing modes and centered in
   expect(centered[0]!.y).toBeCloseTo(0, 6);
   expect(centered[0]!.font).toBe(shiftedFont);
 
+  editor.destroy();
+});
+
+test("clicking an element places the time cursor at its span center", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const path = editor.getSequences()[0].path;
+  // Time 0 at the path start and time 4 at the path end, so the center resolves
+  // to half of the total time.
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+  const el = new LeftForwardOutsideGlide(0 as PathCoordinate, path.length as PathCoordinate);
+  editorRef(editor).getSequences()[0].elements.push(el);
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+  const mid = path.getPosition((path.length / 2) as PathCoordinate);
+
+  mouse("mousedown", canvas, { clientX: sx(mid.x), clientY: sy(mid.y), button: 0, ctrlKey: false });
+  expect(editor.videoTimeSeconds).toBeCloseTo(2, 3);
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("dragging an element by its segment keeps the time cursor at its new span center", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const path = editor.getSequences()[0].path;
+  path.curves = [new Curve(new Vector(0, 0), new Vector(0.5, 0), new Vector(5, 4), new Vector(50, 0))];
+  path.updateLength();
+  // Time 0 at the path start (constructor keyframe) and time 4 at the path end,
+  // so the center resolves to the span center of the total time.
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+
+  const startU = (path.length * 0.2) as PathCoordinate;
+  const endU = (path.length * 0.4) as PathCoordinate;
+  const el = new LeftForwardOutsideThreeTurn("footL", startU, endU);
+  editorRef(editor).getSequences()[0].elements.push(el);
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+  const mid0 = path.getPosition(((startU + endU) / 2) as PathCoordinate);
+
+  mouse("mousedown", canvas, { clientX: sx(mid0.x), clientY: sy(mid0.y), button: 0, ctrlKey: false });
+  expect(editorRef(editor).isDraggingElementSegment).toBe(true);
+  expect(editor.videoTimeSeconds).toBeCloseTo(4 * 0.3, 3);
+
+  for (let i = 1; i <= 20; i++) {
+    const u = path.length * (0.3 + (i / 20) * 0.3);
+    const p = path.getPosition(u as PathCoordinate);
+    mouse("mousemove", window, { clientX: sx(p.x), clientY: sy(p.y), button: 0 });
+  }
+  mouse("mouseup", window, {});
+
+  const centerU = (((el.start as number) + (el.end as number)) / 2) as number;
+  expect(editor.videoTimeSeconds).toBeCloseTo((centerU / path.length) * 4, 3);
+  editor.destroy();
+});
+
+test("clicking an empty part of the path places the provisional element and moves the time cursor", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const path = editor.getSequences()[0].path;
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+  const p = path.getPosition((path.length / 2) as PathCoordinate);
+
+  mouse("mousedown", canvas, { clientX: sx(p.x), clientY: sy(p.y), button: 0, ctrlKey: false });
+  expect(editorRef(editor).isCreatingProvisional).toBe(true);
+  const provisional = editorRef(editor).provisionalElements.get(editor.getSequences()[0]);
+  expect(((provisional.start as number) + (provisional.end as number)) / 2).toBeCloseTo(path.length / 2, 3);
+  expect(editor.videoTimeSeconds).toBeCloseTo(2, 3);
+  mouse("mouseup", window, {});
   editor.destroy();
 });

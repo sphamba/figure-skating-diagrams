@@ -1,7 +1,7 @@
 import type { Curvilinear, Curve } from "../curve.js";
 import { type AxisRect } from "../curve.js";
 import { bladeLength } from "../constants.js";
-import type { PathCoordinate } from "../coordinates.js";
+import type { PathCoordinate, Time } from "../coordinates.js";
 import type { Element } from "../element/element.js";
 import type { DynamicGlide } from "../element/stroke.js";
 import type { Path } from "../path.js";
@@ -9,7 +9,7 @@ import { LENGTH, WIDTH, CORNER_RADIUS } from "../rink.js";
 import type { CanvasRenderingContext2DSized } from "../rinkCanvas.js";
 import { createDefaultFootTurn, isJumpType } from "../element/turnTypes.js";
 import { TimingKeyframe } from "../keyframe.js";
-import { Sequence } from "../sequence.js";
+import { Sequence, DEFAULT_BPM } from "../sequence.js";
 import { checkSequenceCurvatures, isStrokeElement } from "./curvatureWarning.js";
 import { Vector } from "../vector.js";
 
@@ -61,6 +61,10 @@ const SELECTION_RECT_FILL = "rgba(100, 149, 237, 0.2)"; // gentle blue fill
 const SELECTION_RECT_STROKE = "rgba(100, 149, 237, 0.9)";
 const ZOOM_FACTOR = 1.005;
 
+const VIDEO_CIRCLE_RADIUS = 0.25; // m, half of the 0.5 m timestamp circle diameter
+const VIDEO_CIRCLE_MIN_SIZE = 50; // px, minimum on-screen diameter when zoomed out
+const VIDEO_CIRCLE_FILL = "rgba(0, 0, 0, 0.15)";
+
 const MIN_ZOOM = 2;
 const MAX_ZOOM = 5000;
 const CANVAS_SCALE = 20; // canvas units per metre, editor drawing only
@@ -105,6 +109,11 @@ export class Editor {
   sequences: Sequence[] = [];
   mode: EditMode = "view";
   scaleElements = true;
+  activeSequence: Sequence | null = null;
+  bpm: number = DEFAULT_BPM;
+  videoTimeSeconds: number | null = null;
+  onVideoTimeChange?: (seconds: number) => void;
+  private isDraggingVideoCircle = false;
   private view: ViewState;
 
   private selectedPoints = new Map<Sequence, Set<string>>();
@@ -329,6 +338,9 @@ export class Editor {
     ctx.clearRect(0, 0, this.width, this.height);
     this.transformContext();
     this.drawRink();
+    // The time cursor stays behind everything else: it draws over the rink
+    // before the paths, traces, and elements draw above it.
+    this.drawVideoCircle();
     if (this.mode !== "view") {
       for (const sequence of this.sequences) {
         this.drawPath(sequence);
@@ -377,6 +389,59 @@ export class Editor {
       this.drawScheduled = false;
       this.drawFrameHandle = null;
       this.draw();
+    });
+  }
+
+  private getVideoCircleRadius(): number {
+    return Math.max(VIDEO_CIRCLE_RADIUS, VIDEO_CIRCLE_MIN_SIZE / 2 / this.view.zoom);
+  }
+
+  private setTimeCursorToElementCenter(element: Element) {
+    const sequence = this.getSequenceOfElement(element);
+    if (!sequence) return;
+    const lo = Math.min(element.start as number, element.end as number);
+    const hi = Math.max(element.start as number, element.end as number);
+    const seconds = sequence.getTimeFromPathCoordinate(((lo + hi) / 2) as PathCoordinate, this.bpm);
+    this.videoTimeSeconds = seconds;
+    this.onVideoTimeChange?.(seconds);
+  }
+
+  private getVideoCircle(): { sequence: Sequence; point: Vector<2> } | null {
+    if (this.videoTimeSeconds === null || !this.activeSequence) return null;
+    const path = this.activeSequence.path;
+    if (path.curves.length === 0) return null;
+    const u = this.activeSequence.getPathCoordinateFromTime(this.videoTimeSeconds as Time, this.bpm);
+    return { sequence: this.activeSequence, point: path.getPosition(u) };
+  }
+
+  private hitVideoCircle(screenX: number, screenY: number): boolean {
+    const circle = this.getVideoCircle();
+    if (!circle) return false;
+    const cursor = this.screenToWorld(screenX, screenY);
+    const tolerance = Math.max(this.getVideoCircleRadius() + 0.05, PICK_RADIUS / this.view.zoom);
+    return circle.point.minus(cursor).length() <= tolerance;
+  }
+
+  private dragVideoCircle(screenX: number, screenY: number) {
+    const sequence = this.activeSequence;
+    if (!sequence) return;
+    const cursor = this.screenToWorld(screenX, screenY);
+    const u = this.snapCursorToPathAnywhere(sequence, cursor);
+    if (u == null) return;
+    const seconds = sequence.getTimeFromPathCoordinate(u as PathCoordinate, this.bpm);
+    this.videoTimeSeconds = seconds;
+    this.onVideoTimeChange?.(seconds);
+  }
+
+  private drawVideoCircle() {
+    const circle = this.getVideoCircle();
+    if (!circle) return;
+    this.drawMetres(() => {
+      const ctx = this.ctx;
+      ctx.fillStyle = VIDEO_CIRCLE_FILL;
+      ctx.beginPath();
+      ctx.arc(circle.point.x, -circle.point.y, this.getVideoCircleRadius(), 0, 2 * Math.PI);
+      ctx.fill();
     });
   }
 
@@ -1631,9 +1696,15 @@ export class Editor {
 
   private startProvisionalCreation(sequence: Sequence, u: number) {
     this.placeProvisionalElement(sequence, u);
+    this.moveVideoCircleToProvisionalElement(sequence);
     this.isCreatingProvisional = true;
     this.creatingSequence = sequence;
     this.provisionalOriginU = u;
+  }
+
+  private moveVideoCircleToProvisionalElement(sequence: Sequence) {
+    const element = this.provisionalElements.get(sequence);
+    if (element) this.setTimeCursorToElementCenter(element);
   }
 
   private updateProvisionalCreation(cursor: Vector<2>) {
@@ -1644,9 +1715,10 @@ export class Editor {
     const origin = this.provisionalOriginU;
     if (Math.abs(u - origin) < 1e-9) {
       this.placeProvisionalElement(sequence, origin);
-      return;
+    } else {
+      this.setProvisionalSpan(sequence, Math.min(origin, u), Math.max(origin, u), origin);
     }
-    this.setProvisionalSpan(sequence, Math.min(origin, u), Math.max(origin, u), origin);
+    this.moveVideoCircleToProvisionalElement(sequence);
   }
 
   private placeProvisionalElement(sequence: Sequence, u: number) {
@@ -2112,7 +2184,13 @@ export class Editor {
   }
 
   private handlePrimaryDown(screenX: number, screenY: number, ctrlKey: boolean) {
+    // Panning is the only interaction below the time circle, so in view mode
+    // the circle keeps priority.
     if (this.mode === "view") {
+      if (this.hitVideoCircle(screenX, screenY)) {
+        this.isDraggingVideoCircle = true;
+        return;
+      }
       this.handleSecondaryDown(screenX, screenY);
       return;
     }
@@ -2148,6 +2226,10 @@ export class Editor {
       if (pathHit) {
         this.startProvisionalTimingCreation(pathHit.sequence, pathHit.u);
         this.draw();
+        return;
+      }
+      if (this.hitVideoCircle(screenX, screenY)) {
+        this.isDraggingVideoCircle = true;
         return;
       }
       this.isSelectingRect = true;
@@ -2193,6 +2275,7 @@ export class Editor {
           if (owner) this.provisionalElements.delete(owner);
           this.selectElement(element, ctrlKey);
         }
+        this.setTimeCursorToElementCenter(element);
         const pointHit = this.pickElementControlPoint(screenX, screenY);
         if (pointHit?.element === element) {
           this.isDraggingElementPoint = true;
@@ -2206,6 +2289,10 @@ export class Editor {
         if (pathHit) {
           this.startProvisionalCreation(pathHit.sequence, pathHit.u);
         } else {
+          if (this.hitVideoCircle(screenX, screenY)) {
+            this.isDraggingVideoCircle = true;
+            return;
+          }
           this.isSelectingRect = true;
           this.rectDidMove = false;
           this.rectTargetsElements = true;
@@ -2305,6 +2392,10 @@ export class Editor {
           this.lastDragDelta = new Vector<2>(0, 0);
         }
       } else {
+        if (this.hitVideoCircle(screenX, screenY)) {
+          this.isDraggingVideoCircle = true;
+          return;
+        }
         this.isSelectingRect = true;
         this.rectDidMove = false;
         this.rectTargetsElements = false;
@@ -2325,6 +2416,12 @@ export class Editor {
   }
 
   private handleMove(screenX: number, screenY: number) {
+    if (this.isDraggingVideoCircle) {
+      this.dragVideoCircle(screenX, screenY);
+      this.requestDraw();
+      return;
+    }
+
     if (this.isPanning) {
       const deltaX = screenX - this.lastPanX;
       const deltaY = screenY - this.lastPanY;
@@ -2368,6 +2465,7 @@ export class Editor {
         else this.dragElement.end = u;
         this.updateElementKeyframes(this.dragElement);
         this.sequenceMutated = true;
+        this.setTimeCursorToElementCenter(this.dragElement);
       }
       this.requestDraw();
       return;
@@ -2395,6 +2493,7 @@ export class Editor {
           this.updateElementKeyframes(item.element);
         }
         this.sequenceMutated = true;
+        if (this.dragElement) this.setTimeCursorToElementCenter(this.dragElement);
       }
       this.requestDraw();
       return;
@@ -2821,6 +2920,7 @@ export class Editor {
     this.isPanning = false;
     this.isDraggingPoint = false;
     this.isDraggingCurve = false;
+    this.isDraggingVideoCircle = false;
     this.isDraggingElementPoint = false;
     this.isDraggingElementSegment = false;
     this.isCreatingProvisional = false;

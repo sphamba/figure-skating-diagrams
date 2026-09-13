@@ -4,12 +4,14 @@ import type { SequenceJSON } from "./sequence.js";
 export interface DiagramJSON {
   name: string;
   bpm?: number;
+  videoUrl?: string;
   sequences: SequenceJSON[];
 }
 
 export class Diagram {
   name: string;
   bpm: number;
+  videoUrl?: string;
   sequences: Sequence[];
 
   constructor(name: string, sequences: Sequence[] = [], bpm: number = DEFAULT_BPM) {
@@ -31,15 +33,18 @@ export class Diagram {
     return {
       name: this.name,
       bpm: this.bpm,
+      videoUrl: this.videoUrl,
       sequences: this.sequences.map((sequence) => sequence.toJSON()),
     };
   }
 
   static fromJSON(json: DiagramJSON): Diagram {
-    return new Diagram(
+    const diagram = new Diagram(
       json.name ?? "Diagram",
       (json.sequences ?? []).map((sequence) => Sequence.fromJSON(sequence)),
       json.bpm ?? DEFAULT_BPM,
     );
+    diagram.videoUrl = json.videoUrl;
+    return diagram;
   }
 }
