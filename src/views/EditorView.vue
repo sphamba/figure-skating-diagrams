@@ -112,6 +112,18 @@ const glideLevelOptions: { label: string; value: string }[][] = [
   ],
 ];
 
+const glideTwoFeetOptions: { label: string; value: string }[] = [
+  { label: "Forward", value: "Forward" },
+  { label: "Backward", value: "Backward" },
+  { label: "Spread eagle", value: "SpreadEagle" },
+  { label: "Ina Bauer", value: "InaBauer" },
+];
+
+const glidePoseFrontFootOptions = [
+  { label: "Left front", value: "Left" },
+  { label: "Right front", value: "Right" },
+];
+
 const strokeLevelOptions: { label: string; value: string }[][] = [
   [
     { label: "Left", value: "Left" },
@@ -232,9 +244,18 @@ const currentTwoFeetTurnOptions = computed(() => {
 });
 
 const glideSideTwoFoot = computed(() => glidePath.value[0] === "TwoFoot");
-const glideStepFinal = computed(() => glidePath.value.length >= (glideSideTwoFoot.value ? 2 : 3));
+const glidePose = computed(() => (glideSideTwoFoot.value ? glidePath.value[1] : undefined));
+const glidePoseStep = computed(() => glidePose.value === "SpreadEagle" || glidePose.value === "InaBauer");
+const glideStepFinal = computed(
+  () => glidePath.value.length >= (glidePoseStep.value ? 3 : glideSideTwoFoot.value ? 2 : 3),
+);
 
-const currentGlideOptions = computed(() => (glideStepFinal.value ? [] : glideLevelOptions[glidePath.value.length]));
+const currentGlideOptions = computed(() => {
+  if (glideStepFinal.value) return [];
+  if (glidePath.value.length === 1 && glideSideTwoFoot.value) return glideTwoFeetOptions;
+  if (glidePath.value.length === 2) return glidePoseStep.value ? glidePoseFrontFootOptions : [];
+  return glideLevelOptions[glidePath.value.length];
+});
 
 const strokeStepFinal = computed(() => strokePath.value.length >= strokeLevelOptions.length);
 
@@ -278,6 +299,12 @@ function oldValueAt(branch: ElementKind, level: number, value: string): boolean 
   const flags = oldVariant.value;
   if (!flags) return false;
   if (branch === "glide") {
+    if (flags.pose) {
+      if (level === 0) return value === "TwoFoot";
+      if (level === 1) return value === flags.pose;
+      if (level === 2) return value === flags.frontFoot;
+      return false;
+    }
     if (level === 0) return value === (flags.twoFoot ? "TwoFoot" : flags.side);
     if (level === 1) return value === flags.direction;
     if (level === 2) return !flags.twoFoot && value === flags.edge;
@@ -375,7 +402,13 @@ const chosenLabels = computed<string[]>(() => {
   if (elementChangeBranch.value === "glide") {
     const labels = ["Glide"];
     glidePath.value.forEach((value, level) => {
-      const option = glideLevelOptions[level]?.find((choice) => choice.value === value);
+      const options =
+        level === 1 && glidePath.value[0] === "TwoFoot"
+          ? glideTwoFeetOptions
+          : level === 2 && (glidePath.value[1] === "SpreadEagle" || glidePath.value[1] === "InaBauer")
+            ? glidePoseFrontFootOptions
+            : glideLevelOptions[level];
+      const option = options?.find((choice) => choice.value === value);
       if (option) labels.push(option.label);
     });
     return labels;
@@ -1122,9 +1155,11 @@ function openAtExistingVariant() {
   }
   elementChangeBranch.value = branch;
   if (branch === "glide") {
-    glidePath.value = flags.twoFoot
-      ? ["TwoFoot", flags.direction ?? "Forward"]
-      : [flags.side ?? "Left", flags.direction ?? "Forward", flags.edge ?? "Neither"];
+    glidePath.value = flags.pose
+      ? ["TwoFoot", flags.pose, flags.frontFoot ?? "Left"]
+      : flags.twoFoot
+        ? ["TwoFoot", flags.direction ?? "Forward"]
+        : [flags.side ?? "Left", flags.direction ?? "Forward", flags.edge ?? "Neither"];
   } else if (branch === "stroke") {
     strokePath.value = [
       flags.side ?? "Left",
@@ -1196,11 +1231,16 @@ function onFinalChoice(type: string) {
 function onGlideChange(value: string) {
   const next = [...glidePath.value, value];
   glidePath.value = next;
-  if (next.length >= (next[0] === "TwoFoot" ? 2 : 3)) {
-    const [side, direction, edge] = next;
-    onFinalChoice(
-      side === "TwoFoot" ? `Both${direction}Glide` : `${side}${direction}${edge === "Neither" ? "" : edge}Glide`,
-    );
+  const poseStep = next[0] === "TwoFoot" && (next[1] === "SpreadEagle" || next[1] === "InaBauer");
+  if (next.length >= (next[0] === "TwoFoot" ? (poseStep ? 3 : 2) : 3)) {
+    const [side, direction, third] = next;
+    if (poseStep) {
+      onFinalChoice(`${direction}${third}FrontGlide`);
+    } else {
+      onFinalChoice(
+        side === "TwoFoot" ? `Both${direction}Glide` : `${side}${direction}${third === "Neither" ? "" : third}Glide`,
+      );
+    }
   }
 }
 

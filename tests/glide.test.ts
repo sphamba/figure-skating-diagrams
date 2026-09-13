@@ -27,8 +27,8 @@ function glide(typeName: string): DynamicGlide {
 }
 
 test("glide registry lists all static and dynamic glide kinds", () => {
-	expect(Object.keys(glideConstructorsByType)).toHaveLength(50);
-	expect(glideKindChoices).toHaveLength(50);
+	expect(Object.keys(glideConstructorsByType)).toHaveLength(54);
+	expect(glideKindChoices).toHaveLength(54);
 	expect(Object.keys(glideConstructorsByType)).toContain("LeftCrossedForwardInsideGlide");
 	expect(Object.keys(glideConstructorsByType)).toContain("RightNormalBackwardOutsideGlide");
 	expect(Object.keys(glideConstructorsByType)).toContain("LeftCrossedBackForwardInsideGlide");
@@ -99,6 +99,32 @@ test("a crossed back glide keeps the crossed flag and reports itself", () => {
 	expect(crossedBack.crossedBack).toBe(true);
 	expect(normal.crossed).toBe(false);
 	expect(normal.crossedBack).toBe(false);
+});
+
+test("a spread eagle keeps both feet on the centerline, 0.6 m apart, and mirrors the roles for right front", () => {
+	const g = glide("SpreadEagleLeftFrontGlide");
+
+	const left = g.getLeftFootKeyframes();
+	expect(left).toHaveLength(2);
+	expectData(expectAt(left as unknown as Kf[], 0, start), 0.3, 0, 0);
+	expectData(expectAt(left as unknown as Kf[], 1, end), 0.3, 0, 0);
+	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 0, start), -0.3, 0, 0);
+
+	const mirrored = glide("SpreadEagleRightFrontGlide");
+	expectData(expectAt(mirrored.getLeftFootKeyframes() as unknown as Kf[], 0, start), -0.3, 0, 0);
+	expectData(expectAt(mirrored.getRightFootKeyframes() as unknown as Kf[], 0, start), 0.3, 0, 0);
+});
+
+test("an ina bauer offsets the front foot halfFeetSpacing and the back foot 0.4 m, both on the same side", () => {
+	const g = glide("InaBauerLeftFrontGlide");
+
+	expectData(expectAt(g.getLeftFootKeyframes() as unknown as Kf[], 0, start), 0.15, -0.15, 0);
+	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 0, start), -0.15, -0.4, 0);
+	expectData(expectAt(g.getLeftFootKeyframes() as unknown as Kf[], 1, end), 0.15, -0.15, 0);
+
+	const mirrored = glide("InaBauerRightFrontGlide");
+	expectData(expectAt(mirrored.getRightFootKeyframes() as unknown as Kf[], 0, start), 0.15, 0.15, 0);
+	expectData(expectAt(mirrored.getLeftFootKeyframes() as unknown as Kf[], 0, start), -0.15, 0.4, 0);
 });
 
 test("glide types round-trip through JSON", () => {

@@ -8,6 +8,8 @@ export type VariantFlags = {
   stroke?: "Normal" | "Crossed" | "CrossedBack";
   group?: "ThreeTurn" | "Bracket" | "Rocker" | "Counter" | "Loop" | "Twizzle" | "Mohawk" | "Choctaw";
   openness?: "Open" | "Closed"; // two-feet turns only
+  pose?: "SpreadEagle" | "InaBauer"; // two-feet glides only
+  frontFoot?: "Left" | "Right"; // two-feet pose glides only
   turns?: string; // twizzle turn count as string, e.g. "1.5"
 };
 
@@ -37,6 +39,16 @@ function parseEdge(base: string): ["Inside" | "Outside" | "Neither", string] {
 }
 
 export function parseVariantFlags(type: string): VariantFlags {
+  const poseMatch = type.match(/^(SpreadEagle|InaBauer)(Left|Right)FrontGlide$/);
+  if (poseMatch) {
+    return {
+      twoFoot: true,
+      direction: "Forward",
+      pose: poseMatch[1] as VariantFlags["pose"],
+      frontFoot: poseMatch[2] as VariantFlags["frontFoot"],
+    };
+  }
+
   if (type.startsWith("Both")) {
     const [direction] = parseDirection(type.slice(4));
     return direction ? { twoFoot: true, direction } : { twoFoot: true };

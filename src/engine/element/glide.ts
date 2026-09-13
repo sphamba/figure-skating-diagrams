@@ -6,6 +6,9 @@ import { Vector } from "../vector.js";
 
 export const offIceFootHeight = 0.2; // metres
 export const halfFeetSpacing = 0.15; // metres
+export const feetSpacing = 2 * halfFeetSpacing; // metres
+export const spreadEagleSeparation = 0.6; // metres
+export const bauerBackShift = 0.4; // metres
 
 export interface GlideJSON {
   type: string;
@@ -179,6 +182,105 @@ for (const [direction, forward] of glideDirections) {
     defineGlide(type, shortName, config);
   }
   glideKindChoices.push({ type, label: `Two-feet ${direction.toLowerCase()} glide` });
+}
+
+export type TwoFeetPose = "SpreadEagle" | "InaBauer";
+export type GlideFrontFoot = "Left" | "Right";
+
+const twoFeetPoseShortNames: Record<TwoFeetPose, string> = {
+  SpreadEagle: "SeEe",
+  InaBauer: "IBEe",
+};
+
+type TwoFeetPoseConfig = {
+  pose: TwoFeetPose;
+  frontFoot: GlideFrontFoot;
+};
+
+export class TwoFeetPoseGlide extends Glide {
+  private readonly poseConfig: TwoFeetPoseConfig;
+
+  constructor(poseConfig: TwoFeetPoseConfig, start: PathCoordinate, end: PathCoordinate) {
+    super({ forward: true, leftOnIce: true, rightOnIce: true, edge: "neither" }, start, end);
+    this.poseConfig = poseConfig;
+  }
+
+  get pose(): TwoFeetPose {
+    return this.poseConfig.pose;
+  }
+
+  get frontFoot(): GlideFrontFoot {
+    return this.poseConfig.frontFoot;
+  }
+
+  get type(): string {
+    return `${this.poseConfig.pose}${this.poseConfig.frontFoot}FrontGlide`;
+  }
+
+  get defaultShortName(): string {
+    return twoFeetPoseShortNames[this.poseConfig.pose];
+  }
+
+  getLeftFootKeyframes(_spanScale?: number, lateralScale?: number): FootKeyframe[] {
+    return this.createPoseFootKeyframes("footL", lateralScale);
+  }
+
+  getRightFootKeyframes(_spanScale?: number, lateralScale?: number): FootKeyframe[] {
+    return this.createPoseFootKeyframes("footR", lateralScale);
+  }
+
+  private createPoseFootKeyframes(footKey: "footL" | "footR", lateralScale?: number): FootKeyframe[] {
+    const side = footKey === "footL" ? 1 : -1;
+    const front = (footKey === "footL") === (this.poseConfig.frontFoot === "Left");
+    let longitudinal: number;
+    let lateral: number;
+    if (this.poseConfig.pose === "SpreadEagle") {
+      longitudinal = front ? spreadEagleSeparation / 2 : -spreadEagleSeparation / 2;
+      lateral = 0;
+    } else {
+      longitudinal = front ? halfFeetSpacing : -halfFeetSpacing;
+      lateral = (front ? -halfFeetSpacing : bauerBackShift) * side;
+    }
+    const scale = lateralScale ?? 1;
+    const data: FootData = {
+      position: new Vector<3>(longitudinal, lateral * scale, 0),
+      orientation: getQuaternionFromAngleAxis(front ? 0 : Math.PI),
+      contactPoint: 0.5,
+      toePick: false,
+    };
+    return [
+      new FootKeyframe(this.start, data, "smooth", "smooth"),
+      new FootKeyframe(this.end, data, "smooth", "smooth"),
+    ];
+  }
+}
+
+const twoFeetPoseLabels: [TwoFeetPose, string][] = [
+  ["SpreadEagle", "Spread eagle"],
+  ["InaBauer", "Ina Bauer"],
+];
+
+for (const [pose, poseLabel] of twoFeetPoseLabels) {
+  for (const [frontFoot] of glideSides) {
+    const type = `${pose}${frontFoot}FrontGlide`;
+    const shortName = twoFeetPoseShortNames[pose];
+    const config: TwoFeetPoseConfig = { pose, frontFoot };
+    const PoseGlide = class extends TwoFeetPoseGlide {
+      constructor(start: PathCoordinate, end: PathCoordinate) {
+        super(config, start, end);
+      }
+
+      get type(): string {
+        return type;
+      }
+
+      get defaultShortName(): string {
+        return shortName;
+      }
+    };
+    glideConstructorsByType[type] = PoseGlide;
+    glideKindChoices.push({ type, label: `${poseLabel} ${frontFoot.toLowerCase()} front glide` });
+  }
 }
 
 export class LeftForwardInsideGlide extends Glide {
