@@ -82,22 +82,16 @@ export type ControlPointSelection = {
   pointKey: ControlPointKey;
 };
 
-type JointMoveSnapshot = {
+type MoveSnapshot = {
   sequence: Sequence;
-  jointCurveIndex: number;
   curveStarts: number[];
   curveLengths: number[];
   items: Array<{ element: Element; start: number; end: number }>;
   timingKeyframes: Array<{ keyframe: TimingKeyframe; u0: number }>;
 };
 
-type JointDeletionSnapshot = {
-  sequence: Sequence;
+type JointDeletionSnapshot = MoveSnapshot & {
   jointOldIndex: number;
-  curveStarts: number[];
-  curveLengths: number[];
-  items: Array<{ element: Element; start: number; end: number }>;
-  timingKeyframes: Array<{ keyframe: TimingKeyframe; u0: number }>;
 };
 
 export class Editor {
@@ -156,7 +150,7 @@ export class Editor {
   private segmentDragDeltaMin = -Infinity;
   private segmentDragDeltaMax = Infinity;
   private segmentDragGrabU = 0;
-  private jointMoveSnapshot: JointMoveSnapshot | null = null;
+  private dragSnapshots = new Map<Sequence, MoveSnapshot>();
   private jointDeletionSnapshot: JointDeletionSnapshot | null = null;
   private rectAddToSelection = false;
   private rectTargetsElements = false;
@@ -247,7 +241,7 @@ export class Editor {
   setSequences(sequences: Sequence[]) {
     this.sequences = sequences;
     this.sequenceMutated = false;
-    this.jointMoveSnapshot = null;
+    this.dragSnapshots.clear();
     this.jointDeletionSnapshot = null;
     this.selectedPoints.clear();
     this.selectedCurves.clear();
@@ -2378,7 +2372,7 @@ export class Editor {
         this.dragSequence = sequence;
         this.dragOrigin = sequence.path.curves[picked.curveIndex]?.[picked.pointKey].copy() ?? null;
         this.lastDragDelta = new Vector<2>(0, 0);
-        this.jointMoveSnapshot = this.makeJointMoveSnapshot(sequence, picked.curveIndex, picked.pointKey);
+        this.makeMoveSnapshots(this.sequences.filter((s) => (this.selectedPoints.get(s)?.size ?? 0) > 0));
       }
     } else {
       const curveHit = this.pickCurve(screenX, screenY);
@@ -2390,6 +2384,7 @@ export class Editor {
           this.dragSequence = sequence;
           this.dragOrigin = this.screenToWorld(screenX, screenY);
           this.lastDragDelta = new Vector<2>(0, 0);
+          this.makeMoveSnapshots(this.sequences.filter((s) => (this.selectedCurves.get(s)?.size ?? 0) > 0));
         }
       } else {
         if (this.hitVideoCircle(screenX, screenY)) {
@@ -2546,13 +2541,13 @@ export class Editor {
         point.y = world.y;
         this.alignNeighbors(sequence, curveIndex, pointKey, delta);
         sequence.path.updateLength();
-        this.remapElementsAfterJointMove();
         // Move the points selected on the other sequences by the same movement so a
         // selection across sequences keeps moving together.
         for (const [other, keys] of this.selectedPoints) {
           if (other === sequence || keys.size === 0) continue;
           this.translateGroupOf(other, keys, delta);
         }
+        this.remapElementsAfterDragMove();
         this.sequenceMutated = true;
         this.requestDraw();
       } else if (this.dragOrigin) {
@@ -2570,6 +2565,7 @@ export class Editor {
       if (selected.size === 0) continue;
       this.translateGroupOf(sequence, selected, delta);
     }
+    this.remapElementsAfterDragMove();
     this.sequenceMutated = true;
     this.requestDraw();
   }
@@ -2629,6 +2625,7 @@ export class Editor {
 
       sequence.path.updateLength();
     }
+    this.remapElementsAfterDragMove();
     this.sequenceMutated = true;
     this.requestDraw();
   }
@@ -2746,20 +2743,7 @@ export class Editor {
     return provisional ? [provisional, ...sequence.keyframes.time] : [...sequence.keyframes.time];
   }
 
-  private makeJointMoveSnapshot(sequence: Sequence, curveIndex: number, pointKey: ControlPointKey) {
-    const curves = sequence.path.curves;
-    const jointCurveIndex = pointKey === "p3" ? curveIndex : curveIndex - 1;
-    if (jointCurveIndex < 0 && curves.length === 0) return null;
-
-    const curveStarts: number[] = [];
-    const curveLengths: number[] = [];
-    let cumulated = 0;
-    for (const curve of curves) {
-      curveStarts.push(cumulated);
-      curveLengths.push(curve.length);
-      cumulated += curve.length;
-    }
-
+  private makeItemsAndKeyframes(sequence: Sequence): Pick<MoveSnapshot, "items" | "timingKeyframes"> {
     const items: Array<{ element: Element; start: number; end: number }> = [];
     for (const element of this.selectableElements(sequence)) {
       items.push({ element, start: element.start as number, end: element.end as number });
@@ -2768,12 +2752,30 @@ export class Editor {
     for (const keyframe of this.ownedTimingKeyframes(sequence)) {
       timingKeyframes.push({ keyframe, u0: keyframe.pathCoordinate as number });
     }
-    return { sequence, jointCurveIndex, curveStarts, curveLengths, items, timingKeyframes };
+    return { items, timingKeyframes };
   }
 
-  private remapElementsAfterJointMove() {
-    const snapshot = this.jointMoveSnapshot;
-    if (!snapshot) return;
+  private makeMoveSnapshots(sequences: Iterable<Sequence>) {
+    for (const sequence of sequences) {
+      if (!this.dragSnapshots.has(sequence)) {
+        const { curveStarts, curveLengths } = this.axisTables(sequence);
+        this.dragSnapshots.set(sequence, {
+          sequence,
+          curveStarts,
+          curveLengths,
+          ...this.makeItemsAndKeyframes(sequence),
+        });
+      }
+    }
+  }
+
+  private remapElementsAfterDragMove() {
+    for (const snapshot of this.dragSnapshots.values()) {
+      this.remapElementsOfSnapshot(snapshot);
+    }
+  }
+
+  private remapElementsOfSnapshot(snapshot: MoveSnapshot) {
     const sequence = snapshot.sequence;
 
     const newCurveStarts: number[] = [];
@@ -2828,16 +2830,7 @@ export class Editor {
 
   private makeJointDeletionSnapshot(sequence: Sequence, jointOldIndex: number) {
     const { curveStarts, curveLengths } = this.axisTables(sequence);
-
-    const items: Array<{ element: Element; start: number; end: number }> = [];
-    for (const element of this.selectableElements(sequence)) {
-      items.push({ element, start: element.start as number, end: element.end as number });
-    }
-    const timingKeyframes: Array<{ keyframe: TimingKeyframe; u0: number }> = [];
-    for (const keyframe of this.ownedTimingKeyframes(sequence)) {
-      timingKeyframes.push({ keyframe, u0: keyframe.pathCoordinate as number });
-    }
-    return { sequence, jointOldIndex, curveStarts, curveLengths, items, timingKeyframes };
+    return { sequence, jointOldIndex, curveStarts, curveLengths, ...this.makeItemsAndKeyframes(sequence) };
   }
 
   private remapElementsAfterCurveRemoval() {
@@ -2931,7 +2924,7 @@ export class Editor {
     this.draggingTimingKeyframe = null;
     this.dragTimingSequence = null;
     this.dragTimingItems = [];
-    this.jointMoveSnapshot = null;
+    this.dragSnapshots.clear();
     this.dragElement = null;
     this.dragSequence = null;
     this.dragOrigin = null;
