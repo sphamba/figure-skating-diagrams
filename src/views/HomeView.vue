@@ -8,6 +8,7 @@ import Listbox from "openvue/listbox";
 import ToggleSwitch from "openvue/toggleswitch";
 import Splitter from "openvue/splitter";
 import SplitterPanel from "openvue/splitterpanel";
+import SelectButton from "openvue/selectbutton";
 import ConfirmDialog from "openvue/confirmdialog";
 import { useConfirm } from "openvue/useconfirm";
 import DiagramTree, { type DiagramTreeSource } from "@/components/DiagramTree.vue";
@@ -18,6 +19,7 @@ import type { Sequence, SequenceJSON, FootKey } from "@/engine/sequence";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import { useMediaQuery } from "@/composables/useMediaQuery";
 import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
+import { usePlaybackSpeed } from "@/composables/usePlaybackSpeed";
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 
@@ -54,6 +56,7 @@ async function loadDiagramSource({ path }: DiagramTreeSource) {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const text = await response.text();
     const json = JSON.parse(text) as PatternJSON | DiagramJSON | SequenceJSON;
+    resetPlaybackSpeed();
     if (isPattern(json)) {
       store.loadFromJSON(json);
     } else if (isSequenceJSON(json)) {
@@ -93,6 +96,12 @@ const videoStatus = ref<"empty" | "pending" | "valid" | "invalid">("empty");
 const videoValid = computed(() => videoStatus.value === "valid");
 const videoRef = ref<HTMLVideoElement | null>(null);
 const { seconds: videoTime, setTimestamp } = useVideoTimestamp(videoRef);
+const {
+  speed: playbackSpeed,
+  options: playbackSpeedOptions,
+  apply: applyPlaybackSpeed,
+  reset: resetPlaybackSpeed,
+} = usePlaybackSpeed(videoRef);
 
 function onVideoError() {
   if (videoSet.value) videoStatus.value = "invalid";
@@ -100,6 +109,7 @@ function onVideoError() {
 
 function onVideoLoad() {
   videoStatus.value = "valid";
+  applyPlaybackSpeed();
   const earliest = earliestTimeKeyframeSeconds(store.getDiagram());
   if (earliest !== null) setTimestamp(earliest);
 }
@@ -345,6 +355,17 @@ onBeforeUnmount(() => {
         :class="{ 'home-view__splitter--no-video': !videoSet }"
       >
         <SplitterPanel class="home-view__video-pane" :size="videoSet ? 40 : 0" :min-size="videoSet ? 10 : 0">
+          <div v-if="videoSet" class="home-view__video-floating">
+            <SelectButton
+              v-model="playbackSpeed"
+              :options="playbackSpeedOptions"
+              option-label="label"
+              option-value="value"
+              :allow-empty="false"
+              size="small"
+              rounded
+            />
+          </div>
           <video
             v-if="videoSet"
             ref="videoRef"
@@ -554,9 +575,17 @@ onBeforeUnmount(() => {
 }
 
 .home-view__video-pane {
+  position: relative;
   display: flex;
   background: black;
   overflow: hidden;
+}
+
+.home-view__video-floating {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 5;
 }
 
 .home-view__video {

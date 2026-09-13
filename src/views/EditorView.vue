@@ -47,6 +47,7 @@ import { earliestTimeKeyframeSeconds, type DiagramJSON } from "@/engine/diagram"
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import { useMediaQuery } from "@/composables/useMediaQuery";
 import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
+import { usePlaybackSpeed } from "@/composables/usePlaybackSpeed";
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -74,6 +75,7 @@ function onVideoError() {
 
 function onVideoLoad() {
   videoStatus.value = "valid";
+  applyPlaybackSpeed();
   const earliest = earliestTimeKeyframeSeconds(store.getDiagram());
   if (earliest !== null) setTimestamp(earliest);
 }
@@ -550,6 +552,7 @@ async function loadDiagramSource({ path }: DiagramTreeSource) {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const text = await response.text();
     const json = JSON.parse(text) as PatternJSON | DiagramJSON | SequenceJSON;
+    resetPlaybackSpeed();
     if (isPattern(json)) {
       store.loadFromJSON(json);
     } else if (isSequenceJSON(json)) {
@@ -592,6 +595,12 @@ const videoSet = computed(() => videoUrl.value.trim() !== "");
 const videoStatus = ref<"empty" | "pending" | "valid" | "invalid">("empty");
 const videoValid = computed(() => videoStatus.value === "valid");
 const { seconds: videoTime, setTimestamp } = useVideoTimestamp(videoRef);
+const {
+  speed: playbackSpeed,
+  options: playbackSpeedOptions,
+  apply: applyPlaybackSpeed,
+  reset: resetPlaybackSpeed,
+} = usePlaybackSpeed(videoRef);
 
 watch(
   videoUrl,
@@ -1086,6 +1095,7 @@ async function onFileSelected(event: Event) {
 
   try {
     const json = JSON.parse(await file.text()) as PatternJSON | DiagramJSON | SequenceJSON;
+    resetPlaybackSpeed();
     if (isPattern(json)) {
       store.loadFromJSON(json);
     } else if (isSequenceJSON(json)) {
@@ -1442,7 +1452,7 @@ function closeElementChange() {
       <Card class="editor-view__panel">
         <template #title>
           <div class="editor-view__panel-title">
-            <span>Sequence editor</span>
+            <span>Diagram editor</span>
             <Button
               v-if="isMobile"
               icon="pi pi-times"
@@ -1592,7 +1602,11 @@ function closeElementChange() {
 
           <Fieldset legend="Input help" toggleable class="editor-view__help">
             <ul class="editor-view__hint">
-              <li v-for="item in helpItems" :key="item.description" class="editor-view__hint-item">
+              <li
+                v-for="(item, index) in helpItems"
+                :key="`${index}-${item.description}`"
+                class="editor-view__hint-item"
+              >
                 <span class="editor-view__hint-keys">
                   <template v-for="(key, index) in item.keys" :key="key">
                     <Tag :value="key" rounded />
@@ -1617,6 +1631,17 @@ function closeElementChange() {
         :class="{ 'editor-view__splitter--no-video': !videoSet }"
       >
         <SplitterPanel class="editor-view__video-pane" :size="videoSet ? 40 : 0" :min-size="videoSet ? 10 : 0">
+          <div v-if="videoSet" class="editor-view__video-floating">
+            <SelectButton
+              v-model="playbackSpeed"
+              :options="playbackSpeedOptions"
+              option-label="label"
+              option-value="value"
+              :allow-empty="false"
+              size="small"
+              rounded
+            />
+          </div>
           <video
             v-if="videoSet"
             ref="videoRef"
@@ -2141,6 +2166,7 @@ function closeElementChange() {
 }
 
 .editor-view__video-pane {
+  position: relative;
   display: flex;
   background: black;
   overflow: hidden;
@@ -2157,6 +2183,13 @@ function closeElementChange() {
   position: relative;
   overflow: hidden;
   background: white;
+}
+
+.editor-view__video-floating {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 5;
 }
 
 .editor-view__floating {
