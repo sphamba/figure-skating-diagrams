@@ -996,7 +996,7 @@ async function onFileSelected(event: Event) {
   try {
     const json = JSON.parse(await file.text()) as PatternJSON | DiagramJSON | SequenceJSON;
     if (isPattern(json)) {
-      store.loadFromJSON({ name: json.name, sequences: json.sequences });
+      store.loadFromJSON(json);
     } else if (isSequenceJSON(json)) {
       store.loadFromJSON({ name: "Diagram", sequences: [json] });
     } else {
@@ -1386,7 +1386,7 @@ function closeElementChange() {
             <InputText v-model="diagramName" class="w-full" />
             <label class="editor-view__mode-label" for="diagram-bpm">BPM</label>
             <InputNumber id="diagram-bpm" v-model="diagramBpm" :min="1" :step="1" :use-grouping="false" fluid />
-            <label class="editor-view__mode-label" for="diagram-video-url">Video url</label>
+            <label class="editor-view__mode-label" for="diagram-video-url">Video URL</label>
             <InputText
               id="diagram-video-url"
               v-model="videoUrl"

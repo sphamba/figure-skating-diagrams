@@ -12,6 +12,7 @@ const router = createRouter({
           path: "",
           name: "home",
           component: () => import("@/views/HomeView.vue"),
+          meta: { fullBleed: true },
         },
         {
           path: "editor",

@@ -1,0 +1,177 @@
+{
+  "name": "Pre-Preliminary 4 - Waltz Eight",
+  "bpm": 120,
+  "sequences": [
+    {
+      "name": "Sequence",
+      "traceColorL": "#3030d2",
+      "traceColorR": "#9c0000",
+      "path": {
+        "curves": [
+          {
+            "p0": [
+              -0.05376344086021505,
+              0
+            ],
+            "p1": [
+              0.1075268817204301,
+              6.774193548387096
+            ],
+            "p2": [
+              9.598088242974443,
+              6.473005067994232
+            ],
+            "p3": [
+              9.643194346217657,
+              -0.06737990227185753
+            ]
+          },
+          {
+            "p0": [
+              9.643194346217657,
+              -0.06737990227185753
+            ],
+            "p1": [
+              9.68830044946087,
+              -6.607764872537947
+            ],
+            "p2": [
+              -0.057126728072988076,
+              -6.635289873227713
+            ],
+            "p3": [
+              -0.10713755814057432,
+              -0.006962863205913994
+            ]
+          },
+          {
+            "p0": [
+              -0.10713755814057432,
+              -0.006962863205913994
+            ],
+            "p1": [
+              -0.15714838820816057,
+              6.621364146815884
+            ],
+            "p2": [
+              -9.84264225485097,
+              6.698535584210305
+            ],
+            "p3": [
+              -9.84264225485097,
+              0.022832304214571275
+            ]
+          },
+          {
+            "p0": [
+              -9.84264225485097,
+              0.022832304214571275
+            ],
+            "p1": [
+              -9.84264225485097,
+              -6.652870975781163
+            ],
+            "p2": [
+              0.1075268817204301,
+              -6.021505376344086
+            ],
+            "p3": [
+              0,
+              -0.16129032258064516
+            ]
+          }
+        ]
+      },
+      "keyframes": {
+        "footL": [],
+        "footR": [],
+        "hips": [],
+        "time": [
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 0,
+            "data": {
+              "type": "time",
+              "value": 0
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 62.034333221756,
+            "data": {
+              "type": "time",
+              "value": 10
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          }
+        ]
+      },
+      "elements": [
+        {
+          "type": "RightForwardOutsideGlide",
+          "start": 0,
+          "end": 0.41704570893109416,
+          "shortName": ""
+        },
+        {
+          "type": "RightForwardOutsideThreeTurn",
+          "start": 4.416150695717902,
+          "end": 5.203846142329723,
+          "shortName": "RFO3"
+        },
+        {
+          "type": "LeftNormalBackwardOutsideGlide",
+          "start": 10.83652722144958,
+          "end": 11.624307787268854,
+          "shortName": "LBO"
+        },
+        {
+          "type": "LeftBackwardClosedMohawk",
+          "start": 19.147859801476134,
+          "end": 19.95477167271858,
+          "shortName": ""
+        },
+        {
+          "type": "LeftNormalForwardOutsideGlide",
+          "start": 31.03089874362888,
+          "end": 31.849811325080328,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardOutsideThreeTurn",
+          "start": 35.624358382157695,
+          "end": 36.43338885782922,
+          "shortName": "LFO3"
+        },
+        {
+          "type": "RightNormalBackwardOutsideGlide",
+          "start": 41.99359849285574,
+          "end": 42.80262896852728,
+          "shortName": "RBO"
+        },
+        {
+          "type": "RightBackwardClosedMohawk",
+          "start": 50.92857224827046,
+          "end": 51.73117762630067,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardOutsideGlide",
+          "start": 55.824056218822655,
+          "end": 56.626758732534626,
+          "shortName": "LFO"
+        },
+        {
+          "type": "RightForwardOutsideGlide",
+          "start": 24.392382776562812,
+          "end": 25.19271016333645,
+          "shortName": "RFO"
+        }
+      ],
+      "annotations": []
+    }
+  ]
+}
