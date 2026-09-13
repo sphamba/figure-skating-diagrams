@@ -923,3 +923,14 @@ function getTraceWidth(
 export function getOppositeFootKey(footKey: FootKey): FootKey {
   return footKey === "footL" ? "footR" : "footL";
 }
+
+export function hasTimeEvolution(sequence: Sequence): boolean {
+  return sequence.keyframes.time.length > 1;
+}
+
+export function sequenceTimeRange(sequence: Sequence, bpm: number = DEFAULT_BPM): [Time, Time] | null {
+  if (sequence.path.curves.length === 0) return null;
+  const start = sequence.getTimeFromPathCoordinate(0 as PathCoordinate, bpm);
+  const end = sequence.getTimeFromPathCoordinate(sequence.path.length as PathCoordinate, bpm);
+  return [start < end ? start : end, start < end ? end : start];
+}

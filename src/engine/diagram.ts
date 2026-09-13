@@ -1,6 +1,17 @@
 import { DEFAULT_BPM, Sequence } from "./sequence.js";
 import type { SequenceJSON } from "./sequence.js";
 
+export function earliestTimeKeyframeSeconds(diagram: Diagram): number | null {
+  let best: number | null = null;
+  for (const sequence of diagram.sequences) {
+    for (const keyframe of sequence.keyframes.time) {
+      if (keyframe.kind !== "time") continue;
+      if (best === null || keyframe.value < best) best = keyframe.value;
+    }
+  }
+  return best;
+}
+
 export interface DiagramJSON {
   name: string;
   bpm?: number;

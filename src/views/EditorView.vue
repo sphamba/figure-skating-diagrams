@@ -43,7 +43,7 @@ import { OneFootTurn } from "@/engine/element/oneFootTurn";
 import { TwoFeetTurn } from "@/engine/element/twoFeetTurn";
 import type { Element } from "@/engine/element/element";
 import type { PatternJSON } from "@/engine/pattern";
-import type { DiagramJSON } from "@/engine/diagram";
+import { earliestTimeKeyframeSeconds, type DiagramJSON } from "@/engine/diagram";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import { useMediaQuery } from "@/composables/useMediaQuery";
 import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
@@ -70,6 +70,12 @@ watch(isMobile, (mobile) => {
 
 function onVideoError() {
   if (videoSet.value) videoStatus.value = "invalid";
+}
+
+function onVideoLoad() {
+  videoStatus.value = "valid";
+  const earliest = earliestTimeKeyframeSeconds(store.getDiagram());
+  if (earliest !== null) setTimestamp(earliest);
 }
 
 const elementChangeOpen = ref(false);
@@ -1108,6 +1114,7 @@ function downloadFile() {
   anchor.download = "diagram.json";
   anchor.click();
   URL.revokeObjectURL(url);
+  store.markSaved();
 }
 
 function clearPendingChoice() {
@@ -1607,7 +1614,7 @@ function closeElementChange() {
             :src="videoUrl"
             controls
             playsinline
-            @loadeddata="videoStatus = 'valid'"
+            @loadeddata="onVideoLoad"
             @error="onVideoError"
           ></video>
         </SplitterPanel>

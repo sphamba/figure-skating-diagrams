@@ -93,6 +93,99 @@ beforeEach(() => {
   recorder.sequences = [];
 });
 
+const timedDiagramJSON = {
+  name: "Timed",
+  bpm: 110,
+  videoUrl: "https://example.com/video.mp4",
+  sequences: [
+    {
+      name: "Timed",
+      path: { curves: [{ p0: [0, -1.2], p1: [0, -1.2], p2: [0, 1.2], p3: [0, 1.2] }] },
+      elements: [],
+      keyframes: {
+        footL: [],
+        footR: [],
+        hips: [],
+        time: [
+          {
+            kind: "TimingKeyframe",
+            coordinate: 1.5,
+            data: { type: "time", value: 3.75 },
+            transitionIn: "linear",
+            transitionOut: "linear",
+          },
+        ],
+      },
+    },
+    {
+      name: "Later",
+      path: { curves: [{ p0: [0, -1.2], p1: [0, -1.2], p2: [0, 1.2], p3: [0, 1.2] }] },
+      elements: [],
+      keyframes: {
+        footL: [],
+        footR: [],
+        hips: [],
+        time: [
+          {
+            kind: "TimingKeyframe",
+            coordinate: 1,
+            data: { type: "time", value: 5 },
+            transitionIn: "linear",
+            transitionOut: "linear",
+          },
+          {
+            kind: "TimingKeyframe",
+            coordinate: 2,
+            data: { type: "beats", value: 0.5 },
+            transitionIn: "linear",
+            transitionOut: "linear",
+          },
+        ],
+      },
+    },
+  ],
+};
+
+test("loading the video snaps the timestamp to the earliest time keyframe", async () => {
+  const wrapper = await mountEditorView();
+  const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
+  const store = useSequenceEditorStore();
+  store.loadFromJSON(timedDiagramJSON as never);
+  await nextTick();
+  await nextTick();
+  const video = document.querySelector("video");
+  expect(video, "the player should mount after load").not.toBeNull();
+  video!.dispatchEvent(new Event("loadeddata"));
+  await nextTick();
+  expect(video!.currentTime).toBe(3.75);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("downloading the diagram clears the unsaved mark", async () => {
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  const wrapper = await mountEditorView();
+  const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
+  const store = useSequenceEditorStore();
+  store.loadFromJSON(timedDiagramJSON as never);
+  store.setDiagramName("Renamed");
+  await nextTick();
+  expect(store.isUnsaved()).toBe(true);
+
+  const download = wrapper.findAll("button").find((button) => button.text().includes("Download JSON"));
+  expect(download, "the download button should mount").not.toBeUndefined();
+  await download!.trigger("click");
+  await nextTick();
+
+  expect(click).toHaveBeenCalled();
+  expect(store.isUnsaved()).toBe(false);
+  const tag = wrapper.find(".editor-view__unsaved-tag");
+  expect(tag.text()).toBe("Saved");
+  click.mockRestore();
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
 test("EditorView passes the full list and the hidden set tracks visibility toggles", async () => {
   const wrapper = await mountEditorView();
   const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");

@@ -13,7 +13,7 @@ import { useConfirm } from "openvue/useconfirm";
 import DiagramTree, { type DiagramTreeSource } from "@/components/DiagramTree.vue";
 import { Editor } from "@/engine/sequenceEditor/editor";
 import type { PatternJSON } from "@/engine/pattern";
-import type { DiagramJSON } from "@/engine/diagram";
+import { earliestTimeKeyframeSeconds, type DiagramJSON } from "@/engine/diagram";
 import type { Sequence, SequenceJSON, FootKey } from "@/engine/sequence";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import { useMediaQuery } from "@/composables/useMediaQuery";
@@ -96,6 +96,12 @@ const { seconds: videoTime, setTimestamp } = useVideoTimestamp(videoRef);
 
 function onVideoError() {
   if (videoSet.value) videoStatus.value = "invalid";
+}
+
+function onVideoLoad() {
+  videoStatus.value = "valid";
+  const earliest = earliestTimeKeyframeSeconds(store.getDiagram());
+  if (earliest !== null) setTimestamp(earliest);
 }
 
 watch(
@@ -344,7 +350,7 @@ onBeforeUnmount(() => {
             :src="videoUrl"
             controls
             playsinline
-            @loadeddata="videoStatus = 'valid'"
+            @loadeddata="onVideoLoad"
             @error="onVideoError"
           ></video>
         </SplitterPanel>

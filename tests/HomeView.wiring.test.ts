@@ -108,6 +108,33 @@ const videoFile = {
   sequences: [],
 };
 
+const timingSequenceJSON = {
+  name: "Timed",
+  path: { curves: [{ p0: [0, -1.2], p1: [0, -1.2], p2: [0, 1.2], p3: [0, 1.2] }] },
+  elements: [],
+  keyframes: {
+    footL: [],
+    footR: [],
+    hips: [],
+    time: [
+      {
+        kind: "TimingKeyframe",
+        coordinate: 1.5,
+        data: { type: "time", value: 3.75 },
+        transitionIn: "linear",
+        transitionOut: "linear",
+      },
+    ],
+  },
+};
+
+const timedVideoFile = {
+  name: "Timed Video Diagram",
+  bpm: 110,
+  videoUrl: "https://example.com/video.mp4",
+  sequences: [timingSequenceJSON],
+};
+
 beforeEach(() => {
   localStorage.clear();
   recorder.constructorArgs.length = 0;
@@ -142,6 +169,36 @@ test("a failed tree load clears the select and shows an error", async () => {
   await nextTick();
   const small = document.querySelector(".home-view__load-error");
   expect(small !== null).toBe(true);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("loading the video snaps the timestamp to the earliest time keyframe", async () => {
+  const wrapper = await mountHomeView("diagrams/test-video.json", true, timedVideoFile);
+  await wrapper.find('[data-test="tree-open"]').trigger("click");
+  await nextTick();
+  await nextTick();
+  await nextTick();
+  const video = document.querySelector("video");
+  expect(video, "the player should mount after load").not.toBeNull();
+  video!.dispatchEvent(new Event("loadeddata"));
+  await nextTick();
+  expect(video!.currentTime).toBe(3.75);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("loading the video without time keyframes keeps the timestamp", async () => {
+  const wrapper = await mountHomeView("diagrams/test-video.json", true, videoFile);
+  await wrapper.find('[data-test="tree-open"]').trigger("click");
+  await nextTick();
+  await nextTick();
+  await nextTick();
+  const video = document.querySelector("video");
+  expect(video, "the player should mount after load").not.toBeNull();
+  video!.dispatchEvent(new Event("loadeddata"));
+  await nextTick();
+  expect(video!.currentTime).toBe(0);
   wrapper.unmount();
   vi.unstubAllGlobals();
 });
