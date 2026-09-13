@@ -61,13 +61,16 @@ if (typeof window !== "undefined") {
 
 function emitSelectStub(path: string) {
   return {
-    template: `<div><button data-test="tree-open" @click="$emit('update:model-value', '${path}')">o</button></div>`,
+    template: `<div><button data-test="tree-open" @click="$emit('select', { source: 'bundled', path: '${path}' })">o</button></div>`,
   };
 }
 
 async function mountHomeView(selectPath: string | null, fetchOk: boolean, fetchResult: unknown) {
   if (!fetchOk) {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("not found", { status: 404 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("not found", { status: 404 })),
+    );
   } else {
     vi.stubGlobal(
       "fetch",
@@ -76,6 +79,7 @@ async function mountHomeView(selectPath: string | null, fetchOk: boolean, fetchR
   }
   const { default: view } = await import("@/views/HomeView.vue");
   const { default: OpenVue } = await import("openvue/config");
+  const { default: ConfirmationService } = await import("openvue/confirmationservice");
   const { default: Aura } = await import("@openvue/themes/aura");
   const { definePreset } = await import("@openuxkit/themes");
   const appPreset = definePreset(Aura, { semantic: { primary: { 50: "{sky.50}" } } });
@@ -83,8 +87,14 @@ async function mountHomeView(selectPath: string | null, fetchOk: boolean, fetchR
   const wrapper = mount(view as Component, {
     attachTo: document.body,
     global: {
-      plugins: [[OpenVue, { theme: { preset: appPreset, options: { prefix: "p", darkModeSelector: "system", cssLayer: false } } }]],
-      stubs: selectPath ? { Select: emitSelectStub(selectPath) } : {},
+      plugins: [
+        [
+          OpenVue,
+          { theme: { preset: appPreset, options: { prefix: "p", darkModeSelector: "system", cssLayer: false } } },
+        ],
+        [ConfirmationService],
+      ],
+      stubs: selectPath ? { DiagramTree: emitSelectStub(selectPath) } : {},
     },
   });
   await nextTick();

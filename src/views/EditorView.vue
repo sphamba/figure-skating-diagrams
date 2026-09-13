@@ -17,9 +17,11 @@ import ColorPicker from "openvue/colorpicker";
 import ToggleSwitch from "openvue/toggleswitch";
 import Inplace from "openvue/inplace";
 import ConfirmPopup from "openvue/confirmpopup";
+import ConfirmDialog from "openvue/confirmdialog";
 import Splitter from "openvue/splitter";
 import SplitterPanel from "openvue/splitterpanel";
 import { useConfirm } from "openvue/useconfirm";
+import DiagramTree, { type DiagramTreeSource } from "@/components/DiagramTree.vue";
 import { Editor, formatTimingLabel, type EditMode } from "@/engine/sequenceEditor/editor";
 import { TimingKeyframe, type TimingKind } from "@/engine/keyframe";
 import { DEFAULT_ANNOTATION_COLOR, type Annotation } from "@/engine/annotation";
@@ -530,6 +532,49 @@ const diagramBpm = computed({
   },
 });
 
+const isUnsaved = computed(() => store.isUnsaved());
+const loadFailed = ref(false);
+
+async function loadDiagramSource({ path }: DiagramTreeSource) {
+  loadFailed.value = false;
+  try {
+    const response = await fetch(`${import.meta.env.BASE_URL}${path}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const text = await response.text();
+    const json = JSON.parse(text) as PatternJSON | DiagramJSON | SequenceJSON;
+    if (isPattern(json)) {
+      store.loadFromJSON(json);
+    } else if (isSequenceJSON(json)) {
+      store.loadFromJSON({ name: "Diagram", sequences: [json] });
+    } else {
+      store.loadFromJSON(json);
+    }
+  } catch (error) {
+    loadFailed.value = true;
+    console.error("Could not open the diagram file:", error);
+  }
+}
+
+function openDiagramSource(source: DiagramTreeSource) {
+  if (!store.isUnsaved()) {
+    void loadDiagramSource(source);
+    return;
+  }
+  confirm.require({
+    group: "editor-save",
+    header: "Unsaved changes",
+    message: "The current diagram has unsaved changes. Open the new diagram and lose them?",
+    icon: "pi pi-exclamation-triangle",
+    rejectLabel: "Cancel",
+    acceptLabel: "Open",
+    acceptProps: { severity: "warning" },
+    rejectProps: { severity: "secondary", text: true },
+    accept: () => {
+      void loadDiagramSource(source);
+    },
+  });
+}
+
 const videoRef = ref<HTMLVideoElement | null>(null);
 const videoUrl = computed<string>({
   get: () => store.getDiagram().videoUrl ?? "",
@@ -890,8 +935,6 @@ function commitTimingKeyframe() {
   closeTimingKeyframe();
 }
 
-const clearOpen = ref(false);
-
 watch([timingValueDraft, timingKind, timingPreviousValue], () => {
   timingValueError.value = validateTimingValue(timingValueDraft.value);
 });
@@ -992,6 +1035,42 @@ function openFile() {
   fileInput.value?.click();
 }
 
+function openFileWithGuard() {
+  if (!store.isUnsaved()) {
+    openFile();
+    return;
+  }
+  confirm.require({
+    group: "editor-save",
+    header: "Unsaved changes",
+    message: "The current diagram has unsaved changes. Open the new file and lose them?",
+    icon: "pi pi-exclamation-triangle",
+    rejectLabel: "Cancel",
+    acceptLabel: "Open",
+    acceptProps: { severity: "warning" },
+    rejectProps: { severity: "secondary", text: true },
+    accept: () => openFile(),
+  });
+}
+
+function confirmNew() {
+  const unsaved = !store.isUnsaved() ? "New diagram" : "Unsaved changes";
+  const message = store.isUnsaved()
+    ? "The current diagram has unsaved changes. Create a new diagram and lose them?"
+    : "Create a new diagram? The current diagram will be lost.";
+  confirm.require({
+    group: "editor-save",
+    header: unsaved,
+    message,
+    icon: "pi pi-exclamation-triangle",
+    rejectLabel: "Cancel",
+    acceptLabel: "Create",
+    acceptProps: { severity: "warning" },
+    rejectProps: { severity: "secondary", text: true },
+    accept: () => store.clear(),
+  });
+}
+
 async function onFileSelected(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
@@ -1021,8 +1100,7 @@ function isSequenceJSON(json: PatternJSON | DiagramJSON | SequenceJSON): json is
   return "path" in json && "keyframes" in json;
 }
 
-function saveFile() {
-  if (!editor) return;
+function downloadFile() {
   const blob = new Blob([store.toJSON()], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -1188,15 +1266,6 @@ function openAtExistingVariant() {
     ];
   }
   onFinalChoice(element.type);
-}
-
-function onClearConfirmed() {
-  store.clear();
-  closeClear();
-}
-
-function closeClear() {
-  clearOpen.value = false;
 }
 
 function chooseElementBranch(branch: ElementKind) {
@@ -1378,6 +1447,18 @@ function closeElementChange() {
           </div>
         </template>
         <template #content>
+          <div class="editor-view__actions">
+            <Tag
+              :value="isUnsaved ? 'Unsaved changes' : 'Saved'"
+              :severity="isUnsaved ? 'warn' : 'success'"
+              class="editor-view__unsaved-tag"
+            />
+            <DiagramTree class="w-full" @select="openDiagramSource" />
+            <small v-if="loadFailed" class="editor-view__timing-error">
+              The diagram could not be opened. Check that the json file is valid.
+            </small>
+          </div>
+
           <div v-if="editMode !== 'elements'" class="editor-view__actions">
             <div class="editor-view__scale-checkbox">
               <Checkbox v-model="scaleElements" binary input-id="scale-elements" />
@@ -1473,9 +1554,21 @@ function closeElementChange() {
           </div>
 
           <div class="editor-view__actions">
-            <Button label="Open JSON" icon="pi pi-folder-open" class="w-full" severity="secondary" @click="openFile" />
-            <Button label="Save JSON" icon="pi pi-save" class="w-full" severity="secondary" @click="saveFile" />
-            <Button label="Clear" icon="pi pi-trash" class="w-full" severity="danger" @click="clearOpen = true" />
+            <Button
+              label="Load JSON"
+              icon="pi pi-folder-open"
+              class="w-full"
+              severity="secondary"
+              @click="openFileWithGuard"
+            />
+            <Button
+              label="Download JSON"
+              icon="pi pi-download"
+              class="w-full"
+              severity="secondary"
+              @click="downloadFile"
+            />
+            <Button label="New" icon="pi pi-plus" class="w-full" severity="secondary" @click="confirmNew" />
           </div>
 
           <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFileSelected" />
@@ -1719,20 +1812,6 @@ function closeElementChange() {
     </Dialog>
 
     <Dialog
-      v-model:visible="clearOpen"
-      header="Clear diagram"
-      modal
-      class="editor-view__clear-dialog"
-      @hide="closeClear"
-    >
-      <p>Put back the default diagram? The current diagram will be lost.</p>
-      <template #footer>
-        <Button label="Cancel" severity="secondary" icon="pi pi-times" @click="closeClear" />
-        <Button label="Clear" severity="danger" icon="pi pi-trash" @click="onClearConfirmed" />
-      </template>
-    </Dialog>
-
-    <Dialog
       v-model:visible="timingKeyframeOpen"
       header="Timing keyframe"
       modal
@@ -1851,6 +1930,7 @@ function closeElementChange() {
     </Dialog>
 
     <ConfirmPopup ref="confirmPopupRef" group="editor-delete" />
+    <ConfirmDialog group="editor-save" />
   </div>
 </template>
 
@@ -1971,6 +2051,10 @@ function closeElementChange() {
 
 .editor-view__help {
   margin-top: 1rem;
+}
+
+.editor-view__unsaved-tag {
+  align-self: flex-start;
 }
 
 .editor-view__scale-checkbox {
@@ -2162,6 +2246,17 @@ function closeElementChange() {
   width: 320px;
   max-width: 90vw;
   min-width: 0;
+}
+
+.editor-view__save-dialog {
+  width: 320px;
+  max-width: 90vw;
+  min-width: 0;
+}
+
+.editor-view__save-dialog .p-dialog-content {
+  display: flex;
+  flex-direction: column;
 }
 
 .editor-view__annotation-dialog {

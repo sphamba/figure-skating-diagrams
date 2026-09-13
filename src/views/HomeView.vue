@@ -4,11 +4,13 @@ import Button from "openvue/button";
 import Card from "openvue/card";
 import Tag from "openvue/tag";
 import Fieldset from "openvue/fieldset";
-import Select from "openvue/select";
 import Listbox from "openvue/listbox";
 import ToggleSwitch from "openvue/toggleswitch";
 import Splitter from "openvue/splitter";
 import SplitterPanel from "openvue/splitterpanel";
+import ConfirmDialog from "openvue/confirmdialog";
+import { useConfirm } from "openvue/useconfirm";
+import DiagramTree, { type DiagramTreeSource } from "@/components/DiagramTree.vue";
 import { Editor } from "@/engine/sequenceEditor/editor";
 import type { PatternJSON } from "@/engine/pattern";
 import type { DiagramJSON } from "@/engine/diagram";
@@ -16,7 +18,6 @@ import type { Sequence, SequenceJSON, FootKey } from "@/engine/sequence";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import { useMediaQuery } from "@/composables/useMediaQuery";
 import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
-import diagramTree from "virtual:diagram-tree";
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 
@@ -28,6 +29,7 @@ watch(isMobile, (mobile) => {
 });
 
 const store = useSequenceEditorStore();
+const confirm = useConfirm();
 
 const sequences = computed(() => store.getSequences());
 const activeSequence = computed(() => store.getActiveSequence());
@@ -35,26 +37,23 @@ const hiddenSequenceSet = computed(() => new Set(sequences.value.filter((sequenc
 const diagramName = computed(() => store.getDiagram().name);
 const diagramBpm = computed(() => store.getDiagram().bpm);
 
-type TreeGroup = { label: string; items: { name: string; path: string }[] };
+const loadFailed = ref(false);
 
-const treeGroups = computed<TreeGroup[]>(() => {
-  const groups: TreeGroup[] = [];
-  const walk = (folder: typeof diagramTree, prefix: string) => {
-    if (folder.files.length > 0) groups.push({ label: prefix, items: folder.files });
-    for (const child of folder.folders) walk(child, prefix ? `${prefix} / ${child.name}` : child.name);
-  };
-  walk(diagramTree, "diagrams");
-  return groups;
-});
+function isPattern(json: PatternJSON | DiagramJSON | SequenceJSON): json is PatternJSON {
+  return Array.isArray((json as PatternJSON).sequences);
+}
 
-const selectedPath = ref<string | null>(null);
+function isSequenceJSON(json: PatternJSON | DiagramJSON | SequenceJSON): json is SequenceJSON {
+  return "path" in json && "keyframes" in json;
+}
 
-async function onTreeSelect(path: string) {
+async function loadDiagramSource({ path }: DiagramTreeSource) {
   loadFailed.value = false;
   try {
     const response = await fetch(`${import.meta.env.BASE_URL}${path}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const json = JSON.parse(await response.text()) as PatternJSON | DiagramJSON | SequenceJSON;
+    const text = await response.text();
+    const json = JSON.parse(text) as PatternJSON | DiagramJSON | SequenceJSON;
     if (isPattern(json)) {
       store.loadFromJSON(json);
     } else if (isSequenceJSON(json)) {
@@ -65,19 +64,27 @@ async function onTreeSelect(path: string) {
   } catch (error) {
     loadFailed.value = true;
     console.error("Could not open the diagram file:", error);
-  } finally {
-    selectedPath.value = null;
   }
 }
 
-const loadFailed = ref(false);
-
-function isPattern(json: PatternJSON | DiagramJSON | SequenceJSON): json is PatternJSON {
-  return Array.isArray((json as PatternJSON).sequences);
-}
-
-function isSequenceJSON(json: PatternJSON | DiagramJSON | SequenceJSON): json is SequenceJSON {
-  return "path" in json && "keyframes" in json;
+function openDiagramSource(source: DiagramTreeSource) {
+  if (!store.isUnsaved()) {
+    void loadDiagramSource(source);
+    return;
+  }
+  confirm.require({
+    group: "home-save",
+    header: "Unsaved changes",
+    message: "The current diagram has unsaved changes. Open the new diagram and lose them?",
+    icon: "pi pi-exclamation-triangle",
+    rejectLabel: "Cancel",
+    acceptLabel: "Open",
+    acceptProps: { severity: "warning" },
+    rejectProps: { severity: "secondary", text: true },
+    accept: () => {
+      void loadDiagramSource(source);
+    },
+  });
 }
 
 const videoUrl = computed(() => store.getDiagram().videoUrl ?? "");
@@ -246,19 +253,7 @@ onBeforeUnmount(() => {
         </template>
         <template #content>
           <div class="home-view__actions">
-            <label class="home-view__mode-label" for="diagram-tree">Saved diagrams</label>
-            <Select
-              input-id="diagram-tree"
-              v-model="selectedPath"
-              :options="treeGroups"
-              option-label="name"
-              option-value="path"
-              option-group-label="label"
-              option-group-children="items"
-              placeholder="Open a diagram"
-              class="w-full"
-              @update:model-value="(value) => value && onTreeSelect(value)"
-            />
+            <DiagramTree class="w-full" @select="openDiagramSource" />
             <small v-if="loadFailed" class="home-view__load-error">
               The diagram could not be opened. Check that the json file is valid.
             </small>
@@ -328,6 +323,8 @@ onBeforeUnmount(() => {
         </template>
       </Card>
     </aside>
+
+    <ConfirmDialog group="home-save" />
 
     <div v-if="isMobile && sidebarOpen" class="home-view__backdrop" @click="sidebarOpen = false"></div>
 

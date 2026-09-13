@@ -1,4 +1,4 @@
-import { shallowRef, triggerRef } from "vue";
+import { ref, shallowRef, triggerRef } from "vue";
 import { defineStore } from "pinia";
 import { BothForwardGlide } from "@/engine/element/glide";
 import { DEFAULT_START_ELEMENT_LENGTH } from "@/engine/sequenceEditor/editor";
@@ -48,6 +48,7 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
   const diagram = shallowRef<Diagram>(loadStoredDiagram());
   const activeSequence = shallowRef<Sequence | null>(diagram.value.sequences[0] ?? null);
   const hiddenSequences = shallowRef<Set<Sequence>>(new Set());
+  const jsonBaseline = ref<string>(JSON.stringify(diagram.value.toJSON(), null, 2));
 
   function getDiagram(): Diagram {
     return diagram.value;
@@ -89,8 +90,6 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     return `${DEFAULT_SEQUENCE_NAME} ${index}`;
   }
 
-  // Structural changes rebuild the sequences array instead of mutating it in place:
-  // the view's computed chain reads this array, so a new identity keeps the list reactive.
   function addSequence() {
     const sequence = defaultSequence();
     sequence.name = uniqueSequenceName(diagram.value.sequences);
@@ -158,6 +157,7 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     } catch (error) {
       console.error("Could not store the diagram:", error);
     }
+    triggerRef(diagram);
   }
 
   function loadFromJSON(json: DiagramJSON) {
@@ -168,10 +168,23 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     hiddenSequences.value = new Set();
     triggerRef(diagram);
     saveToStorage();
+    markSaved();
   }
 
   function toJSON(): string {
     return JSON.stringify(diagram.value.toJSON(), null, 2);
+  }
+
+  function getJSON(): string {
+    return JSON.stringify(diagram.value.toJSON(), null, 2);
+  }
+
+  function markSaved() {
+    jsonBaseline.value = getJSON();
+  }
+
+  function isUnsaved(): boolean {
+    return getJSON() !== jsonBaseline.value;
   }
 
   function clear() {
@@ -181,6 +194,7 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     hiddenSequences.value = new Set();
     triggerRef(diagram);
     saveToStorage();
+    markSaved();
   }
 
   return {
@@ -203,6 +217,9 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     saveToStorage,
     loadFromJSON,
     toJSON,
+    getJSON,
+    markSaved,
+    isUnsaved,
     clear,
   };
 });
