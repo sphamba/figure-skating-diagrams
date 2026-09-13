@@ -359,6 +359,7 @@ const helpItems = computed<HelpItem[]>(() =>
   editMode.value === "view"
     ? [
         { keys: ["wheel"], description: "zoom" },
+        { keys: ["left drag"], description: "move the view" },
         { keys: ["right drag"], description: "move the view" },
         ...touchHelpItems,
       ]

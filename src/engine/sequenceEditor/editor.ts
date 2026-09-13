@@ -348,6 +348,7 @@ export class Editor {
       this.drawTraces();
       this.drawTimingBeatLabels();
     } else if (this.mode === "timing") {
+      this.drawTimingElements();
       this.drawTimingKeyframes();
       this.drawTimingButtons();
       this.drawTimingTimeLabels();
@@ -877,9 +878,22 @@ export class Editor {
     this.drawProvisionalPlusButtons();
   }
 
+  private drawTimingElements() {
+    for (const sequence of this.sequences) {
+      if (sequence.path.curves.length === 0) continue;
+      this.ctx.strokeStyle = "#000";
+      this.ctx.lineWidth = (PATH_WIDTH + 2) / this.view.zoom;
+      for (const element of sequence.elements) {
+        this.drawElementSpan(sequence, element);
+      }
+    }
+  }
+
   private getDisplayedSpan(sequence: Sequence, element: Element): [PathCoordinate, PathCoordinate] {
     const minBladeLength =
-      this.scaleElements && this.mode !== "elements" ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
+      this.scaleElements && this.mode !== "elements" && this.mode !== "timing"
+        ? MIN_BLADE_LENGTH / this.view.zoom
+        : undefined;
     const scales = sequence.getSpanScales(minBladeLength);
     const factor = scales.get(element) ?? 1;
     const [start, end] = factor === 1 ? [element.start, element.end] : element.scaleAboutMiddle(factor);
@@ -2098,7 +2112,10 @@ export class Editor {
   }
 
   private handlePrimaryDown(screenX: number, screenY: number, ctrlKey: boolean) {
-    if (this.mode === "view") return;
+    if (this.mode === "view") {
+      this.handleSecondaryDown(screenX, screenY);
+      return;
+    }
 
     if (this.mode === "timing") {
       const plusHit = this.hitProvisionalTimingPlus(screenX, screenY);
