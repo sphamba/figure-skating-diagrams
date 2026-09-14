@@ -232,6 +232,7 @@ export class Editor {
   private lastPanX = 0;
   private lastPanY = 0;
   private touchMode: "none" | "one" | "two" = "none";
+  private pendingTouchPosition: [number, number] | null = null;
   private lastPinchDist = 0;
   private lastPinchMidX = 0;
   private lastPinchMidY = 0;
@@ -2781,7 +2782,8 @@ export class Editor {
   private handleTouchStart(event: TouchEvent) {
     event.preventDefault();
     if (event.touches.length >= 2) {
-      if (this.touchMode === "one") this.handleMouseUp(); // a second finger breaks off the one-finger action
+      if (this.touchMode === "one") this.handleMouseUp();
+      this.pendingTouchPosition = null;
       this.touchMode = "two";
       this.startPinch(event.touches);
       return;
@@ -2790,12 +2792,13 @@ export class Editor {
     const touch = event.touches[0];
     if (!touch) return;
     this.touchMode = "one";
-    this.handlePrimaryDown(...this.touchPosition(touch), false);
+    this.pendingTouchPosition = this.touchPosition(touch);
   }
 
   private handleTouchMove(event: TouchEvent) {
     if (this.touchMode === "two" && event.touches.length >= 2) {
       event.preventDefault();
+      this.pendingTouchPosition = null;
       this.pinchZoomAndPan(event.touches);
       return;
     }
@@ -2803,18 +2806,28 @@ export class Editor {
       event.preventDefault();
       const touch = event.touches[0];
       if (!touch) return;
+      if (this.pendingTouchPosition) {
+        this.handlePrimaryDown(...this.pendingTouchPosition, false);
+        this.pendingTouchPosition = null;
+      }
       this.handleMove(...this.touchPosition(touch));
     }
   }
 
   private handleTouchEnd(event: TouchEvent) {
     if (this.touchMode === "one" && event.touches.length === 0) {
+      const cancelled = event.type === "touchcancel";
+      if (!cancelled && this.pendingTouchPosition) {
+        this.handlePrimaryDown(...this.pendingTouchPosition, false);
+      }
+      this.pendingTouchPosition = null;
       this.handleMouseUp();
       this.touchMode = "none";
       return;
     }
     if (this.touchMode === "two" && event.touches.length < 2) {
       this.touchMode = "none";
+      this.pendingTouchPosition = null;
       event.preventDefault();
       this.handleMouseUp();
     }
