@@ -741,8 +741,7 @@ export class Sequence {
       // element middle. Several circles span the element from start to end, with the
       // element span taken from the neighbor keyframes in "drawable": the spin
       // element places rest keyframes at its start and end. The foot orientation is
-      // not applied: the keyframe shift goes to the geographic edge side,
-      // independent of the foot orientation.
+      // not applied: the shift direction is set by the spin handedness.
       const radius = Math.abs(data.spinShift);
       const count = Math.abs(data.spins ?? 0);
       const circleCoordinates: PathCoordinate[] = [];

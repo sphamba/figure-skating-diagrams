@@ -100,7 +100,7 @@ test("a right-handed left-foot inside spin shifts the on-ice foot to +y and sets
 	expect(right[0].data.position!.z).toBeCloseTo(offIceFootHeight, 10);
 });
 
-test("a left-handed spin keeps the same shift side and sets spins to -1", () => {
+test("a left-handed spin shifts to -y and sets spins to -1", () => {
 	const instance = spin("LeftInsideSpin", true);
 	expect(instance.onIceFoot).toBe("footL");
 
@@ -108,7 +108,7 @@ test("a left-handed spin keeps the same shift side and sets spins to -1", () => 
 	expect(kfSpins(left[1])).toBe(-1);
 	expect(left[1].data.position!.x).toBe(0);
 	expect(left[1].data.position!.y).toBe(0);
-	expect(left[1].data.spinShift!).toBeCloseTo(HALF, 10);
+	expect(left[1].data.spinShift!).toBeCloseTo(-HALF, 10);
 	expect(left[1].data.position!.z).toBe(0);
 
 	const right = instance.getRightFootKeyframes();
@@ -117,13 +117,13 @@ test("a left-handed spin keeps the same shift side and sets spins to -1", () => 
 	expect(right[0].data.position!.z).toBeCloseTo(offIceFootHeight, 10);
 });
 
-test("a left-handed right-foot outside spin keeps the same shift side and sets spins to -1", () => {
+test("a left-handed right-foot outside spin shifts to -y and sets spins to -1", () => {
 	const instance = spin("RightOutsideSpin", true);
 	expect(instance.onIceFoot).toBe("footR");
 
 	const right = instance.getRightFootKeyframes();
 	expect(kfSpins(right[1])).toBe(-1);
-	expect(right[1].data.spinShift!).toBeCloseTo(HALF, 10);
+	expect(right[1].data.spinShift!).toBeCloseTo(-HALF, 10);
 
 	const left = instance.getLeftFootKeyframes();
 	expect(left).toHaveLength(2);
@@ -136,6 +136,17 @@ test("a right-handed right-foot outside spin shifts to +y", () => {
 	expect(kfSpins(instance.getRightFootKeyframes()[1])).toBe(1);
 	expect(instance.getRightFootKeyframes()[1].data.spinShift!).toBeCloseTo(HALF, 10);
 	expect(instance.getRightFootKeyframes()[1].data.position!.y).toBe(0);
+});
+
+test("the shift side depends on the handedness only", () => {
+	for (const typeName of ["LeftInsideSpin", "LeftOutsideSpin", "RightInsideSpin", "RightOutsideSpin"]) {
+		const shiftsOf = (leftHanded: boolean) =>
+			[...spin(typeName, leftHanded).getLeftFootKeyframes(), ...spin(typeName, leftHanded).getRightFootKeyframes()].find(
+				(keyframe) => (keyframe.data.spins ?? 0) !== 0,
+			)!.data.spinShift!;
+		expect(shiftsOf(false)).toBeCloseTo(HALF, 10);
+		expect(shiftsOf(true)).toBeCloseTo(-HALF, 10);
+	}
 });
 
 test("the revolution count sets the spins attribute and is kept on the element", () => {
@@ -287,7 +298,7 @@ test("no circles are drawn for a resting foot or a non-spinning foot", () => {
 	expect(right.circles).toHaveLength(0);
 
 	const leftHanded = spinTraceSequence("LeftInsideSpin", true);
-	// Handedness only sets the spins attribute, not the shift, so the circle stays.
+	// Handedness flips the shift side, but the circle stays, on the other side.
 	expect(leftHanded.keyframes.footL.filter((keyframe) => (keyframe.data.spins ?? 0) !== 0)).toHaveLength(1);
 	const left = makeCtx();
 	leftHanded.drawFootTrace(left.ctx, "footL", 0 as PathCoordinate, leftHanded.path.length as PathCoordinate);

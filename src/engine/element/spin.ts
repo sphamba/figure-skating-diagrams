@@ -129,16 +129,10 @@ export abstract class Spin extends Element {
     return new constructor(json.start, json.end, json.leftHanded, json.spinType, json.revolutions);
   }
 
-  // An inside edge is the weight on the toe-side of the blade, an outside edge
-  // on the heel-side. With the on-ice foot oriented backwards, this maps to the
-  // path frame as +y for either of these cases:
-  // - the left foot on an inside edge
-  // - the right foot on an outside edge
-  // The shift always goes to the corresponding edge. Handedness does not move
-  // the foot; it only sets the "spins" attribute.
+  // The circle side depends on the handedness only: +y for a right-handed spin,
+  // -y for a left-handed spin. Foot, edge and trace direction do not change it.
   private get shiftSign(): number {
-    const leftFoot = this.onIceFoot === "footL";
-    return this.inside === leftFoot ? 1 : -1;
+    return this.rightHanded ? 1 : -1;
   }
 
   // The on-ice foot orientation depends on foot and edge:
