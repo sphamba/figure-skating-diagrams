@@ -72,6 +72,7 @@ export function changeElementType(
     shortName?: string;
     leftHanded?: boolean;
     spinType?: string;
+    revolutions?: number;
   },
 ): Element {
   const start = template.start as PathCoordinate;
@@ -87,7 +88,13 @@ export function changeElementType(
           leftHanded?: boolean,
         ) => Jump)(start, end, template.leftHanded)
       : spinConstructor && isSpinType(type)
-        ? new spinConstructor(start, end, template.leftHanded, template.spinType as SpinType | undefined)
+        ? new spinConstructor(
+            start,
+            end,
+            template.leftHanded,
+            template.spinType as SpinType | undefined,
+            template.revolutions,
+          )
         : changeFootTurnType(type, {
             ...template,
             start,

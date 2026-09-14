@@ -1,11 +1,13 @@
 import { expect, test } from "vitest";
 import { bladeLength } from "../src/engine/constants.js";
 import {
+  Spin,
   spinConstructorsByType,
   spinKindChoices,
-  type Spin,
+  type SpinConstructor,
   halfBladeLength,
 } from "../src/engine/element/spin.js";
+import { changeElementType } from "../src/engine/element/turnTypes.js";
 import { offIceFootHeight } from "../src/engine/element/glide.js";
 import { Sequence, traceWidth } from "../src/engine/sequence.js";
 import type { PathCoordinate } from "../src/engine/coordinates.js";
@@ -19,11 +21,11 @@ const end = 2;
 const middle = (start + end) / 2;
 const HALF = bladeLength / 2;
 
-function spinTraceSequence(typeName = "LeftInsideSpin", leftHanded = false): Sequence {
+function spinTraceSequence(typeName = "LeftInsideSpin", leftHanded = false, revolutions?: number): Sequence {
 	const path = new Path();
 	path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(5 / 3, 0), new Vector(10 / 3, 0), new Vector(5, 0)));
 	const sequence = new Sequence(path);
-	sequence.addElement(spin(typeName, leftHanded));
+	sequence.addElement(spin(typeName, leftHanded, revolutions));
 	return sequence;
 }
 
@@ -47,11 +49,13 @@ function makeCtx() {
 	return { ctx: ctx as unknown as CanvasRenderingContext2DSized, strokes, circles, dashes };
 }
 
-function spin(typeName: string, leftHanded = false): Spin {
-	return new (spinConstructorsByType[typeName] as new (start: number, end: number, leftHanded?: boolean) => Spin)(
-		start,
-		end,
+function spin(typeName: string, leftHanded = false, revolutions?: number): Spin {
+	return new (spinConstructorsByType[typeName] as SpinConstructor)(
+		start as PathCoordinate,
+		end as PathCoordinate,
 		leftHanded,
+		undefined,
+		revolutions,
 	);
 }
 
@@ -134,6 +138,45 @@ test("a right-handed right-foot outside spin shifts to +y", () => {
 	expect(instance.getRightFootKeyframes()[1].data.position!.y).toBe(0);
 });
 
+test("the revolution count sets the spins attribute and is kept on the element", () => {
+	const rightHanded = spin("LeftInsideSpin", false, 3);
+	expect(rightHanded.revolutions).toBe(3);
+	expect(kfSpins(rightHanded.getLeftFootKeyframes()[1])).toBe(3);
+
+	const leftHanded = spin("LeftInsideSpin", true, 3);
+	expect(leftHanded.revolutions).toBe(3);
+	expect(kfSpins(leftHanded.getLeftFootKeyframes()[1])).toBe(-3);
+});
+
+test("the revolution count must be an integer of at least 1", () => {
+	for (const revolutions of [0, -2, 1.5]) {
+		expect(() => spin("LeftInsideSpin", false, revolutions)).toThrow();
+	}
+});
+
+test("the revolution count is saved to and loaded from JSON", () => {
+	const instance = spin("LeftInsideSpin", false, 3);
+	const json = instance.toJSON();
+	expect(json.revolutions).toBe(3);
+
+	const restored = Spin.fromJSON(json);
+	expect(restored.revolutions).toBe(3);
+	expect(kfSpins(restored.getLeftFootKeyframes()[1])).toBe(3);
+});
+
+test("changeElementType builds a spin with the given revolution count", () => {
+	const element = changeElementType("LeftInsideSpin", {
+		type: "LeftInsideSpin",
+		start,
+		end,
+		spinType: "sit",
+		revolutions: 2,
+	});
+	expect(element).toBeInstanceOf(Spin);
+	expect((element as Spin).revolutions).toBe(2);
+	expect((element as Spin).spinType).toBe("sit");
+});
+
 test("the on-ice foot orientation depends on foot, edge and handedness", () => {
 	const cases: [string, boolean, "forward" | "backward"][] = [
 		["LeftInsideSpin", false, "backward"],
@@ -173,6 +216,68 @@ test("spinning keyframes are saved to draw one circle each at the end", () => {
 	expect(circle.y).toBeCloseTo(-radius, 10);
 	expect(ctx.strokeStyle).toBe(sequence.traceColorL);
 	expect(ctx.lineWidth).toBeCloseTo(traceWidth, 10);
+});
+
+test("several spins draw one circle per revolution, spanning the element from start to end", () => {
+	const sequence = spinTraceSequence();
+	const spinKeyframe = sequence.keyframes.footL.find((keyframe) => (keyframe.data.spins ?? 0) !== 0)!;
+	spinKeyframe.data.spins = 3;
+
+	const { ctx, circles } = makeCtx();
+	sequence.drawFootTrace(ctx, "footL", 0 as PathCoordinate, sequence.path.length as PathCoordinate);
+	expect(circles).toHaveLength(3);
+
+	const radius = Math.abs(spinKeyframe.data.spinShift!);
+	expect(radius).toBeCloseTo(halfBladeLength, 10);
+	// The path is a straight line from (0, 0) to (5, 0) and the element spans path
+	// coordinates 0 to 2, so the circle centers sit at x = 1/3, 1 and 5/3.
+	const expectedX = [1 / 3, 1, 5 / 3];
+	for (let i = 0; i < 3; i++) {
+		const circle = circles[i]!;
+		expect(circle.r).toBeCloseTo(radius, 10);
+		expect(circle.x).toBeCloseTo(expectedX[i]!, 10);
+		expect(circle.y).toBeCloseTo(-radius, 10);
+	}
+});
+
+test("a negative spins count draws abs(spins) circles", () => {
+	const sequence = spinTraceSequence();
+	const spinKeyframe = sequence.keyframes.footL.find((keyframe) => (keyframe.data.spins ?? 0) !== 0)!;
+	spinKeyframe.data.spins = -2;
+
+	const { ctx, circles } = makeCtx();
+	sequence.drawFootTrace(ctx, "footL", 0 as PathCoordinate, sequence.path.length as PathCoordinate);
+	expect(circles).toHaveLength(2);
+
+	const radius = Math.abs(spinKeyframe.data.spinShift!);
+	const expectedX = [0.5, 1.5];
+	for (let i = 0; i < 2; i++) {
+		const circle = circles[i]!;
+		expect(circle.r).toBeCloseTo(radius, 10);
+		expect(circle.x).toBeCloseTo(expectedX[i]!, 10);
+		expect(circle.y).toBeCloseTo(-radius, 10);
+	}
+});
+
+test("a spin element with three revolutions draws three circles spanning the element", () => {
+	const sequence = spinTraceSequence("LeftInsideSpin", false, 3);
+	const spinKeyframe = sequence.keyframes.footL.find((keyframe) => (keyframe.data.spins ?? 0) !== 0)!;
+	expect(spinKeyframe.data.spins).toBe(3);
+
+	const { ctx, circles } = makeCtx();
+	sequence.drawFootTrace(ctx, "footL", 0 as PathCoordinate, sequence.path.length as PathCoordinate);
+	expect(circles).toHaveLength(3);
+
+	const radius = Math.abs(spinKeyframe.data.spinShift!);
+	// The path is a straight line from (0, 0) to (5, 0) and the element spans path
+	// coordinates 0 to 2, so the circle centers sit at x = 1/3, 1 and 5/3.
+	const expectedX = [1 / 3, 1, 5 / 3];
+	for (let i = 0; i < 3; i++) {
+		const circle = circles[i]!;
+		expect(circle.r).toBeCloseTo(radius, 10);
+		expect(circle.x).toBeCloseTo(expectedX[i]!, 10);
+		expect(circle.y).toBeCloseTo(-radius, 10);
+	}
 });
 
 test("no circles are drawn for a resting foot or a non-spinning foot", () => {

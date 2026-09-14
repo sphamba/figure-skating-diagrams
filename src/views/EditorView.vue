@@ -96,6 +96,8 @@ const turnPath = ref<string[]>([]);
 const twoFeetPath = ref<string[]>([]);
 const jumpPath = ref<string[]>([]);
 const spinPath = ref<string[]>([]);
+const defaultSpinRevolutions = 3;
+const spinRevolutionsDraft = ref<number | null>(defaultSpinRevolutions);
 
 const elementKindGroupOptions = [
   { label: "Glide", value: "glide" },
@@ -391,6 +393,10 @@ const chosenLabels = computed<string[]>(() => {
   if (elementChangeBranch.value === "spin") {
     const labels = ["Spin"];
     spinPath.value.forEach((value, level) => {
+      if (level === 4) {
+        labels.push(`${value} revolution${value === "1" ? "" : "s"}`);
+        return;
+      }
       const options =
         level === 0
           ? jumpHandednessOptions
@@ -1200,23 +1206,35 @@ const currentJumpOptions = computed(() => {
   return jumpRevolutionOptions;
 });
 
-const spinStepFinal = computed(() => spinPath.value.length >= 4);
+const spinStepFinal = computed(() => spinPath.value.length >= 5);
 
 const currentSpinOptions = computed(() => {
-  if (spinStepFinal.value) return [];
   if (spinPath.value.length === 0) return jumpHandednessOptions;
   if (spinPath.value.length === 1) return spinFootLevelOptions;
   if (spinPath.value.length === 2) return spinEdgeLevelOptions;
-  return spinTypeLevelOptions;
+  if (spinPath.value.length === 3) return spinTypeLevelOptions;
+  return [];
 });
+
+function spinTypeName(): string {
+  const [, foot, edgeName] = spinPath.value;
+  const side = foot === "LeftFoot" ? "Left" : "Right";
+  return `${side}${edgeName}Spin`;
+}
 
 function onSpinChange(value: string) {
   spinPath.value = [...spinPath.value, value];
-  if (spinPath.value.length >= 4) {
-    const [, foot, edgeName] = spinPath.value;
-    const side = foot === "LeftFoot" ? "Left" : "Right";
-    onFinalChoice(`${side}${edgeName}Spin`);
+  if (spinPath.value.length === 4) {
+    spinRevolutionsDraft.value = defaultSpinRevolutions;
+    onFinalChoice(spinTypeName());
   }
+}
+
+function onSpinRevolutionsChange() {
+  const revolutions = Math.max(1, Math.round(spinRevolutionsDraft.value ?? defaultSpinRevolutions));
+  spinRevolutionsDraft.value = revolutions;
+  spinPath.value = [...spinPath.value.slice(0, 4), String(revolutions)];
+  onFinalChoice(spinTypeName());
 }
 
 function onJumpChange(value: string) {
@@ -1244,8 +1262,10 @@ function openAtExistingVariant() {
           parsed.leftFoot ? "LeftFoot" : "RightFoot",
           parsed.inside ? "Inside" : "Outside",
           (element as Spin).spinType,
+          String(element.revolutions),
         ]
       : [];
+    spinRevolutionsDraft.value = element.revolutions;
     if (parsed) onFinalChoice(element.type);
     return;
   }
@@ -1317,12 +1337,15 @@ function onFinalChoice(type: string) {
         ? spinPath.value[0] === "Left"
         : undefined;
   const spinType = elementChangeBranch.value === "spin" ? (spinPath.value[3] as SpinType | undefined) : undefined;
+  const spinRevolutions =
+    elementChangeBranch.value === "spin" ? Number(spinPath.value[4] ?? defaultSpinRevolutions) : undefined;
   const candidate = changeElementType(type, {
     type,
     start: target.start,
     end: target.end,
     leftHanded,
     spinType,
+    revolutions: spinRevolutions,
   });
   pendingReplacement.value = candidate;
   shortNameDraft.value =
@@ -1829,7 +1852,7 @@ function closeElementChange() {
         </Listbox>
 
         <Listbox
-          v-else-if="elementChangeBranch === 'spin' && !spinStepFinal"
+          v-else-if="elementChangeBranch === 'spin' && spinPath.length < 4"
           :model-value="null"
           :options="currentSpinOptions"
           option-value="value"
@@ -1843,6 +1866,20 @@ function closeElementChange() {
             </span>
           </template>
         </Listbox>
+
+        <div v-else-if="elementChangeBranch === 'spin' && !spinStepFinal" class="editor-view__short-name">
+          <label class="editor-view__mode-label" for="spin-revolutions">Revolutions</label>
+          <InputNumber
+            id="spin-revolutions"
+            v-model="spinRevolutionsDraft"
+            :min="1"
+            :step="1"
+            :use-grouping="false"
+            :max-fraction-digits="0"
+            fluid
+            @keyup.enter="onSpinRevolutionsChange"
+          />
+        </div>
 
         <div v-else class="editor-view__short-name">
           <label class="editor-view__mode-label" for="element-short-name">Short name</label>
@@ -1869,6 +1906,12 @@ function closeElementChange() {
           severity="secondary"
           icon="pi pi-arrow-left"
           @click="previousElementChangeStep"
+        />
+        <Button
+          v-if="elementChangeBranch === 'spin' && !spinStepFinal && spinPath.length === 4"
+          label="Next"
+          icon="pi pi-arrow-right"
+          @click="onSpinRevolutionsChange"
         />
         <Button v-if="currentStepFinal" label="OK" icon="pi pi-check" @click="commitElementChange" />
         <Button v-else label="Close" severity="secondary" icon="pi pi-times" @click="closeElementChange" />

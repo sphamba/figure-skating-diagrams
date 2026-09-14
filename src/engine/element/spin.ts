@@ -26,6 +26,7 @@ export interface SpinJSON {
   shortName?: string;
   leftHanded?: boolean;
   spinType?: SpinType;
+  revolutions?: number;
 }
 
 type SpinConfig = {
@@ -39,18 +40,24 @@ export type SpinConstructor = new (
   end: PathCoordinate,
   leftHanded?: boolean,
   spinType?: SpinType,
+  revolutions?: number,
 ) => Spin;
 
 export abstract class Spin extends Element {
   private readonly config: SpinConfig;
   private readonly mirrored: boolean;
+  private readonly spinRevolutions: number;
 
   abstract readonly type: string;
 
-  constructor(config: SpinConfig, start: PathCoordinate, end: PathCoordinate, leftHanded = false) {
+  constructor(config: SpinConfig, start: PathCoordinate, end: PathCoordinate, leftHanded = false, revolutions = 1) {
     super(start, end);
+    if (!Number.isInteger(revolutions) || revolutions < 1) {
+      throw new Error(`Spin revolutions must be an integer of at least 1: ${revolutions}`);
+    }
     this.config = config;
     this.mirrored = leftHanded;
+    this.spinRevolutions = revolutions;
   }
 
   get leftHanded(): boolean {
@@ -71,6 +78,10 @@ export abstract class Spin extends Element {
 
   get spinType(): SpinType {
     return this.config.spinType;
+  }
+
+  get revolutions(): number {
+    return this.spinRevolutions;
   }
 
   getLeftFootKeyframes(_spanScale?: number, lateralScale?: number): FootKeyframe[] {
@@ -106,6 +117,7 @@ export abstract class Spin extends Element {
       shortName: this.shortName,
       leftHanded: this.leftHanded,
       spinType: this.spinType,
+      revolutions: this.spinRevolutions,
     };
   }
 
@@ -114,7 +126,7 @@ export abstract class Spin extends Element {
     if (!constructor) {
       throw new Error(`Unknown spin type: ${json.type}`);
     }
-    return new constructor(json.start, json.end, json.leftHanded, json.spinType);
+    return new constructor(json.start, json.end, json.leftHanded, json.spinType, json.revolutions);
   }
 
   // An inside edge is the weight on the toe-side of the blade, an outside edge
@@ -171,7 +183,7 @@ export abstract class Spin extends Element {
     const spinData: FootData = {
       ...restData,
       spinShift: this.shiftSign * halfBladeLength * scale,
-      spins: this.rightHanded ? 1 : -1,
+      spins: (this.rightHanded ? 1 : -1) * this.spinRevolutions,
     };
     return [
       new FootKeyframe(start, restData, "smooth", "smooth"),
@@ -214,8 +226,14 @@ for (const [side, leftFoot] of spinSides) {
     const flags: SpinConfig = { leftFoot, inside, spinType: "upright" };
     const shortName = spinTypeShortNames[flags.spinType];
     const Variant = class extends Spin {
-      constructor(start: PathCoordinate, end: PathCoordinate, leftHanded = false, spinType?: SpinType) {
-        super(spinType ? { ...flags, spinType } : flags, start, end, leftHanded);
+      constructor(
+        start: PathCoordinate,
+        end: PathCoordinate,
+        leftHanded = false,
+        spinType?: SpinType,
+        revolutions?: number,
+      ) {
+        super(spinType ? { ...flags, spinType } : flags, start, end, leftHanded, revolutions);
       }
 
       get type(): string {

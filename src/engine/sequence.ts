@@ -736,23 +736,41 @@ export class Sequence {
     for (const keyframe of spinKeyframes) {
       const data = keyframe.data;
       if (data.orientation === undefined || data.spinShift === undefined || data.spinShift === 0) continue;
-      // The circle sits at the path frame lateral offset "spinShift" of the centerline,
-      // so it touches the centerline. The foot orientation is not applied: the keyframe
-      // shift goes to the geographic edge side, independent of the foot orientation.
+      // The circles sit at the path frame lateral offset "spinShift" of the
+      // centerline, so each one touches the centerline. A single circle sits at the
+      // element middle. Several circles span the element from start to end, with the
+      // element span taken from the neighbor keyframes in "drawable": the spin
+      // element places rest keyframes at its start and end. The foot orientation is
+      // not applied: the keyframe shift goes to the geographic edge side,
+      // independent of the foot orientation.
       const radius = Math.abs(data.spinShift);
-      const pathOrientation = this.getPathOrientation(keyframe.coordinate);
-      const center = this.path
-        .getPosition(keyframe.coordinate)
-        .plus(new Vector<3>(0, data.spinShift, 0).rotate(pathOrientation) as unknown as Vector<2>);
+      const count = Math.abs(data.spins ?? 0);
+      const circleCoordinates: PathCoordinate[] = [];
+      if (count <= 1) {
+        circleCoordinates.push(keyframe.coordinate);
+      } else {
+        const index = drawable.indexOf(keyframe);
+        const spanStart = (drawable[index - 1] ?? keyframe).coordinate as number;
+        const spanEnd = (drawable[index + 1] ?? keyframe).coordinate as number;
+        for (let i = 0; i < count; i++) {
+          circleCoordinates.push((spanStart + ((spanEnd - spanStart) * (i + 0.5)) / count) as PathCoordinate);
+        }
+      }
       ctx.strokeStyle = footKey === "footL" ? this.traceColorL : this.traceColorR;
       ctx.lineWidth = minTraceWidth === undefined ? traceWidth : Math.max(traceWidth, minTraceWidth);
       // A backwards foot uses a dashed line: dash length "step", space "step",
       // where "step" is the real-length draw increment of the current zoom level.
       const backwards = new Vector<3>(1, 0, 0).rotate(data.orientation).x < 0;
       ctx.setLineDash(backwards ? [step, step] : []);
-      ctx.beginPath();
-      ctx.arc(center.x, -center.y, radius, 0, 2 * Math.PI);
-      ctx.stroke();
+      for (const coordinate of circleCoordinates) {
+        const pathOrientation = this.getPathOrientation(coordinate);
+        const center = this.path
+          .getPosition(coordinate)
+          .plus(new Vector<3>(0, data.spinShift, 0).rotate(pathOrientation) as unknown as Vector<2>);
+        ctx.beginPath();
+        ctx.arc(center.x, -center.y, radius, 0, 2 * Math.PI);
+        ctx.stroke();
+      }
       ctx.setLineDash([]);
     }
   }
