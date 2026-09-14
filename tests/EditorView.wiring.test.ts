@@ -186,6 +186,38 @@ test("downloading the diagram clears the unsaved mark", async () => {
   vi.unstubAllGlobals();
 });
 
+test("a store restored with zero sequences still constructs the editor", async () => {
+  localStorage.setItem("sequence-editor", JSON.stringify({ name: "Diagram", sequences: [] }));
+  const wrapper = await mountEditorView();
+
+  expect(recorder.constructorArgs).toHaveLength(1);
+  const emptyEditorArg = recorder.constructorArgs[0] as { sequences: unknown[] };
+  expect(emptyEditorArg.sequences).toHaveLength(0);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("loading a diagram after a zero-sequence store reaches the editor", async () => {
+  localStorage.setItem("sequence-editor", JSON.stringify({ name: "Diagram", sequences: [] }));
+  const wrapper = await mountEditorView();
+  const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
+  const store = useSequenceEditorStore();
+  await nextTick();
+  await nextTick();
+
+  const editorArg = recorder.constructorArgs[0] as { sequences: unknown[] };
+  expect(editorArg.sequences).toHaveLength(0);
+
+  store.loadFromJSON(timedDiagramJSON as never);
+  await nextTick();
+  await nextTick();
+
+  const latestList = recorder.sequences as unknown[];
+  expect(latestList).toHaveLength(2);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
 test("EditorView passes the full list and the hidden set tracks visibility toggles", async () => {
   const wrapper = await mountEditorView();
   const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");

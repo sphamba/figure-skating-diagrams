@@ -15,6 +15,7 @@ const recorder = vi.hoisted(() => ({
   constructorArgs: [] as { sequences: unknown[] }[],
   hiddenSets: [] as unknown,
   sequences: [] as unknown[],
+  destroyed: 0,
 }));
 
 class EditorStub {
@@ -34,7 +35,9 @@ class EditorStub {
   setSequences(list: unknown[]) {
     recorder.sequences = list;
   }
-  destroy() {}
+  destroy() {
+    recorder.destroyed++;
+  }
 }
 
 vi.mock("@/engine/sequenceEditor/editor", async (importOriginal) => ({
@@ -140,6 +143,7 @@ beforeEach(() => {
   recorder.constructorArgs.length = 0;
   recorder.hiddenSets.length = 0;
   recorder.sequences = [];
+  recorder.destroyed = 0;
 });
 
 test("the tree loader mounts the player and fills the url", async () => {
@@ -199,6 +203,40 @@ test("loading the video without time keyframes keeps the timestamp", async () =>
   video!.dispatchEvent(new Event("loadeddata"));
   await nextTick();
   expect(video!.currentTime).toBe(0);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("a store restored with zero sequences still constructs the editor", async () => {
+  localStorage.setItem("sequence-editor", JSON.stringify({ name: "Diagram", sequences: [] }));
+  const wrapper = await mountHomeView(null, true, videoFile);
+  await nextTick();
+
+  expect(recorder.constructorArgs).toHaveLength(1);
+  const emptyEditorArg = recorder.constructorArgs[0] as { sequences: unknown[] };
+  expect(emptyEditorArg.sequences).toHaveLength(0);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("loading a diagram with a video re-creates the editor on the new canvas", async () => {
+  const wrapper = await mountHomeView("diagrams/test-video.json", true, timedVideoFile);
+  const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
+  useSequenceEditorStore();
+  await nextTick();
+  await nextTick();
+  expect(recorder.constructorArgs).toHaveLength(1);
+
+  await wrapper.find('[data-test="tree-open"]').trigger("click");
+  await nextTick();
+  await nextTick();
+  await nextTick();
+
+  expect(recorder.destroyed).toBeGreaterThanOrEqual(1);
+  expect(recorder.constructorArgs).toHaveLength(2);
+  const newEditorArg = recorder.constructorArgs[1] as { sequences: unknown[] };
+  expect(newEditorArg.sequences).toHaveLength(1);
+  expect(document.querySelector(".home-view__video")).not.toBeNull();
   wrapper.unmount();
   vi.unstubAllGlobals();
 });

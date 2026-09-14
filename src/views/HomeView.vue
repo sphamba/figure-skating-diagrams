@@ -230,9 +230,8 @@ function updateViewportSizes() {
 // The player can appear after mount, so the splitter re-mounts to re-compute the panel sizes.
 const splitKey = computed(() => `${splitLayout.value}-${videoSet.value}`);
 
-onMounted(() => {
+function createEditor() {
   if (!canvasRef.value) return;
-  if (sequences.value.length === 0) return;
   const editorInstance = new Editor(canvasRef.value, sequences.value);
   editor = editorInstance;
   editorInstance.mode = "view";
@@ -243,7 +242,19 @@ onMounted(() => {
   editorInstance.activeSequence = activeSequence.value;
   editorInstance.bpm = getBpm();
   editorInstance.videoTimeSeconds = videoTime.value;
-});
+}
+
+watch(
+  canvasRef,
+  (element, previous) => {
+    if (previous !== element) {
+      editor?.destroy();
+      editor = null;
+    }
+    if (element && !editor) createEditor();
+  },
+  { flush: "post" },
+);
 
 let previousSequences: Sequence[] = [];
 watch(sequences, (list) => {

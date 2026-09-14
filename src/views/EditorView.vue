@@ -985,7 +985,6 @@ watch(
 
 onMounted(() => {
   if (!canvasRef.value) return;
-  if (sequences.value.length === 0) return;
   const editorInstance = new Editor(canvasRef.value, sequences.value);
   editor = editorInstance;
   editorInstance.setHiddenSequences(hiddenSequenceSet.value);
