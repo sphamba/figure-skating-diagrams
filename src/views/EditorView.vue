@@ -44,7 +44,7 @@ import { OneFootTurn } from "@/engine/element/oneFootTurn";
 import { TwoFeetTurn } from "@/engine/element/twoFeetTurn";
 import type { Element } from "@/engine/element/element";
 import type { PatternJSON } from "@/engine/pattern";
-import { earliestTimeKeyframeSeconds, type DiagramJSON } from "@/engine/diagram";
+import { earliestTimeKeyframeSeconds, fullTimeExtentSeconds, type DiagramJSON } from "@/engine/diagram";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import { useMediaQuery } from "@/composables/useMediaQuery";
 import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
@@ -610,21 +610,47 @@ const videoUrl = computed<string>({
 const videoSet = computed(() => videoUrl.value.trim() !== "");
 const videoStatus = ref<"empty" | "pending" | "valid" | "invalid">("empty");
 const videoValid = computed(() => videoStatus.value === "valid");
-const { seconds: videoTime, setTimestamp } = useVideoTimestamp(videoRef);
 const {
   speed: playbackSpeed,
   options: playbackSpeedOptions,
   apply: applyPlaybackSpeed,
   reset: resetPlaybackSpeed,
 } = usePlaybackSpeed(videoRef);
+const {
+  seconds: videoTime,
+  setTimestamp,
+  playing,
+  play: playAnimation,
+  pause: pauseAnimation,
+} = useVideoTimestamp(videoRef, {
+  speed: playbackSpeed,
+  extent: () => fullTimeExtentSeconds(store.getDiagram().sequences, getBpm()),
+});
 
 watch(
   videoUrl,
   (value) => {
     videoStatus.value = value.trim() !== "" ? "pending" : "empty";
+    pauseAnimation();
   },
   { immediate: true },
 );
+
+function togglePlayback() {
+  if (playing.value) pauseAnimation();
+  else playAnimation();
+}
+
+let resumeAfterScrub = false;
+
+function jumpToStart() {
+  const bounds = fullTimeExtentSeconds(store.getDiagram().sequences, getBpm());
+  if (bounds) {
+    setTimestamp(bounds[0]);
+    return;
+  }
+  setTimestamp(earliestTimeKeyframeSeconds(store.getDiagram()) ?? 0);
+}
 
 watch(
   videoValid,
@@ -972,6 +998,7 @@ watch([timingValueDraft, timingKind, timingPreviousValue], () => {
 });
 
 watch(editMode, (mode) => {
+  pauseAnimation();
   if (editor) {
     editor.mode = mode;
     editor.clearSelection();
@@ -996,6 +1023,16 @@ onMounted(() => {
   editorInstance.setHiddenSequences(hiddenSequenceSet.value);
 
   editorInstance.onVideoTimeChange = (seconds) => setTimestamp(seconds);
+  editorInstance.onTimeScrubStart = () => {
+    if (!playing.value) return;
+    resumeAfterScrub = true;
+    pauseAnimation();
+  };
+  editorInstance.onTimeScrubEnd = () => {
+    if (!resumeAfterScrub) return;
+    resumeAfterScrub = false;
+    playAnimation();
+  };
   editorInstance.activeSequence = activeSequence.value;
   editorInstance.bpm = getBpm();
   editorInstance.videoTimeSeconds = videoTime.value;
@@ -1676,17 +1713,6 @@ function closeElementChange() {
         :class="{ 'editor-view__splitter--no-video': !videoSet }"
       >
         <SplitterPanel class="editor-view__video-pane" :size="videoSet ? 40 : 0" :min-size="videoSet ? 10 : 0">
-          <div v-if="videoSet" class="editor-view__video-floating">
-            <SelectButton
-              v-model="playbackSpeed"
-              :options="playbackSpeedOptions"
-              option-label="label"
-              option-value="value"
-              :allow-empty="false"
-              size="small"
-              rounded
-            />
-          </div>
           <video
             v-if="videoSet"
             ref="videoRef"
@@ -1699,22 +1725,51 @@ function closeElementChange() {
           ></video>
         </SplitterPanel>
         <SplitterPanel class="editor-view__canvas-pane" :min-size="20">
-          <div class="editor-view__floating">
-            <Button
-              v-if="isMobile && !sidebarOpen"
-              icon="pi pi-bars"
-              aria-label="Open panel"
-              severity="secondary"
-              rounded
-              @click="sidebarOpen = true"
-            />
-            <SelectButton
-              v-model="editMode"
-              :options="editModeOptions"
-              option-label="label"
-              option-value="value"
-              :allow-empty="false"
-            />
+          <div class="editor-view__floating-stack">
+            <div class="editor-view__floating">
+              <Button
+                v-if="isMobile && !sidebarOpen"
+                icon="pi pi-bars"
+                aria-label="Open panel"
+                severity="secondary"
+                rounded
+                @click="sidebarOpen = true"
+              />
+              <SelectButton
+                v-model="editMode"
+                :options="editModeOptions"
+                option-label="label"
+                option-value="value"
+                :allow-empty="false"
+              />
+            </div>
+            <div v-if="editMode === 'view'" class="editor-view__floating">
+              <Button
+                icon="pi pi-step-backward"
+                aria-label="Back to the earliest time"
+                severity="secondary"
+                rounded
+                size="small"
+                @click="jumpToStart"
+              />
+              <Button
+                :icon="playing ? 'pi pi-pause' : 'pi pi-play'"
+                :aria-label="playing ? 'Pause the animation' : 'Play the animation'"
+                severity="secondary"
+                rounded
+                size="small"
+                @click="togglePlayback"
+              />
+              <SelectButton
+                v-model="playbackSpeed"
+                :options="playbackSpeedOptions"
+                option-label="label"
+                option-value="value"
+                :allow-empty="false"
+                size="small"
+                rounded
+              />
+            </div>
           </div>
           <canvas ref="canvasRef" class="editor-view__canvas-element"></canvas>
         </SplitterPanel>
@@ -2270,18 +2325,18 @@ function closeElementChange() {
   background: white;
 }
 
-.editor-view__video-floating {
+.editor-view__floating-stack {
   position: absolute;
   top: 1rem;
   left: 1rem;
   z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
 }
 
 .editor-view__floating {
-  position: absolute;
-  top: 1rem;
-  left: 1rem;
-  z-index: 5;
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;

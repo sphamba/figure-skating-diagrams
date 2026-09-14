@@ -157,6 +157,8 @@ export class Editor {
   videoTimeSeconds: number | null = null;
   hiddenSequences: Set<Sequence> = new Set();
   onVideoTimeChange?: (seconds: number) => void;
+  onTimeScrubStart?: () => void;
+  onTimeScrubEnd?: () => void;
   private isDraggingVideoCircle = false;
   private dragVideoSequence: Sequence | null = null;
   private view: ViewState;
@@ -2891,6 +2893,7 @@ export class Editor {
       if (grabbed) {
         this.isDraggingVideoCircle = true;
         this.dragVideoSequence = grabbed;
+        this.onTimeScrubStart?.();
         return;
       }
       const nearPath = this.hitNearPath(screenX, screenY);
@@ -2898,6 +2901,7 @@ export class Editor {
         // Clicking near the path scrubs the time cursor, so the drag starts at once.
         this.isDraggingVideoCircle = true;
         this.dragVideoSequence = nearPath;
+        this.onTimeScrubStart?.();
         this.dragVideoCircle(screenX, screenY);
         return;
       }
@@ -2942,6 +2946,7 @@ export class Editor {
       if (grabbedTiming) {
         this.isDraggingVideoCircle = true;
         this.dragVideoSequence = grabbedTiming;
+        this.onTimeScrubStart?.();
         return;
       }
       this.startSelectionRectangle("timing", ctrlKey, screenX, screenY);
@@ -2997,6 +3002,7 @@ export class Editor {
           if (grabbedAnnotation) {
             this.isDraggingVideoCircle = true;
             this.dragVideoSequence = grabbedAnnotation;
+            this.onTimeScrubStart?.();
             return;
           }
           this.startSelectionRectangle("annotations", ctrlKey, screenX, screenY);
@@ -3058,6 +3064,7 @@ export class Editor {
           if (grabbedElement) {
             this.isDraggingVideoCircle = true;
             this.dragVideoSequence = grabbedElement;
+            this.onTimeScrubStart?.();
             return;
           }
           this.startSelectionRectangle("elements", ctrlKey, screenX, screenY);
@@ -3157,6 +3164,7 @@ export class Editor {
         if (grabbedPath) {
           this.isDraggingVideoCircle = true;
           this.dragVideoSequence = grabbedPath;
+          this.onTimeScrubStart?.();
           return;
         }
         this.startSelectionRectangle("points", ctrlKey, screenX, screenY);
@@ -3819,6 +3827,7 @@ export class Editor {
     this.isPanning = false;
     this.isDraggingPoint = false;
     this.isDraggingCurve = false;
+    const wasScrubbing = this.isDraggingVideoCircle;
     this.isDraggingVideoCircle = false;
     this.dragVideoSequence = null;
     this.isDraggingElementPoint = false;
@@ -3842,6 +3851,7 @@ export class Editor {
     this.dragSequence = null;
     this.dragOrigin = null;
     this.lastDragDelta = new Vector<2>(0, 0);
+    if (wasScrubbing) this.onTimeScrubEnd?.();
     if (this.sequenceMutated) {
       this.sequenceMutated = false;
       this.notifySequenceChange();

@@ -16,7 +16,7 @@ import { useConfirm } from "openvue/useconfirm";
 import DiagramTree, { type DiagramTreeSource } from "@/components/DiagramTree.vue";
 import { Editor } from "@/engine/sequenceEditor/editor";
 import type { PatternJSON } from "@/engine/pattern";
-import { earliestTimeKeyframeSeconds, type DiagramJSON } from "@/engine/diagram";
+import { earliestTimeKeyframeSeconds, fullTimeExtentSeconds, type DiagramJSON } from "@/engine/diagram";
 import type { Sequence, SequenceJSON, FootKey } from "@/engine/sequence";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import { useMediaQuery } from "@/composables/useMediaQuery";
@@ -145,13 +145,22 @@ const videoSet = computed(() => videoUrl.value.trim() !== "");
 const videoStatus = ref<"empty" | "pending" | "valid" | "invalid">("empty");
 const videoValid = computed(() => videoStatus.value === "valid");
 const videoRef = ref<HTMLVideoElement | null>(null);
-const { seconds: videoTime, setTimestamp } = useVideoTimestamp(videoRef);
 const {
   speed: playbackSpeed,
   options: playbackSpeedOptions,
   apply: applyPlaybackSpeed,
   reset: resetPlaybackSpeed,
 } = usePlaybackSpeed(videoRef);
+const {
+  seconds: videoTime,
+  setTimestamp,
+  playing,
+  play: playAnimation,
+  pause: pauseAnimation,
+} = useVideoTimestamp(videoRef, {
+  speed: playbackSpeed,
+  extent: () => fullTimeExtentSeconds(store.getDiagram().sequences, getBpm()),
+});
 
 function onVideoError() {
   if (videoSet.value) videoStatus.value = "invalid";
@@ -168,9 +177,26 @@ watch(
   videoUrl,
   (value) => {
     videoStatus.value = value.trim() !== "" ? "pending" : "empty";
+    pauseAnimation();
   },
   { immediate: true },
 );
+
+function togglePlayback() {
+  if (playing.value) pauseAnimation();
+  else playAnimation();
+}
+
+let resumeAfterScrub = false;
+
+function jumpToStart() {
+  const bounds = fullTimeExtentSeconds(store.getDiagram().sequences, getBpm());
+  if (bounds) {
+    setTimestamp(bounds[0]);
+    return;
+  }
+  setTimestamp(earliestTimeKeyframeSeconds(store.getDiagram()) ?? 0);
+}
 
 let editor: Editor | null = null;
 
@@ -285,6 +311,16 @@ function createEditor() {
   editorInstance.drawRange = store.getDrawRange();
   editorInstance.setHiddenSequences(hiddenSequenceSet.value);
   editorInstance.onVideoTimeChange = (seconds) => setTimestamp(seconds);
+  editorInstance.onTimeScrubStart = () => {
+    if (!playing.value) return;
+    resumeAfterScrub = true;
+    pauseAnimation();
+  };
+  editorInstance.onTimeScrubEnd = () => {
+    if (!resumeAfterScrub) return;
+    resumeAfterScrub = false;
+    playAnimation();
+  };
   editorInstance.activeSequence = activeSequence.value;
   editorInstance.bpm = getBpm();
   editorInstance.videoTimeSeconds = videoTime.value;
@@ -471,17 +507,6 @@ onBeforeUnmount(() => {
         :class="{ 'home-view__splitter--no-video': !videoSet }"
       >
         <SplitterPanel class="home-view__video-pane" :size="videoSet ? 40 : 0" :min-size="videoSet ? 10 : 0">
-          <div v-if="videoSet" class="home-view__video-floating">
-            <SelectButton
-              v-model="playbackSpeed"
-              :options="playbackSpeedOptions"
-              option-label="label"
-              option-value="value"
-              :allow-empty="false"
-              size="small"
-              rounded
-            />
-          </div>
           <video
             v-if="videoSet"
             ref="videoRef"
@@ -494,18 +519,47 @@ onBeforeUnmount(() => {
           ></video>
         </SplitterPanel>
         <SplitterPanel class="home-view__canvas-pane" :min-size="20">
-          <div class="home-view__floating">
-            <small v-if="videoStatus === 'invalid'" class="home-view__video-error">
-              The video could not be loaded. Use a direct link to an .mp4 file.
-            </small>
-            <Button
-              v-if="isMobile && !sidebarOpen"
-              icon="pi pi-bars"
-              aria-label="Open panel"
-              severity="secondary"
-              rounded
-              @click="sidebarOpen = true"
-            />
+          <div class="home-view__floating-stack">
+            <div class="home-view__floating">
+              <small v-if="videoStatus === 'invalid'" class="home-view__video-error">
+                The video could not be loaded. Use a direct link to an .mp4 file.
+              </small>
+              <Button
+                v-if="isMobile && !sidebarOpen"
+                icon="pi pi-bars"
+                aria-label="Open panel"
+                severity="secondary"
+                rounded
+                @click="sidebarOpen = true"
+              />
+            </div>
+            <div class="home-view__floating">
+              <Button
+                icon="pi pi-step-backward"
+                aria-label="Back to the earliest time"
+                severity="secondary"
+                rounded
+                size="small"
+                @click="jumpToStart"
+              />
+              <Button
+                :icon="playing ? 'pi pi-pause' : 'pi pi-play'"
+                :aria-label="playing ? 'Pause the animation' : 'Play the animation'"
+                severity="secondary"
+                rounded
+                size="small"
+                @click="togglePlayback"
+              />
+              <SelectButton
+                v-model="playbackSpeed"
+                :options="playbackSpeedOptions"
+                option-label="label"
+                option-value="value"
+                :allow-empty="false"
+                size="small"
+                rounded
+              />
+            </div>
           </div>
           <canvas ref="canvasRef" class="home-view__canvas-element"></canvas>
         </SplitterPanel>
@@ -723,13 +777,6 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-.home-view__video-floating {
-  position: absolute;
-  top: 1rem;
-  left: 1rem;
-  z-index: 5;
-}
-
 .home-view__video {
   display: block;
   width: 100%;
@@ -743,11 +790,18 @@ onBeforeUnmount(() => {
   background: white;
 }
 
-.home-view__floating {
+.home-view__floating-stack {
   position: absolute;
   top: 1rem;
   left: 1rem;
   z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.home-view__floating {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
