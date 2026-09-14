@@ -23,6 +23,8 @@ import Splitter from "openvue/splitter";
 import SplitterPanel from "openvue/splitterpanel";
 import { useConfirm } from "openvue/useconfirm";
 import DiagramTree, { type DiagramTreeSource } from "@/components/DiagramTree.vue";
+import TimeSyncPane from "@/components/TimeSyncPane.vue";
+import { textColorFor } from "@/utils/contrast";
 import { Editor, formatTimingLabel, type EditMode } from "@/engine/sequenceEditor/editor";
 import { TimingKeyframe, type TimingKind } from "@/engine/keyframe";
 import { DEFAULT_ANNOTATION_COLOR, type Annotation } from "@/engine/annotation";
@@ -734,7 +736,6 @@ const viewportWidth = ref(0);
 const viewportHeight = ref(0);
 
 const splitLayout = computed(() => {
-  // Sidebar space is subtracted before the 1:1 threshold decides the split direction.
   const sidebarSpace = !isMobile.value && sidebarOpen.value ? 360 : 0;
   return (viewportWidth.value - sidebarSpace) / viewportHeight.value > 1 ? "horizontal" : "vertical";
 });
@@ -784,17 +785,6 @@ function cancelRename() {
 function setTraceColor(sequence: Sequence, footKey: FootKey, color: string) {
   store.setTraceColor(sequence, footKey, color);
   editor?.draw();
-}
-
-function swatchTextColor(color: string): string {
-  const match = color.match(/^#([0-9a-f]{6})$/i);
-  if (!match) return "white";
-  const channels = [0, 2, 4].map((offset) => parseInt(match[1]!.slice(offset, offset + 2), 16) / 255);
-  const [r = 0, g = 0, b = 0] = channels.map((value) =>
-    value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
-  );
-  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return luminance > 0.35 ? "black" : "white";
 }
 
 const selectedSequence = computed({
@@ -901,7 +891,7 @@ function getBpm(): number {
 
 function onTimingKindChange(kind: TimingKind) {
   if (kind === timingKind.value) return;
-  const parsed = parseTimingValue(timingValueDraft.value); // in the previous kind
+  const parsed = parseTimingValue(timingValueDraft.value); // the draft still holds a value in the previous kind
   timingKind.value = kind;
   if (parsed === null) {
     const hasOriginal = timingOriginalKind.value !== null && timingOriginalValue.value !== null;
@@ -1085,6 +1075,10 @@ watch([videoTime, activeSequence] as const, () => {
   editor.bpm = getBpm();
   editor.requestDraw();
 });
+
+const bpm = computed(() => getBpm());
+
+const visibleSequences = computed(() => sequences.value.filter((sequence) => store.isVisible(sequence)));
 
 onMounted(() => {
   updateViewportSizes();
@@ -1603,7 +1597,7 @@ function closeElementChange() {
                     />
                     <span
                       class="editor-view__swatch-letter"
-                      :style="{ color: swatchTextColor(sequenceInfos.get(option)?.[swatch.footKey] ?? '#ffffff') }"
+                      :style="{ color: textColorFor(sequenceInfos.get(option)?.[swatch.footKey] ?? '#ffffff') }"
                       >{{ swatch.letter }}</span
                     >
                   </span>
@@ -1725,53 +1719,56 @@ function closeElementChange() {
           ></video>
         </SplitterPanel>
         <SplitterPanel class="editor-view__canvas-pane" :min-size="20">
-          <div class="editor-view__floating-stack">
-            <div class="editor-view__floating">
-              <Button
-                v-if="isMobile && !sidebarOpen"
-                icon="pi pi-bars"
-                aria-label="Open panel"
-                severity="secondary"
-                rounded
-                @click="sidebarOpen = true"
-              />
-              <SelectButton
-                v-model="editMode"
-                :options="editModeOptions"
-                option-label="label"
-                option-value="value"
-                :allow-empty="false"
-              />
+          <div class="editor-view__canvas-area">
+            <div class="editor-view__floating-stack">
+              <div class="editor-view__floating">
+                <Button
+                  v-if="isMobile && !sidebarOpen"
+                  icon="pi pi-bars"
+                  aria-label="Open panel"
+                  severity="secondary"
+                  rounded
+                  @click="sidebarOpen = true"
+                />
+                <SelectButton
+                  v-model="editMode"
+                  :options="editModeOptions"
+                  option-label="label"
+                  option-value="value"
+                  :allow-empty="false"
+                />
+              </div>
+              <div v-if="editMode === 'view'" class="editor-view__floating">
+                <Button
+                  icon="pi pi-step-backward"
+                  aria-label="Back to the earliest time"
+                  severity="secondary"
+                  rounded
+                  size="small"
+                  @click="jumpToStart"
+                />
+                <Button
+                  :icon="playing ? 'pi pi-pause' : 'pi pi-play'"
+                  :aria-label="playing ? 'Pause the animation' : 'Play the animation'"
+                  severity="secondary"
+                  rounded
+                  size="small"
+                  @click="togglePlayback"
+                />
+                <SelectButton
+                  v-model="playbackSpeed"
+                  :options="playbackSpeedOptions"
+                  option-label="label"
+                  option-value="value"
+                  :allow-empty="false"
+                  size="small"
+                  rounded
+                />
+              </div>
             </div>
-            <div v-if="editMode === 'view'" class="editor-view__floating">
-              <Button
-                icon="pi pi-step-backward"
-                aria-label="Back to the earliest time"
-                severity="secondary"
-                rounded
-                size="small"
-                @click="jumpToStart"
-              />
-              <Button
-                :icon="playing ? 'pi pi-pause' : 'pi pi-play'"
-                :aria-label="playing ? 'Pause the animation' : 'Play the animation'"
-                severity="secondary"
-                rounded
-                size="small"
-                @click="togglePlayback"
-              />
-              <SelectButton
-                v-model="playbackSpeed"
-                :options="playbackSpeedOptions"
-                option-label="label"
-                option-value="value"
-                :allow-empty="false"
-                size="small"
-                rounded
-              />
-            </div>
+            <canvas ref="canvasRef" class="editor-view__canvas-element"></canvas>
           </div>
-          <canvas ref="canvasRef" class="editor-view__canvas-element"></canvas>
+          <TimeSyncPane v-if="editMode === 'view'" :sequences="visibleSequences" :time-seconds="videoTime" :bpm="bpm" />
         </SplitterPanel>
       </Splitter>
     </div>
@@ -2321,8 +2318,16 @@ function closeElementChange() {
 
 .editor-view__canvas-pane {
   position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   background: white;
+}
+
+.editor-view__canvas-area {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .editor-view__floating-stack {

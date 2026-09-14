@@ -14,6 +14,8 @@ import Slider from "openvue/slider";
 import ConfirmDialog from "openvue/confirmdialog";
 import { useConfirm } from "openvue/useconfirm";
 import DiagramTree, { type DiagramTreeSource } from "@/components/DiagramTree.vue";
+import TimeSyncPane from "@/components/TimeSyncPane.vue";
+import { textColorFor } from "@/utils/contrast";
 import { Editor } from "@/engine/sequenceEditor/editor";
 import type { PatternJSON } from "@/engine/pattern";
 import { earliestTimeKeyframeSeconds, fullTimeExtentSeconds, type DiagramJSON } from "@/engine/diagram";
@@ -257,17 +259,6 @@ const footSwatches = [
   { footKey: "footR" as FootKey, letter: "R" },
 ];
 
-function swatchTextColor(color: string): string {
-  const match = color.match(/^#([0-9a-f]{6})$/i);
-  if (!match) return "white";
-  const channels = [0, 2, 4].map((offset) => parseInt(match[1]!.slice(offset, offset + 2), 16) / 255);
-  const [r = 0, g = 0, b = 0] = channels.map((value) =>
-    value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
-  );
-  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return luminance > 0.35 ? "black" : "white";
-}
-
 const selectedSequence = computed({
   get: () => activeSequence.value,
   set: (value) => {
@@ -289,7 +280,6 @@ const viewportWidth = ref(0);
 const viewportHeight = ref(0);
 
 const splitLayout = computed(() => {
-  // Sidebar space is subtracted before the 1:1 threshold decides the split direction.
   const sidebarSpace = !isMobile.value && sidebarOpen.value ? 360 : 0;
   return (viewportWidth.value - sidebarSpace) / viewportHeight.value > 1 ? "horizontal" : "vertical";
 });
@@ -356,6 +346,10 @@ watch([videoTime, activeSequence] as const, () => {
   editor.bpm = getBpm();
   editor.requestDraw();
 });
+
+const bpm = computed(() => getBpm());
+
+const visibleSequences = computed(() => sequences.value.filter((sequence) => store.isVisible(sequence)));
 
 onMounted(() => {
   updateViewportSizes();
@@ -447,7 +441,7 @@ onBeforeUnmount(() => {
                   >
                     <span
                       class="home-view__swatch-letter"
-                      :style="{ color: swatchTextColor(sequenceInfos.get(option)?.[swatch.footKey] ?? '#ffffff') }"
+                      :style="{ color: textColorFor(sequenceInfos.get(option)?.[swatch.footKey] ?? '#ffffff') }"
                       >{{ swatch.letter }}</span
                     >
                   </span>
@@ -519,49 +513,52 @@ onBeforeUnmount(() => {
           ></video>
         </SplitterPanel>
         <SplitterPanel class="home-view__canvas-pane" :min-size="20">
-          <div class="home-view__floating-stack">
-            <div class="home-view__floating">
-              <small v-if="videoStatus === 'invalid'" class="home-view__video-error">
-                The video could not be loaded. Use a direct link to an .mp4 file.
-              </small>
-              <Button
-                v-if="isMobile && !sidebarOpen"
-                icon="pi pi-bars"
-                aria-label="Open panel"
-                severity="secondary"
-                rounded
-                @click="sidebarOpen = true"
-              />
+          <div class="home-view__canvas-area">
+            <div class="home-view__floating-stack">
+              <div class="home-view__floating">
+                <small v-if="videoStatus === 'invalid'" class="home-view__video-error">
+                  The video could not be loaded. Use a direct link to an .mp4 file.
+                </small>
+                <Button
+                  v-if="isMobile && !sidebarOpen"
+                  icon="pi pi-bars"
+                  aria-label="Open panel"
+                  severity="secondary"
+                  rounded
+                  @click="sidebarOpen = true"
+                />
+              </div>
+              <div class="home-view__floating">
+                <Button
+                  icon="pi pi-step-backward"
+                  aria-label="Back to the earliest time"
+                  severity="secondary"
+                  rounded
+                  size="small"
+                  @click="jumpToStart"
+                />
+                <Button
+                  :icon="playing ? 'pi pi-pause' : 'pi pi-play'"
+                  :aria-label="playing ? 'Pause the animation' : 'Play the animation'"
+                  severity="secondary"
+                  rounded
+                  size="small"
+                  @click="togglePlayback"
+                />
+                <SelectButton
+                  v-model="playbackSpeed"
+                  :options="playbackSpeedOptions"
+                  option-label="label"
+                  option-value="value"
+                  :allow-empty="false"
+                  size="small"
+                  rounded
+                />
+              </div>
             </div>
-            <div class="home-view__floating">
-              <Button
-                icon="pi pi-step-backward"
-                aria-label="Back to the earliest time"
-                severity="secondary"
-                rounded
-                size="small"
-                @click="jumpToStart"
-              />
-              <Button
-                :icon="playing ? 'pi pi-pause' : 'pi pi-play'"
-                :aria-label="playing ? 'Pause the animation' : 'Play the animation'"
-                severity="secondary"
-                rounded
-                size="small"
-                @click="togglePlayback"
-              />
-              <SelectButton
-                v-model="playbackSpeed"
-                :options="playbackSpeedOptions"
-                option-label="label"
-                option-value="value"
-                :allow-empty="false"
-                size="small"
-                rounded
-              />
-            </div>
+            <canvas ref="canvasRef" class="home-view__canvas-element"></canvas>
           </div>
-          <canvas ref="canvasRef" class="home-view__canvas-element"></canvas>
+          <TimeSyncPane :sequences="visibleSequences" :time-seconds="videoTime" :bpm="bpm" />
         </SplitterPanel>
       </Splitter>
     </div>
@@ -786,8 +783,16 @@ onBeforeUnmount(() => {
 
 .home-view__canvas-pane {
   position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   background: white;
+}
+
+.home-view__canvas-area {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .home-view__floating-stack {
