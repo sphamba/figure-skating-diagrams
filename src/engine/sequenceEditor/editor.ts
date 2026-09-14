@@ -1077,7 +1077,7 @@ export class Editor {
     if (!extent) return null;
     if (this.videoTimeSeconds === null) return null;
     const center = this.videoTimeSeconds;
-    const halfWindow = (extent[1] - extent[0]) * this.drawRange;
+    const halfWindow = (extent[1] - extent[0]) * this.drawRange ** 2;
     const t0 = Math.max(extent[0], center - halfWindow);
     const t1 = Math.min(extent[1], center + halfWindow);
     if (t1 <= t0) return null;

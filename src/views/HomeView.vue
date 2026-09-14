@@ -44,6 +44,7 @@ const diagramName = computed(() => store.getDiagram().name);
 const diagramBpm = computed(() => store.getDiagram().bpm);
 
 const loadFailed = ref(false);
+const fileInput = ref<HTMLInputElement | null>(null);
 
 function isPattern(json: PatternJSON | DiagramJSON | SequenceJSON): json is PatternJSON {
   return Array.isArray((json as PatternJSON).sequences);
@@ -51,6 +52,51 @@ function isPattern(json: PatternJSON | DiagramJSON | SequenceJSON): json is Patt
 
 function isSequenceJSON(json: PatternJSON | DiagramJSON | SequenceJSON): json is SequenceJSON {
   return "path" in json && "keyframes" in json;
+}
+
+function openFile() {
+  fileInput.value?.click();
+}
+
+function openFileWithGuard() {
+  if (!store.isUnsaved()) {
+    openFile();
+    return;
+  }
+  confirm.require({
+    group: "home-save",
+    header: "Unsaved changes",
+    message: "The current diagram has unsaved changes. Open the new file and lose them?",
+    icon: "pi pi-exclamation-triangle",
+    rejectLabel: "Cancel",
+    acceptLabel: "Open",
+    acceptProps: { severity: "warning" },
+    rejectProps: { severity: "secondary", text: true },
+    accept: () => openFile(),
+  });
+}
+
+async function onFileSelected(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  loadFailed.value = false;
+  try {
+    const json = JSON.parse(await file.text()) as PatternJSON | DiagramJSON | SequenceJSON;
+    resetPlaybackSpeed();
+    if (isPattern(json)) {
+      store.loadFromJSON(json);
+    } else if (isSequenceJSON(json)) {
+      store.loadFromJSON({ name: "Diagram", sequences: [json] });
+    } else {
+      store.loadFromJSON(json);
+    }
+  } catch (error) {
+    loadFailed.value = true;
+    console.error("Could not open the diagram file:", error);
+  } finally {
+    input.value = "";
+  }
 }
 
 async function loadDiagramSource({ path }: DiagramTreeSource) {
@@ -312,6 +358,14 @@ onBeforeUnmount(() => {
         <template #content>
           <div class="home-view__actions">
             <DiagramTree class="w-full" @select="openDiagramSource" />
+            <Button
+              label="Load JSON"
+              icon="pi pi-folder-open"
+              class="w-full"
+              severity="secondary"
+              @click="openFileWithGuard"
+            />
+            <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFileSelected" />
             <small v-if="loadFailed" class="home-view__load-error">
               The diagram could not be opened. Check that the json file is valid.
             </small>
