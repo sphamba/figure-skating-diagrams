@@ -129,6 +129,25 @@ const elementStrips = computed<ElementStrip[]>(() => {
 
 const hasRows = computed(() => annotationRows.value.length > 0 || elementStrips.value.length > 0);
 
+// Element panels currently unfolded; the current element's full name shows
+// below, because the content only mounts when the panel lazily opens.
+const openStripKeys = ref<string[]>([]);
+
+function isStripOpen(key: string): boolean {
+  return openStripKeys.value.includes(key);
+}
+
+function toggleStripOpen(key: string) {
+  openStripKeys.value = isStripOpen(key)
+    ? openStripKeys.value.filter((item) => item !== key)
+    : [...openStripKeys.value, key];
+}
+
+// Accordion emits panel values as strings in multiple mode, so normalize them.
+function toOpenStripKeys(value: string | string[] | null | undefined): string[] {
+  return Array.isArray(value) ? value : value == null ? [] : [value];
+}
+
 // Annotation rows with unfolded panels; the inline description hides there,
 // because the full text shows in the unfolded content below.
 const openAnnotationRows = ref<number[]>([]);
@@ -142,6 +161,12 @@ function toOpenRows(value: string | string[] | null | undefined): number[] {
     if (!Number.isNaN(index)) rows.push(index);
   }
   return rows;
+}
+
+function toggleAnnotationOpen(index: number) {
+  openAnnotationRows.value = openAnnotationRows.value.includes(index)
+    ? openAnnotationRows.value.filter((item) => item !== index)
+    : [...openAnnotationRows.value, index];
 }
 
 // A cursor beyond a sequence's time range would clamp to its boundary coordinate,
@@ -593,6 +618,7 @@ const handleStyle = computed(() => {
     <div class="time-sync-pane">
       <Accordion
         :multiple="true"
+        :lazy="true"
         :value="openAnnotationRows"
         @update:value="(v) => (openAnnotationRows = toOpenRows(v))"
       >
@@ -605,64 +631,89 @@ const handleStyle = computed(() => {
           @leave="rowLeave"
         >
           <AccordionPanel v-for="(row, index) in annotationRows" :key="row.key" :value="index">
-            <AccordionHeader>
-              <span
-                class="time-sync-pane__chip time-sync-pane__chip--annotation"
-                :style="{ background: row.color, color: textColorFor(row.color) }"
-                >{{ row.title }}</span
-              >
-              <span
-                class="time-sync-pane__summary"
-                :class="[
-                  { 'time-sync-pane__summary--hidden': openAnnotationRows.includes(index) },
-                  row.description ? '' : 'time-sync-pane__summary--empty',
-                ]"
-                >{{ row.description || "No description" }}</span
-              >
+            <AccordionHeader asChild v-slot="{ active }">
+              <div class="time-sync-pane__annotation-header">
+                <span
+                  class="time-sync-pane__chip time-sync-pane__chip--annotation"
+                  :style="{ background: row.color, color: textColorFor(row.color) }"
+                  >{{ row.title }}</span
+                >
+                <button
+                  type="button"
+                  class="time-sync-pane__toggle"
+                  :aria-label="active ? 'Hide description' : 'Show description'"
+                  :aria-expanded="active"
+                  @click.stop="toggleAnnotationOpen(index)"
+                >
+                  <span :class="active ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"></span>
+                </button>
+              </div>
             </AccordionHeader>
             <AccordionContent>
-              <p class="time-sync-pane__detail" :class="row.description ? '' : 'time-sync-pane__detail--empty'">
-                {{ row.description || "No description" }}
-              </p>
+              <p class="time-sync-pane__detail">{{ row.description || "No description" }}</p>
             </AccordionContent>
           </AccordionPanel>
         </TransitionGroup>
       </Accordion>
 
-      <TransitionGroup
-        tag="div"
-        :css="false"
-        @before-enter="rowBeforeEnter"
-        @enter="rowEnter"
-        @before-leave="rowBeforeLeave"
-        @leave="rowLeave"
+      <Accordion
+        :multiple="true"
+        :lazy="true"
+        :value="openStripKeys"
+        @update:value="(v) => (openStripKeys = toOpenStripKeys(v))"
       >
-        <div
-          v-for="(strip, stripIndex) in elementStrips"
-          :key="strip.key"
-          :ref="(element) => setStripRef(stripIndex, element)"
-          class="time-sync-pane__strip"
-          @wheel="onStripWheel"
-          @scroll="onStripScroll"
-          @scrollend="onStripScrollEnd"
+        <TransitionGroup
+          tag="div"
+          :css="false"
+          @before-enter="rowBeforeEnter"
+          @enter="rowEnter"
+          @before-leave="rowBeforeLeave"
+          @leave="rowLeave"
         >
-          <div class="time-sync-pane__strip-track">
-            <button
-              v-for="(item, itemIndex) in strip.items"
-              :key="item.key"
-              type="button"
-              class="time-sync-pane__chip time-sync-pane__chip--element"
-              :class="{
-                'time-sync-pane__chip--dim': itemIndex !== strip.current && itemIndex !== previewCurrent[stripIndex],
-              }"
-              :title="item.fullName"
-              @click="seekTo(strip, item)"
-            >
-              {{ item.label }}
-            </button>
-          </div>
-        </div>
-      </TransitionGroup>
+          <AccordionPanel v-for="(strip, stripIndex) in elementStrips" :key="strip.key" :value="strip.key">
+            <AccordionHeader asChild v-slot="{ active }">
+              <div class="time-sync-pane__strip-header">
+                <div
+                  :ref="(element) => setStripRef(stripIndex, element)"
+                  class="time-sync-pane__strip"
+                  @wheel="onStripWheel"
+                  @scroll="onStripScroll"
+                  @scrollend="onStripScrollEnd"
+                >
+                  <div class="time-sync-pane__strip-track">
+                    <button
+                      v-for="(item, itemIndex) in strip.items"
+                      :key="item.key"
+                      type="button"
+                      class="time-sync-pane__chip time-sync-pane__chip--element"
+                      :class="{
+                        'time-sync-pane__chip--dim':
+                          itemIndex !== strip.current && itemIndex !== previewCurrent[stripIndex],
+                      }"
+                      :title="item.fullName"
+                      @click="seekTo(strip, item)"
+                    >
+                      {{ item.label }}
+                    </button>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="time-sync-pane__toggle"
+                  :aria-label="active ? 'Fold element names' : 'Unfold element names'"
+                  :aria-expanded="active"
+                  @click.stop="toggleStripOpen(strip.key)"
+                >
+                  <span :class="active ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"></span>
+                </button>
+              </div>
+            </AccordionHeader>
+            <AccordionContent>
+              <p class="time-sync-pane__strip-fullname">{{ strip.items[strip.current]?.fullName }}</p>
+            </AccordionContent>
+          </AccordionPanel>
+        </TransitionGroup>
+      </Accordion>
 
       <span v-if="!hasRows" class="time-sync-pane__empty">No element yet</span>
     </div>
@@ -709,24 +760,6 @@ const handleStyle = computed(() => {
   font-weight: 600;
 }
 
-.time-sync-pane__summary {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--p-text-muted-color);
-  font-weight: 400;
-}
-
-.time-sync-pane__summary--hidden {
-  display: none;
-}
-
-.time-sync-pane__summary--empty {
-  font-style: italic;
-}
-
 .time-sync-pane__chip--element {
   border: 0;
   font-family: inherit;
@@ -740,16 +773,60 @@ const handleStyle = computed(() => {
 }
 
 .time-sync-pane__strip {
+  position: relative;
   width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
   margin-bottom: 0.25rem;
   scrollbar-width: none;
   overscroll-behavior-x: contain;
+  // Chips end at the toggle button, so they do not show under it.
+  clip-path: inset(0 1.5rem 0 0);
 }
 
 .time-sync-pane__strip::-webkit-scrollbar {
   display: none;
+}
+
+.time-sync-pane__strip-header {
+  position: relative;
+}
+
+.time-sync-pane__annotation-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.time-sync-pane__toggle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--p-text-muted-color);
+  z-index: 1;
+}
+
+.time-sync-pane__toggle .pi {
+  font-size: 0.75rem;
+}
+
+.time-sync-pane__strip-fullname {
+  margin: 0;
+  font-weight: 400;
+  color: var(--p-text-muted-color);
+  text-align: center;
 }
 
 .time-sync-pane__strip-track {
@@ -759,12 +836,10 @@ const handleStyle = computed(() => {
 }
 
 .time-sync-pane__detail {
-  margin: 0 0.25rem 0;
+  margin: 0;
+  font-weight: 400;
   color: var(--p-text-muted-color);
-}
-
-.time-sync-pane__detail--empty {
-  font-style: italic;
+  text-align: center;
 }
 
 .time-sync-pane__empty {

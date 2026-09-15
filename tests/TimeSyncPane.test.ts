@@ -30,12 +30,13 @@ async function openPane(sequences: Sequence[], time: number | null): Promise<HTM
   return content;
 }
 
-test("shows the annotation title with its detail below while the cursor is within the sequence", async () => {
+test("shows the annotation title when folded while the cursor is within the sequence", async () => {
   const content = await openPane([buildSequence()], 3.9);
   expect(content).not.toBeNull();
   const text = content?.textContent ?? "";
   expect(text).toContain("Annotation");
-  expect(text).toContain("No description");
+  // The description shows only after unfolding, so the folded row has none.
+  expect(text).not.toContain("No description");
   expect(text).not.toContain("(");
   expect(text).not.toContain("Nothing at the time cursor");
 });
@@ -66,18 +67,43 @@ function buildFallbackSequence(): Sequence {
   return sequence;
 }
 
-test("hides the inline annotation description while the row is unfolded", async () => {
+test("shows the description below the annotation only after unfolding", async () => {
   const wrapper = mount(TimeSyncPane, {
     props: { sequences: [buildSequence()], timeSeconds: 3.9, bpm: 120 },
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
-  const header = document.body.querySelector(".p-accordionheader");
-  const summary = document.body.querySelector(".time-sync-pane__summary");
-  expect(summary).not.toBeNull();
-  expect(summary?.textContent).toContain("No description");
-  header?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  // The folded row shows only the title, so no description exists yet.
+  expect(document.body.querySelector(".time-sync-pane__detail")).toBeNull();
+  const toggle = document.body.querySelector(".time-sync-pane__toggle");
+  toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(document.body.querySelector(".time-sync-pane__summary--hidden")).not.toBeNull();
+  const detail = document.body.querySelector(".time-sync-pane__detail");
+  expect(detail).not.toBeNull();
+  expect(detail?.textContent).toContain("No description");
+  wrapper.unmount();
+});
+
+test("shows the current element full name below only after the arrow unfolds the strip", async () => {
+  const wrapper = mount(TimeSyncPane, {
+    props: { sequences: [buildFallbackSequence()], timeSeconds: 4.5, bpm: 120 },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const chips = document.body.querySelectorAll("button.time-sync-pane__chip--element");
+  const first = chips[0];
+  expect(first?.textContent).toContain("B");
+  expect(document.body.querySelector(".time-sync-pane__strip-fullname")).toBeNull();
+  const arrow = document.body.querySelector(".time-sync-pane__toggle");
+  expect(arrow).not.toBeNull();
+  arrow?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const chipsAfter = document.body.querySelectorAll("button.time-sync-pane__chip--element");
+  expect(chipsAfter[0]?.textContent).toContain("B");
+  const detail = document.body.querySelector(".time-sync-pane__strip-fullname");
+  expect(detail?.textContent).toContain("Two-feet forward glide");
+  arrow?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const detailHidden = document.body.querySelector(".time-sync-pane__strip-fullname");
+  expect(detailHidden === null || detailHidden.style.display === "none").toBe(true);
   wrapper.unmount();
 });
 
