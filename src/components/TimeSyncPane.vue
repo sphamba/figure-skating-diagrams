@@ -7,7 +7,7 @@ import AccordionPanel from "openvue/accordionpanel";
 import Button from "openvue/button";
 import Drawer from "openvue/drawer";
 import { sequenceTimeRange, type Sequence } from "@/engine/sequence";
-import type { Element as DiagramElement } from "@/engine/element/element";
+import { WHEEL_SENSITIVITY } from "@/engine/constants";
 import type { Annotation } from "@/engine/annotation";
 import type { Time, PathCoordinate } from "@/engine/coordinates";
 import { elementFullName } from "@/engine/element/fullName";
@@ -19,8 +19,11 @@ const props = defineProps<{
   bpm: number;
 }>();
 
+const emit = defineEmits<{ seek: [seconds: number]; scrubStart: []; scrubEnd: [] }>();
+
 type AnnotationRow = {
   kind: "annotation";
+  key: string;
   annotation: Annotation;
   sequence: Sequence;
   color: string;
@@ -28,21 +31,27 @@ type AnnotationRow = {
   description: string;
 };
 
-type ElementRow = {
-  kind: "element";
-  element: DiagramElement;
-  sequence: Sequence;
+type ElementItem = {
+  key: string;
   label: string;
   fullName: string;
+  startTime: number;
 };
 
-type Row = AnnotationRow | ElementRow;
+type ElementStrip = {
+  key: string;
+  sequence: Sequence;
+  items: ElementItem[];
+  current: number;
+};
 
 const annotationRows = computed<AnnotationRow[]>(() => {
   const time = props.timeSeconds;
   if (time === null) return [];
   const rows: AnnotationRow[] = [];
+  let sequenceIndex = -1;
   for (const sequence of props.sequences) {
+    sequenceIndex++;
     if (!cursorInSequence(sequence)) continue;
     const u = sequence.getPathCoordinateFromTime(time as Time, props.bpm);
     for (const annotation of [...sequence.annotations].sort((a, b) => (a.start as number) - (b.start as number))) {
@@ -51,6 +60,7 @@ const annotationRows = computed<AnnotationRow[]>(() => {
       if (lo <= u && u <= hi) {
         rows.push({
           kind: "annotation",
+          key: `${sequenceIndex}-${annotation.start}-${annotation.end}-${annotation.title}`,
           annotation,
           sequence,
           color: annotation.color,
@@ -63,49 +73,76 @@ const annotationRows = computed<AnnotationRow[]>(() => {
   return rows;
 });
 
-const elementRows = computed<ElementRow[]>(() => {
+// One horizontal strip per sequence: the named elements in a line. The strip
+// offset centers the current element.
+// Elements without a short name are not shown.
+const CURRENT_TOLERANCE = 0.000001; // path coordinate, meters
+const elementStrips = computed<ElementStrip[]>(() => {
   const time = props.timeSeconds;
   if (time === null) return [];
-  const rows: ElementRow[] = [];
+  const strips: ElementStrip[] = [];
+  let sequenceIndex = -1;
   for (const sequence of props.sequences) {
+    sequenceIndex++;
     if (!cursorInSequence(sequence)) continue;
+    const shown = [...sequence.elements]
+      .sort((a, b) => (a.start as number) - (b.start as number))
+      .filter((element) => element.shortName !== "");
+    if (shown.length === 0) continue;
     const u = sequence.getPathCoordinateFromTime(time as Time, props.bpm);
-    const sorted = [...sequence.elements].sort((a, b) => (a.start as number) - (b.start as number));
-    const currentIndex = sorted.findIndex(
-      (element) =>
-        Math.min(element.start as number, element.end as number) <= u &&
-        u <= Math.max(element.start as number, element.end as number),
-    );
-    let entry = currentIndex === -1 ? undefined : sorted[currentIndex];
-    if (entry && entry.shortName === "") entry = undefined;
-    if (!entry) {
-      let best: DiagramElement | undefined;
+    // The last element whose start the cursor has reached. At a shared boundary
+    // the cursor belongs to the element that starts there, so the previous one
+    // does not stay selected. The tolerance keeps the rounding of the seek time
+    // from putting the cursor just below a start.
+    let current = -1;
+    for (let index = 0; index < shown.length; index++) {
+      const element = shown[index]!;
+      if (Math.min(element.start as number, element.end as number) - CURRENT_TOLERANCE <= u) current = index;
+    }
+    if (current === -1) {
       let bestDistance = Infinity;
-      for (const element of sorted) {
-        if (element.shortName === "") continue;
+      for (let index = 0; index < shown.length; index++) {
+        const element = shown[index]!;
         const end = Number(sequence.getTimeFromPathCoordinate(element.end as PathCoordinate, props.bpm));
         const distance = Math.abs(end - time);
         if (distance < bestDistance) {
           bestDistance = distance;
-          best = element;
+          current = index;
         }
       }
-      entry = best;
     }
-    if (entry) {
-      rows.push({
-        kind: "element",
-        element: entry,
-        sequence,
-        label: entry.shortName,
-        fullName: elementFullName(entry),
-      });
-    }
+    if (current === -1) continue;
+    strips.push({
+      key: `${sequenceIndex}-${sequence.name}`,
+      sequence,
+      current,
+      items: shown.map((element, index) => ({
+        key: `${index}-${element.start}-${element.end}`,
+        label: element.shortName,
+        fullName: elementFullName(element),
+        startTime: Number(sequence.getTimeFromPathCoordinate(element.start as PathCoordinate, props.bpm)),
+      })),
+    });
   }
-  return rows;
+  return strips;
 });
 
-const rows = computed<Row[]>(() => [...annotationRows.value, ...elementRows.value]);
+const hasRows = computed(() => annotationRows.value.length > 0 || elementStrips.value.length > 0);
+
+// Annotation rows with unfolded panels; the inline description hides there,
+// because the full text shows in the unfolded content below.
+const openAnnotationRows = ref<number[]>([]);
+
+// Accordion emits panel values as strings in multiple mode, so normalize them to numbers.
+function toOpenRows(value: string | string[] | null | undefined): number[] {
+  const list = Array.isArray(value) ? value : value == null ? [] : [value];
+  const rows: number[] = [];
+  for (const item of list) {
+    const index = Number(item);
+    if (!Number.isNaN(index)) rows.push(index);
+  }
+  return rows;
+}
 
 // A cursor beyond a sequence's time range would clamp to its boundary coordinate,
 // so sequences the cursor is not within are skipped entirely.
@@ -118,6 +155,258 @@ function cursorInSequence(sequence: Sequence): boolean {
   return range !== null && time >= range[0] && time <= range[1];
 }
 
+function seekTo(strip: ElementStrip, item: ElementItem) {
+  emit("seek", item.startTime);
+}
+
+// ---- Element strip scrolling ----
+
+// The strip containers, ordered like elementStrips.
+const stripContainers = ref<(HTMLElement | null)[]>([]);
+
+function setStripRef(index: number, element: unknown) {
+  const container = element as HTMLElement | null;
+  stripContainers.value[index] = container;
+  if (container && !observedContainers.has(container)) {
+    observedContainers.add(container);
+    resizeObserver?.observe(container);
+  }
+}
+
+const observedContainers = new WeakSet<HTMLElement>();
+let resizeObserver: ResizeObserver | null = null;
+let resizeObserverHost: ResizeObserver | null = null;
+
+const lastCurrent = new Map<number, number>();
+
+// Room equal to half the container width, so the first and last elements
+// can reach the horizontal center.
+function setStripTrackPadding(container: HTMLElement) {
+  const track = container.firstElementChild as HTMLElement | null;
+  if (!track) return;
+  const pad = Math.max(0, container.clientWidth / 2);
+  track.style.paddingLeft = `${pad}px`;
+  track.style.paddingRight = `${pad}px`;
+}
+
+function centerStripItem(container: HTMLElement, index: number, behavior: ScrollBehavior) {
+  const track = container.firstElementChild as HTMLElement | null;
+  const item = track?.children[index] as HTMLElement | undefined;
+  if (!item || track?.children.length === 0) return;
+  const left = item.offsetLeft + item.offsetWidth / 2 - container.clientWidth / 2;
+  if (Math.abs(container.scrollLeft - left) < 1) return;
+  // A pending snap from an earlier user scroll is stale once content moves under it.
+  clearSnapTimer(container);
+  markProgrammaticScroll(container);
+  container.scrollTo({ left: Math.max(0, left), behavior });
+}
+
+function recenterStrips() {
+  elementStrips.value.forEach((strip, index) => {
+    const container = stripContainers.value[index];
+    if (!container) return;
+    setStripTrackPadding(container);
+    if (lastCurrent.get(index) === strip.current) return;
+    // While the user scrolls, the selection follows the scroll, so no
+    // programmatic recenter that would fight the scrolling.
+    if (isUserScrolling(container)) return;
+    lastCurrent.set(index, strip.current);
+    centerStripItem(container, strip.current, "smooth");
+  });
+}
+
+function resendCurrentOnResize() {
+  elementStrips.value.forEach((strip, index) => {
+    const container = stripContainers.value[index];
+    if (!container) return;
+    setStripTrackPadding(container);
+    // Like recenterStrips: an active user scroll is neither masked nor fought.
+    if (isUserScrolling(container)) return;
+    if (lastCurrent.get(index) === undefined) return;
+    centerStripItem(container, strip.current, "smooth");
+  });
+}
+
+// Gentle snap: after a scroll settles, ease the closest element to the center.
+const snapTimers = new Map<HTMLElement, ReturnType<typeof setTimeout>>();
+
+function stripCenterIndex(container: HTMLElement): number {
+  const track = container.firstElementChild as HTMLElement | null;
+  if (!track || track.children.length === 0) return -1;
+  const target = container.scrollLeft + container.clientWidth / 2;
+  let bestIndex = 0;
+  let bestDistance = Infinity;
+  for (let index = 0; index < track.children.length; index++) {
+    const item = track.children[index] as HTMLElement;
+    const distance = Math.abs(item.offsetLeft + item.offsetWidth / 2 - target);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  }
+  return bestIndex;
+}
+
+function snapStrip(container: HTMLElement, behavior: ScrollBehavior = "smooth", allowEmit = false) {
+  const bestIndex = stripCenterIndex(container);
+  if (bestIndex === -1) return;
+  centerStripItem(container, bestIndex, behavior);
+  // Only a snap scheduled by a user gesture may select; programmatic
+  // snaps only correct the visual position.
+  if (allowEmit) selectStripIndex(container, bestIndex);
+}
+
+function scheduleSnap(container: HTMLElement, delay = 150) {
+  const previous = snapTimers.get(container);
+  if (previous !== undefined) clearTimeout(previous);
+  snapTimers.set(
+    container,
+    setTimeout(() => {
+      snapTimers.delete(container);
+      snapStrip(container, "smooth", true);
+      endUserScroll(container);
+      const stripIndex = stripContainers.value.indexOf(container);
+      if (stripIndex !== -1) clearStripPreview(stripIndex);
+    }, delay),
+  );
+}
+
+function clearSnapTimer(container: HTMLElement) {
+  const pending = snapTimers.get(container);
+  if (pending !== undefined) {
+    clearTimeout(pending);
+    snapTimers.delete(container);
+  }
+}
+
+// Scroll events that programmatic scrolls fire are ignored in this window.
+const PROGRAMMATIC_GRACE = 600; // ms
+
+const programmaticUntil = new WeakMap<HTMLElement, number>();
+const lastUserScroll = new WeakMap<HTMLElement, number>();
+
+function markProgrammaticScroll(container: HTMLElement) {
+  programmaticUntil.set(container, Date.now() + PROGRAMMATIC_GRACE);
+}
+
+function isProgrammaticScroll(container: HTMLElement): boolean {
+  return Date.now() < (programmaticUntil.get(container) ?? 0);
+}
+
+const USER_SCROLL_GRACE = 250; // ms
+
+function isUserScrolling(container: HTMLElement): boolean {
+  return Date.now() - (lastUserScroll.get(container) ?? 0) < USER_SCROLL_GRACE;
+}
+
+const lastSeeked = new Map<Sequence, number>();
+
+// ---- User scroll gestures ----
+
+// A user scroll/drag gesture is active per strip. Its start and end are reported
+// like a canvas time cursor scrub, so the playback can pause and resume. The
+// time cursor and other timelines update only when the gesture has settled.
+const activeGestures = new Set<HTMLElement>();
+
+function beginUserScroll(container: HTMLElement) {
+  if (activeGestures.has(container)) return;
+  activeGestures.add(container);
+  emit("scrubStart");
+}
+
+function endUserScroll(container: HTMLElement) {
+  if (!activeGestures.delete(container)) return;
+  emit("scrubEnd");
+}
+
+// Visual selection preview: while the user scrolls, the element at the center
+// shows as selected, but the time cursor updates only on settle.
+const previewCurrent = ref<number[]>([]);
+
+function setStripPreview(container: HTMLElement) {
+  const stripIndex = stripContainers.value.indexOf(container);
+  if (stripIndex === -1) return;
+  const index = stripCenterIndex(container);
+  if (previewCurrent.value[stripIndex] === index) return;
+  const next = [...previewCurrent.value];
+  next[stripIndex] = index;
+  previewCurrent.value = next;
+}
+
+function clearStripPreview(stripIndex: number) {
+  if (previewCurrent.value[stripIndex] === undefined) return;
+  const next = [...previewCurrent.value];
+  delete next[stripIndex];
+  previewCurrent.value = next;
+}
+
+function selectStripIndex(container: HTMLElement, itemIndex: number) {
+  const stripIndex = stripContainers.value.indexOf(container);
+  if (stripIndex === -1) return;
+  const strip = elementStrips.value[stripIndex];
+  if (!strip) return;
+  const item = strip.items[itemIndex];
+  if (!item) return;
+  if (lastSeeked.get(strip.sequence) === item.startTime) return;
+  lastSeeked.set(strip.sequence, item.startTime);
+  emit("seek", item.startTime);
+}
+
+// On desktop the wheel scrolls the strip horizontally.
+function onStripWheel(event: WheelEvent) {
+  const container = event.currentTarget as HTMLElement;
+  event.preventDefault();
+  const delta = Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+  if (delta !== 0) {
+    beginUserScroll(container);
+    container.scrollLeft += delta * WHEEL_SENSITIVITY;
+    scheduleSnap(container);
+  }
+}
+
+function onStripScroll(event: Event) {
+  const container = event.currentTarget as HTMLElement;
+  if (isProgrammaticScroll(container)) {
+    // Refresh the window while programmatic scroll events keep arriving, so
+    // the filter tracks the whole smooth scroll, not a fixed delay.
+    markProgrammaticScroll(container);
+    return;
+  }
+  beginUserScroll(container);
+  lastUserScroll.set(container, Date.now());
+  // Visually select the center element, but wait for the settle before the seek.
+  setStripPreview(container);
+  scheduleSnap(container);
+}
+
+// A smooth programmatic scroll also fires scrollend in modern browsers, so clear
+// the suppression then instead of waiting out the grace alone.
+function onStripScrollEnd(event: Event) {
+  programmaticUntil.delete(event.currentTarget as HTMLElement);
+}
+
+watch(
+  elementStrips,
+  () => {
+    stripContainers.value.length = elementStrips.value.length;
+    previewCurrent.value.length = elementStrips.value.length;
+    clearObsoleteSeeked();
+    nextTick(recenterStrips);
+  },
+  { immediate: true },
+);
+
+// Drop dedupe entries of sequences that left, so index shifts cannot
+// suppress a valid selection of the next strip in the set.
+function clearObsoleteSeeked() {
+  const activeSequences = new Set(elementStrips.value.map((strip) => strip.sequence));
+  for (const sequence of lastSeeked.keys()) {
+    if (!activeSequences.has(sequence)) lastSeeked.delete(sequence);
+  }
+}
+
+// ---- Row unfold transition ----
+
 const open = ref(true);
 
 // Same curve as the drawer's open transition, so rows unfold in sync.
@@ -125,10 +414,20 @@ const ROW_TRANSITION = "0.5s cubic-bezier(0.32, 0.72, 0, 1)";
 const rowTimers = new Map<Element, ReturnType<typeof setTimeout>>();
 
 function clearRowAfterTransition(el: HTMLElement, done?: () => void) {
+  rowTimers.delete(el);
   el.style.transition = "";
   el.style.height = "";
   el.style.overflow = "";
   done?.();
+}
+
+// A previous timer is cleared before a new transition, so a stale timer cannot
+// reset the styles mid-animation or complete the wrong transition, which replays
+// the appear/disappear hooks a second time.
+function setRowTimer(el: Element, callback: () => void) {
+  const previous = rowTimers.get(el);
+  if (previous !== undefined) clearTimeout(previous);
+  rowTimers.set(el, setTimeout(callback, 520));
 }
 
 function rowBeforeEnter(el: Element) {
@@ -144,10 +443,7 @@ function rowEnter(el: Element, done: () => void) {
   requestAnimationFrame(() => {
     element.style.height = `${target}px`;
   });
-  rowTimers.set(
-    el,
-    setTimeout(() => clearRowAfterTransition(element, done), 520),
-  );
+  setRowTimer(el, () => clearRowAfterTransition(element, done));
 }
 
 function rowBeforeLeave(el: Element) {
@@ -162,10 +458,7 @@ function rowLeave(el: Element, done: () => void) {
   requestAnimationFrame(() => {
     element.style.height = "0px";
   });
-  rowTimers.set(
-    el,
-    setTimeout(() => clearRowAfterTransition(element, done), 520),
-  );
+  setRowTimer(el, () => clearRowAfterTransition(element, done));
 }
 
 onBeforeUnmount(() => {
@@ -177,7 +470,6 @@ const handleRef = ref<{ $el?: HTMLElement | null } | null>(null);
 const drawerRect = ref({ left: 0, width: 0, bottom: 0 });
 const HANDLE_GAP = 6;
 const drawerHeight = ref(0);
-let resizeObserver: ResizeObserver | null = null;
 let drawerObserver: ResizeObserver | null = null;
 
 function updateDrawerRect() {
@@ -218,7 +510,10 @@ watch(
     if (value) {
       updateDrawerRect();
       nextTick(() => {
-        requestAnimationFrame(measureDrawerHeight);
+        requestAnimationFrame(() => {
+          measureDrawerHeight();
+          resendCurrentOnResize();
+        });
       });
       return;
     }
@@ -233,16 +528,26 @@ onMounted(() => {
   updateDrawerRect();
   const host = handleRef.value?.$el?.parentElement;
   if (host && typeof ResizeObserver !== "undefined") {
-    resizeObserver = new ResizeObserver(updateDrawerRect);
-    resizeObserver.observe(host);
+    resizeObserverHost = new ResizeObserver(updateDrawerRect);
+    resizeObserverHost.observe(host);
+  }
+  if (typeof ResizeObserver !== "undefined") {
+    resizeObserver = new ResizeObserver(resendCurrentOnResize);
   }
 });
 
 onBeforeUnmount(() => {
+  for (const container of [...activeGestures]) endUserScroll(container);
+  activeGestures.clear();
   for (const timer of rowTimers.values()) clearTimeout(timer);
   rowTimers.clear();
+  for (const timer of snapTimers.values()) clearTimeout(timer);
+  snapTimers.clear();
+  lastSeeked.clear();
   resizeObserver?.disconnect();
   resizeObserver = null;
+  resizeObserverHost?.disconnect();
+  resizeObserverHost = null;
   drawerObserver?.disconnect();
   drawerObserver = null;
 });
@@ -286,7 +591,11 @@ const handleStyle = computed(() => {
     }"
   >
     <div class="time-sync-pane">
-      <Accordion :multiple="true">
+      <Accordion
+        :multiple="true"
+        :value="openAnnotationRows"
+        @update:value="(v) => (openAnnotationRows = toOpenRows(v))"
+      >
         <TransitionGroup
           tag="div"
           :css="false"
@@ -295,44 +604,67 @@ const handleStyle = computed(() => {
           @before-leave="rowBeforeLeave"
           @leave="rowLeave"
         >
-          <AccordionPanel v-for="(row, index) in annotationRows" :key="index" :value="index">
+          <AccordionPanel v-for="(row, index) in annotationRows" :key="row.key" :value="index">
             <AccordionHeader>
               <span
                 class="time-sync-pane__chip time-sync-pane__chip--annotation"
                 :style="{ background: row.color, color: textColorFor(row.color) }"
                 >{{ row.title }}</span
               >
-              <span class="time-sync-pane__sequence">{{ row.sequence.name }}</span>
+              <span
+                class="time-sync-pane__summary"
+                :class="[
+                  { 'time-sync-pane__summary--hidden': openAnnotationRows.includes(index) },
+                  row.description ? '' : 'time-sync-pane__summary--empty',
+                ]"
+                >{{ row.description || "No description" }}</span
+              >
             </AccordionHeader>
             <AccordionContent>
-              <p class="time-sync-pane__detail">{{ row.description || "No description" }}</p>
+              <p class="time-sync-pane__detail" :class="row.description ? '' : 'time-sync-pane__detail--empty'">
+                {{ row.description || "No description" }}
+              </p>
             </AccordionContent>
           </AccordionPanel>
         </TransitionGroup>
       </Accordion>
 
-      <Accordion :multiple="true">
-        <TransitionGroup
-          tag="div"
-          :css="false"
-          @before-enter="rowBeforeEnter"
-          @enter="rowEnter"
-          @before-leave="rowBeforeLeave"
-          @leave="rowLeave"
+      <TransitionGroup
+        tag="div"
+        :css="false"
+        @before-enter="rowBeforeEnter"
+        @enter="rowEnter"
+        @before-leave="rowBeforeLeave"
+        @leave="rowLeave"
+      >
+        <div
+          v-for="(strip, stripIndex) in elementStrips"
+          :key="strip.key"
+          :ref="(element) => setStripRef(stripIndex, element)"
+          class="time-sync-pane__strip"
+          @wheel="onStripWheel"
+          @scroll="onStripScroll"
+          @scrollend="onStripScrollEnd"
         >
-          <AccordionPanel v-for="(row, index) in elementRows" :key="index" :value="index">
-            <AccordionHeader>
-              <span class="time-sync-pane__chip">{{ row.label }}</span>
-              <span class="time-sync-pane__sequence">{{ row.sequence.name }}</span>
-            </AccordionHeader>
-            <AccordionContent>
-              <p class="time-sync-pane__detail">{{ row.fullName }}</p>
-            </AccordionContent>
-          </AccordionPanel>
-        </TransitionGroup>
-      </Accordion>
+          <div class="time-sync-pane__strip-track">
+            <button
+              v-for="(item, itemIndex) in strip.items"
+              :key="item.key"
+              type="button"
+              class="time-sync-pane__chip time-sync-pane__chip--element"
+              :class="{
+                'time-sync-pane__chip--dim': itemIndex !== strip.current && itemIndex !== previewCurrent[stripIndex],
+              }"
+              :title="item.fullName"
+              @click="seekTo(strip, item)"
+            >
+              {{ item.label }}
+            </button>
+          </div>
+        </div>
+      </TransitionGroup>
 
-      <span v-if="rows.length === 0" class="time-sync-pane__empty">No element yet</span>
+      <span v-if="!hasRows" class="time-sync-pane__empty">No element yet</span>
     </div>
   </Drawer>
 </template>
@@ -367,6 +699,7 @@ const handleStyle = computed(() => {
 }
 
 .time-sync-pane__chip {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   padding: 0.2rem 0.75rem;
@@ -376,15 +709,62 @@ const handleStyle = computed(() => {
   font-weight: 600;
 }
 
-.time-sync-pane__sequence {
-  margin-left: 0;
+.time-sync-pane__summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--p-text-muted-color);
   font-weight: 400;
+}
+
+.time-sync-pane__summary--hidden {
+  display: none;
+}
+
+.time-sync-pane__summary--empty {
+  font-style: italic;
+}
+
+.time-sync-pane__chip--element {
+  border: 0;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  transition: opacity 0.3s ease;
+}
+
+.time-sync-pane__chip--dim {
+  opacity: 0.35;
+}
+
+.time-sync-pane__strip {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin-bottom: 0.25rem;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+
+.time-sync-pane__strip::-webkit-scrollbar {
+  display: none;
+}
+
+.time-sync-pane__strip-track {
+  display: flex;
+  gap: 0.5rem;
+  width: max-content;
 }
 
 .time-sync-pane__detail {
   margin: 0 0.25rem 0;
   color: var(--p-text-muted-color);
+}
+
+.time-sync-pane__detail--empty {
+  font-style: italic;
 }
 
 .time-sync-pane__empty {

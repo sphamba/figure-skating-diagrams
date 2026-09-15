@@ -1,6 +1,6 @@
 import type { Curvilinear, Curve } from "../curve.js";
 import { type AxisRect } from "../curve.js";
-import { bladeLength } from "../constants.js";
+import { bladeLength, WHEEL_SENSITIVITY } from "../constants.js";
 import type { PathCoordinate, Time } from "../coordinates.js";
 import { fullTimeExtentSeconds } from "../diagram.js";
 import { Annotation } from "../annotation.js";
@@ -2760,7 +2760,10 @@ export class Editor {
     const [screenX, screenY] = this.screenPosition(event);
     const worldBefore = this.screenToWorld(screenX, screenY);
 
-    this.view.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, this.view.zoom * Math.pow(ZOOM_FACTOR, -event.deltaY)));
+    this.view.zoom = Math.min(
+      MAX_ZOOM,
+      Math.max(MIN_ZOOM, this.view.zoom * Math.pow(ZOOM_FACTOR, -event.deltaY * WHEEL_SENSITIVITY)),
+    );
 
     this.view.center = new Vector<2>(
       worldBefore.x - (screenX - this.width / 2) / this.view.zoom,

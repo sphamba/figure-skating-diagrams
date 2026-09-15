@@ -55,6 +55,43 @@ describe("useVideoTimestamp", () => {
     expect(seconds!.value).toBe(2);
   });
 
+  it("ignores stale completed seeks during rapid scrubbing", async () => {
+    host();
+    const element = document.createElement("video");
+    video.value = element;
+    await flush();
+    setTimestamp!(1);
+    setTimestamp!(3);
+    // An intermediate completed seek reports its older position while the video
+    // still catches up on the queued seeks.
+    element.currentTime = 1;
+    element.dispatchEvent(new Event("seeked"));
+    await flush();
+    expect(seconds!.value).toBe(3);
+    // The final seek completes and matches the pending target.
+    element.currentTime = 3;
+    element.dispatchEvent(new Event("seeked"));
+    await flush();
+    expect(seconds!.value).toBe(3);
+  });
+
+  it("lets the video advance after play clears the seek target", async () => {
+    const wrapper = host();
+    const element = document.createElement("video");
+    video.value = element;
+    await flush();
+    setTimestamp!(2);
+    await flush();
+    element.dispatchEvent(new Event("play"));
+    element.dispatchEvent(new Event("playing"));
+    await flush();
+    element.currentTime = 2.5;
+    element.dispatchEvent(new Event("seeked"));
+    await flush();
+    expect(seconds!.value).toBe(2.5);
+    wrapper.unmount();
+  });
+
   it("resets to zero when the element is removed", async () => {
     host();
     const element = document.createElement("video");

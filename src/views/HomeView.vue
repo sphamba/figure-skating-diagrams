@@ -191,6 +191,20 @@ function togglePlayback() {
 
 let resumeAfterScrub = false;
 
+// Scroll/drag gestures on the elements pane act like a canvas time cursor scrub:
+// pause the playback during the gesture, resume it when the gesture has settled.
+function onPaneScrubStart() {
+  if (!playing.value) return;
+  resumeAfterScrub = true;
+  pauseAnimation();
+}
+
+function onPaneScrubEnd() {
+  if (!resumeAfterScrub) return;
+  resumeAfterScrub = false;
+  playAnimation();
+}
+
 function jumpToStart() {
   const bounds = fullTimeExtentSeconds(store.getDiagram().sequences, getBpm());
   if (bounds) {
@@ -558,7 +572,14 @@ onBeforeUnmount(() => {
             </div>
             <canvas ref="canvasRef" class="home-view__canvas-element"></canvas>
           </div>
-          <TimeSyncPane :sequences="visibleSequences" :time-seconds="videoTime" :bpm="bpm" />
+          <TimeSyncPane
+            :sequences="visibleSequences"
+            :time-seconds="videoTime"
+            :bpm="bpm"
+            @seek="setTimestamp"
+            @scrub-start="onPaneScrubStart"
+            @scrub-end="onPaneScrubEnd"
+          />
         </SplitterPanel>
       </Splitter>
     </div>

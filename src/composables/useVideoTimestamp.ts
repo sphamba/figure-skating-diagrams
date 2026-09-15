@@ -23,6 +23,8 @@ export function useVideoTimestamp(video: Ref<HTMLVideoElement | null | undefined
   let anchor: Anchor = { time: 0, wall: 0 };
   let seeking = false;
   let lastFrame: number | null = null;
+  // Seconds of the last user-driven seek, while the video still catches up.
+  let pendingTarget: number | null = null;
 
   function stopLoop() {
     if (frameHandle !== null) {
@@ -46,6 +48,11 @@ export function useVideoTimestamp(video: Ref<HTMLVideoElement | null | undefined
   function anchorFromElement() {
     const element = video.value;
     if (!element) return;
+    // The video processes queued seeks one by one and fires events for each, so a
+    // completed seek may still report an older position. Adopting it would replay
+    // earlier drag positions and flash the timelines; wait for the last target.
+    if (pendingTarget !== null && Math.abs(element.currentTime - pendingTarget) > 0.05) return;
+    pendingTarget = null;
     anchor = { time: element.currentTime, wall: performance.now() };
     seconds.value = element.currentTime;
   }
@@ -105,6 +112,8 @@ export function useVideoTimestamp(video: Ref<HTMLVideoElement | null | undefined
   }
 
   function onPlay() {
+    // Playing supersedes the seek target: the video advances past it.
+    pendingTarget = null;
     stopLoop();
     stopRvfc();
     playing.value = true;
@@ -176,6 +185,7 @@ export function useVideoTimestamp(video: Ref<HTMLVideoElement | null | undefined
       return;
     }
     const clamped = Math.max(0, Math.min(value, element.duration || value));
+    pendingTarget = clamped;
     element.currentTime = clamped;
     seconds.value = clamped;
     anchor = { time: clamped, wall: performance.now() };
@@ -196,6 +206,7 @@ export function useVideoTimestamp(video: Ref<HTMLVideoElement | null | undefined
     stopLoop();
     stopRvfc();
     playing.value = false;
+    pendingTarget = null;
     seconds.value = 0;
     anchor = { time: 0, wall: 0 };
     if (!element) return;
