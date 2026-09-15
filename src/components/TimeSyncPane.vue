@@ -318,6 +318,20 @@ function isProgrammaticScroll(container: HTMLElement): boolean {
   return Date.now() < (programmaticUntil.get(container) ?? 0);
 }
 
+// A scroll event is a user gesture only soon after real input, so a delayed
+// programmatic scroll event cannot start a user gesture and select an element.
+const USER_INPUT_TTL = 1000; // ms
+
+const userInputUntil = new WeakMap<HTMLElement, number>();
+
+function markUserInput(container: HTMLElement) {
+  userInputUntil.set(container, Date.now() + USER_INPUT_TTL);
+}
+
+function hasRecentUserInput(container: HTMLElement): boolean {
+  return Date.now() < (userInputUntil.get(container) ?? 0);
+}
+
 const USER_SCROLL_GRACE = 250; // ms
 
 function isUserScrolling(container: HTMLElement): boolean {
@@ -383,20 +397,29 @@ function onStripWheel(event: WheelEvent) {
   event.preventDefault();
   const delta = Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
   if (delta !== 0) {
+    markUserInput(container);
     beginUserScroll(container);
     container.scrollLeft += delta * WHEEL_SENSITIVITY;
     scheduleSnap(container);
   }
 }
 
+function onStripPointerDown(event: PointerEvent) {
+  markUserInput(event.currentTarget as HTMLElement);
+}
+
 function onStripScroll(event: Event) {
   const container = event.currentTarget as HTMLElement;
-  if (isProgrammaticScroll(container)) {
+  const freshInput = hasRecentUserInput(container);
+  if (isProgrammaticScroll(container) && !freshInput) {
     // Refresh the window while programmatic scroll events keep arriving, so
     // the filter tracks the whole smooth scroll, not a fixed delay.
     markProgrammaticScroll(container);
     return;
   }
+  // A scroll event without real input is programmatic, e.g. a recenter whose
+  // events lag behind the smooth scroll under load.
+  if (!freshInput) return;
   beginUserScroll(container);
   lastUserScroll.set(container, Date.now());
   // Visually select the center element, but wait for the settle before the seek.
@@ -676,6 +699,7 @@ const handleStyle = computed(() => {
                 <div
                   :ref="(element) => setStripRef(stripIndex, element)"
                   class="time-sync-pane__strip"
+                  @pointerdown="onStripPointerDown"
                   @wheel="onStripWheel"
                   @scroll="onStripScroll"
                   @scrollend="onStripScrollEnd"

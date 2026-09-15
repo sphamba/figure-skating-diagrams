@@ -130,6 +130,8 @@ test("seeks for the element at the center of the strip only when the scroll has 
   await new Promise((resolve) => setTimeout(resolve, 0));
   const strip = document.body.querySelector<HTMLElement>(".time-sync-pane__strip");
   expect(strip).not.toBeNull();
+  // Real input starts the gesture; the events of programmatic scrolls cannot.
+  strip!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
   strip!.dispatchEvent(new Event("scroll"));
   // No seek during the gesture: the time cursor updates only on settle.
   expect(wrapper.emitted("seek")).toBeUndefined();
