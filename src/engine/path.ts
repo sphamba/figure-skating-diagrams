@@ -311,6 +311,8 @@ export class Path {
     this.curves.forEach((curve) => curve.draw(ctx));
   }
 
+  // Strokes the whole span in one path, so translucent strokes show no seams
+  // where the curves meet.
   drawRange(ctx: CanvasRenderingContext2DSized, uStart: PathCoordinate, uEnd: PathCoordinate) {
     if (ctx == null || this.curves.length == 0) return;
 
@@ -318,6 +320,8 @@ export class Path {
     const end = Math.min(this.length, uEnd as number);
     if (end <= start) return;
 
+    ctx.beginPath();
+    let pen: Vector<2> | null = null;
     let cumulated = 0;
     for (const curve of this.curves) {
       const curveStart = cumulated;
@@ -327,15 +331,22 @@ export class Path {
       if (curveEnd <= start) continue;
       if (curveStart >= end) break;
 
+      let points: [Vector<2>, Vector<2>, Vector<2>, Vector<2>];
       if (curveStart >= start && curveEnd <= end) {
-        curve.draw(ctx);
-        continue;
+        points = [curve.p0, curve.p1, curve.p2, curve.p3];
+      } else {
+        const sStart = curve.getCurvilinearCoordFromUniform(Math.max(0, start - curveStart));
+        const sEnd = curve.getCurvilinearCoordFromUniform(Math.min(curve.length, end - curveStart));
+        points = clippedBezierPoints(curve, sStart, sEnd);
       }
 
-      const sStart = curve.getCurvilinearCoordFromUniform(Math.max(0, start - curveStart));
-      const sEnd = curve.getCurvilinearCoordFromUniform(Math.min(curve.length, end - curveStart));
-      drawSubBezier(ctx, curve, sStart, sEnd);
+      if (pen == null || !pointsClose(pen, points[0]!)) {
+        ctx.moveTo(points[0]!.x, -points[0]!.y);
+      }
+      ctx.bezierCurveTo(points[1]!.x, -points[1]!.y, points[2]!.x, -points[2]!.y, points[3]!.x, -points[3]!.y);
+      pen = points[3]!;
     }
+    ctx.stroke();
   }
 
   drawNodes(ctx: CanvasRenderingContext2DSized, size: number) {
@@ -391,23 +402,22 @@ function splitBezierAt(
   ];
 }
 
-function drawSubBezier(ctx: CanvasRenderingContext2DSized, curve: Curve, sStart: number, sEnd: number) {
-  if (sEnd <= sStart) return;
-
-  let points = [curve.p0, curve.p1, curve.p2, curve.p3];
+function clippedBezierPoints(curve: Curve, sStart: number, sEnd: number): [Vector<2>, Vector<2>, Vector<2>, Vector<2>] {
+  let points: [Vector<2>, Vector<2>, Vector<2>, Vector<2>] = [curve.p0, curve.p1, curve.p2, curve.p3];
 
   if (sStart > 0) {
-    points = splitBezierAt(points[0]!, points[1]!, points[2]!, points[3]!, sStart)[1];
+    points = splitBezierAt(points[0]!, points[1]!, points[2]!, points[3]!, sStart)[1] as typeof points;
   }
 
   const relEnd = sEnd >= 1 ? 1 : (sEnd - sStart) / (1 - sStart);
   if (relEnd < 1) {
-    points = splitBezierAt(points[0]!, points[1]!, points[2]!, points[3]!, relEnd)[0];
+    points = splitBezierAt(points[0]!, points[1]!, points[2]!, points[3]!, relEnd)[0] as typeof points;
   }
 
-  const [p0, p1, p2, p3] = points;
-  ctx.beginPath();
-  ctx.moveTo(p0!.x, -p0!.y);
-  ctx.bezierCurveTo(p1!.x, -p1!.y, p2!.x, -p2!.y, p3!.x, -p3!.y);
-  ctx.stroke();
+  return points;
+}
+
+function pointsClose(a: Vector<2>, b: Vector<2>): boolean {
+  const EPSILON = 1e-9;
+  return Math.abs(a.x - b.x) < EPSILON && Math.abs(a.y - b.y) < EPSILON;
 }
