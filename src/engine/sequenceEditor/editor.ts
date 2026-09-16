@@ -1,6 +1,6 @@
 import type { Curvilinear, Curve } from "../curve.js";
 import { type AxisRect } from "../curve.js";
-import { bladeLength, WHEEL_SENSITIVITY } from "../constants.js";
+import { bladeLength, CANVAS_FONT, WHEEL_SENSITIVITY } from "../constants.js";
 import type { PathCoordinate, Time } from "../coordinates.js";
 import { fullTimeExtentSeconds } from "../diagram.js";
 import { Annotation } from "../annotation.js";
@@ -9,6 +9,7 @@ import type { DynamicGlide } from "../element/stroke.js";
 import type { Path } from "../path.js";
 import { LENGTH, WIDTH, CORNER_RADIUS } from "../rink.js";
 import type { CanvasRenderingContext2DSized } from "../rinkCanvas.js";
+import { canvasFontReady } from "../font.js";
 import { createDefaultFootTurn, isJumpType } from "../element/turnTypes.js";
 import { TimingKeyframe } from "../keyframe.js";
 import { Sequence, DEFAULT_BPM, hasTimeEvolution, sequenceTimeRange } from "../sequence.js";
@@ -246,6 +247,7 @@ export class Editor {
   private lastPinchMidY = 0;
   private drawScheduled = false;
   private drawFrameHandle: number | null = null;
+  private destroyed = false;
 
   private onWheel = (event: WheelEvent) => this.handleWheel(event);
   private onMouseDown = (event: MouseEvent) => this.handleMouseDown(event);
@@ -295,6 +297,8 @@ export class Editor {
     window.addEventListener("resize", this.onWindowResize);
 
     this.draw();
+    // Canvas text may render before the webfont loads; redraw once it is ready.
+    canvasFontReady().then(() => this.requestDraw());
   }
 
   destroy() {
@@ -303,6 +307,7 @@ export class Editor {
       this.drawFrameHandle = null;
     }
     this.drawScheduled = false;
+    this.destroyed = true;
     this.canvas.removeEventListener("wheel", this.onWheel);
     this.canvas.removeEventListener("mousedown", this.onMouseDown);
     this.canvas.removeEventListener("touchstart", this.onTouchStart);
@@ -527,6 +532,7 @@ export class Editor {
   }
 
   requestDraw() {
+    if (this.destroyed) return;
     if (typeof requestAnimationFrame !== "function") {
       this.draw();
       return;
@@ -1407,7 +1413,7 @@ export class Editor {
   private drawWhiteRectLabel(text: string, point: Vector<2>, inside: Vector<2>, fontSize = LABEL_FONT_SIZE_SMALL) {
     const ctx = this.ctx;
     const offset = (LABEL_OFFSET * CANVAS_SCALE) / this.view.zoom;
-    ctx.font = `${(fontSize * CANVAS_SCALE) / this.view.zoom}px sans-serif`;
+    ctx.font = `${(fontSize * CANVAS_SCALE) / this.view.zoom}px ${CANVAS_FONT}`;
     const metrics = ctx.measureText(text);
     const width = metrics.width;
     const height = (metrics.actualBoundingBoxAscent ?? 0) + (metrics.actualBoundingBoxDescent ?? 0);
@@ -1429,7 +1435,7 @@ export class Editor {
   private drawWhiteCircleLabel(text: string, point: Vector<2>, inside: Vector<2>, fontSize = LABEL_FONT_SIZE_SMALL) {
     const ctx = this.ctx;
     const offset = (LABEL_OFFSET * CANVAS_SCALE) / this.view.zoom;
-    ctx.font = `${(fontSize * CANVAS_SCALE) / this.view.zoom}px sans-serif`;
+    ctx.font = `${(fontSize * CANVAS_SCALE) / this.view.zoom}px ${CANVAS_FONT}`;
     const metrics = ctx.measureText(text);
     const width = metrics.width;
     const height = (metrics.actualBoundingBoxAscent ?? 0) + (metrics.actualBoundingBoxDescent ?? 0);
@@ -1798,7 +1804,7 @@ export class Editor {
 
   private drawCenteredLabel(text: string, point: Vector<2>, fontSize = LABEL_FONT_SIZE) {
     const ctx = this.ctx;
-    ctx.font = `${(fontSize * CANVAS_SCALE) / this.view.zoom}px sans-serif`;
+    ctx.font = `${(fontSize * CANVAS_SCALE) / this.view.zoom}px ${CANVAS_FONT}`;
     ctx.fillStyle = "#000";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -1816,7 +1822,7 @@ export class Editor {
     // extraOffset comes in metres, scaled the same way as the px offset.
     const offset = (LABEL_OFFSET * CANVAS_SCALE) / this.view.zoom + extraOffset * CANVAS_SCALE; // px -> canvas units
 
-    ctx.font = `${(fontSize * CANVAS_SCALE) / this.view.zoom}px sans-serif`;
+    ctx.font = `${(fontSize * CANVAS_SCALE) / this.view.zoom}px ${CANVAS_FONT}`;
     ctx.fillStyle = "#000";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";

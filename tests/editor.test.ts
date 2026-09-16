@@ -664,7 +664,7 @@ test("a crossed stroke draws a second 12px label anchored to the element middle,
 
   const mainLabels = drawn.filter((label) => label.text === "LBI");
   expect(mainLabels.length).toBe(2);
-  const px = (font: string) => Number(font.replace("px sans-serif", ""));
+  const px = (font: string) => Number(font.replace(/px.*$/, ""));
   expect(px(crossedLabels[0]!.font) * 14).toBeCloseTo(px(mainLabels[0]!.font) * 12, 9);
 
   // Anchors sit on the path line, so the inside shift mirrors the main label:
@@ -762,7 +762,7 @@ test("an uncovered inflection point draws one small inflection label", () => {
   const inflectionLabels = drawn.filter((label) => label.text === "CE");
   expect(inflectionLabels).toHaveLength(1);
 
-  const px = (font: string) => Number(font.replace("px sans-serif", ""));
+  const px = (font: string) => Number(font.replace(/px.*$/, ""));
   const mainLabels = drawn.filter((label) => label.text === "LFO");
   expect(mainLabels.length).toBeGreaterThan(0);
   expect(px(inflectionLabels[0]!.font) * 14).toBeCloseTo(px(mainLabels[0]!.font) * 12, 9);

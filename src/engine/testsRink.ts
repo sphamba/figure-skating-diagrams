@@ -8,6 +8,8 @@ import { Sequence } from "./sequence.js";
 import { LeftForwardOutsideThreeTurn } from "./element/threeTurn.js";
 import { defaultFootTurnLength } from "./element/turn.js";
 import { Vector } from "./vector.js";
+import { CANVAS_FONT } from "./constants.js";
+import { canvasFontReady } from "./font.js";
 
 export function test() {
   const path = new Path();
@@ -164,7 +166,7 @@ export function test() {
     if (ctx == null) return;
     ctx.fillStyle = "black";
     ctx.strokeStyle = "black";
-    ctx.font = `${fontSize}px sans-serif`;
+    ctx.font = `${fontSize}px ${CANVAS_FONT}`;
     ctx.textBaseline = "top";
     for (let i = 0; i < slidersDom.length / 2; i++) {
       const [x, y] = getControlPointCoordinates(i);
@@ -194,4 +196,7 @@ export function test() {
   }
 
   draw();
+  canvasFontReady().then(() => {
+    draw();
+  });
 }
