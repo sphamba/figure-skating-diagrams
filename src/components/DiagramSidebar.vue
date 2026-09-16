@@ -78,7 +78,7 @@ const sections = [
       </TabList>
       <TabPanels>
         <TabPanel value="files">
-          <DiagramSidebarFiles :mode="props.mode" @load-start="emit('load-start')" />
+          <DiagramSidebarFiles :mode="props.mode" @load-start="emit('load-start')" @close="open = false" />
         </TabPanel>
         <TabPanel value="diagram">
           <DiagramSidebarDiagram :mode="props.mode" :video-error="props.videoError ?? false" />

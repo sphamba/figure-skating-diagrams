@@ -14,7 +14,7 @@ import type { SequenceJSON } from "@/engine/sequence";
 const props = defineProps<{ mode: "home" | "editor" }>();
 
 // The parent pauses the playback before the new diagram reaches the store, as before.
-const emit = defineEmits<{ "load-start": [] }>();
+const emit = defineEmits<{ "load-start": []; close: [] }>();
 
 const isEditor = computed(() => props.mode === "editor");
 
@@ -84,6 +84,7 @@ async function onFileSelected(event: Event) {
     const json = JSON.parse(await file.text()) as PatternJSON | DiagramJSON | SequenceJSON;
     emit("load-start");
     loadIntoStore(json);
+    emit("close");
   } catch (error) {
     loadFailed.value = true;
     console.error("Could not open the diagram file:", error);
@@ -100,6 +101,7 @@ async function loadDiagramSource({ path }: DiagramTreeSource) {
     const json = JSON.parse(await response.text()) as PatternJSON | DiagramJSON | SequenceJSON;
     emit("load-start");
     loadIntoStore(json);
+    emit("close");
   } catch (error) {
     loadFailed.value = true;
     console.error("Could not open the diagram file:", error);
@@ -135,6 +137,7 @@ function downloadFile() {
   anchor.click();
   URL.revokeObjectURL(url);
   store.markSaved();
+  emit("close");
 }
 
 function confirmNew() {
@@ -151,7 +154,10 @@ function confirmNew() {
     acceptLabel: "Create",
     acceptProps: { severity: "warning" },
     rejectProps: { severity: "secondary", text: true },
-    accept: () => store.clear(),
+    accept: () => {
+      store.clear();
+      emit("close");
+    },
   });
 }
 

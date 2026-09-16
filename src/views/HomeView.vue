@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Button from "openvue/button";
 import SelectButton from "openvue/selectbutton";
 import Splitter from "openvue/splitter";
@@ -157,6 +157,79 @@ const splitLayout = computed(() => {
   return (viewportWidth.value - sidebarSpace) / viewportHeight.value > 1 ? "horizontal" : "vertical";
 });
 
+const splitterRoot = ref<{ $el?: HTMLElement | null } | null>(null);
+const videoPaneSize = ref(40);
+const PANE_SELECTOR = ".home-view__video-pane";
+
+// The panel percentage does not map linearly to pixels, so the 16/9 size
+// converges from the measured pane against the wanted target.
+function updateVideoPaneSize(thenAgain = false) {
+  if (!videoSet.value) {
+    if (videoPaneSize.value !== 0) videoPaneSize.value = 0;
+    return;
+  }
+  const root = splitterRoot.value?.$el ?? null;
+  // The 16/9 ratio applies to any vertical split and to a mobile horizontal
+  // split; only a desktop side-by-side split keeps the fixed 40%. A desktop
+  // vertical split needs the measured root, so it waits for a next check.
+  if (splitLayout.value === "horizontal" && !isMobile.value) {
+    if (videoPaneSize.value !== 40) videoPaneSize.value = 40;
+    return;
+  }
+  if (!root) return;
+  const pane = root.querySelector<HTMLElement>(PANE_SELECTOR);
+  if (!pane) return;
+  const vertical = splitLayout.value === "vertical";
+  const splitterW = root.clientWidth;
+  const splitterH = root.clientHeight;
+  if (splitterW <= 0 || splitterH <= 0) return;
+  const target = vertical
+    ? Math.min((splitterW * 9) / 16, splitterH / 2)
+    : Math.min((splitterH * 16) / 9, splitterW / 2);
+  const current = vertical ? pane.clientHeight : pane.clientWidth;
+  if (Math.abs(current - target) <= 1.5) return;
+  const previous = videoPaneSize.value;
+  const next =
+    previous <= 0.5 || current <= 2
+      ? Math.min(95, Math.max(2, (target / (vertical ? splitterH : splitterW)) * 100 * 1.15))
+      : Math.min(95, Math.max(2, (previous * target) / current));
+  if (Math.abs(next - previous) < 0.05) return;
+  videoPaneSize.value = next;
+  if (thenAgain) {
+    requestAnimationFrame(() => requestAnimationFrame(() => updateVideoPaneSize(true)));
+  }
+}
+
+// Both pane bases sum to exactly 100 on any 16/9 split: no growth distortion.
+const canvasPaneSize = computed(() =>
+  videoSet.value && (splitLayout.value === "vertical" || isMobile.value) ? 100 - videoPaneSize.value : 50,
+);
+
+let splitterObserver: ResizeObserver | null = null;
+
+watch(splitterRoot, async (root, previous) => {
+  if (previous !== root) {
+    splitterObserver?.disconnect();
+    splitterObserver = null;
+  }
+  await nextTick();
+  const el = root?.$el ?? null;
+  if (el && !splitterObserver && typeof ResizeObserver !== "undefined") {
+    splitterObserver = new ResizeObserver(() => updateVideoPaneSize(true));
+    splitterObserver.observe(el);
+  }
+  updateVideoPaneSize(true);
+});
+
+watch([videoSet, isMobile, splitLayout], () => {
+  updateVideoPaneSize(true);
+});
+
+onBeforeUnmount(() => {
+  splitterObserver?.disconnect();
+  splitterObserver = null;
+});
+
 function updateViewportSizes() {
   viewportWidth.value = window.innerWidth;
   viewportHeight.value = window.innerHeight;
@@ -256,12 +329,13 @@ onBeforeUnmount(() => {
       <div class="home-view__splitter-wrap">
         <Splitter
           :key="splitKey"
+          ref="splitterRoot"
           :layout="splitLayout"
           :gutter-size="videoSet ? 10 : 0"
           class="home-view__splitter"
           :class="{ 'home-view__splitter--no-video': !videoSet }"
         >
-          <SplitterPanel class="home-view__video-pane" :size="videoSet ? 40 : 0" :min-size="videoSet ? 10 : 0">
+          <SplitterPanel class="home-view__video-pane" :size="videoPaneSize" :min-size="videoSet ? 10 : 0">
             <video
               v-if="videoSet"
               ref="videoRef"
@@ -273,7 +347,7 @@ onBeforeUnmount(() => {
               @error="onVideoError"
             ></video>
           </SplitterPanel>
-          <SplitterPanel class="home-view__canvas-pane" :min-size="20">
+          <SplitterPanel class="home-view__canvas-pane" :size="canvasPaneSize" :min-size="20">
             <div class="home-view__canvas-area">
               <canvas ref="canvasRef" class="home-view__canvas-element"></canvas>
               <TimeSyncPane

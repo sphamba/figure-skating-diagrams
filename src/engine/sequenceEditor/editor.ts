@@ -102,6 +102,7 @@ const ANNOTATION_SELECTED_COLOR = "#d33";
 
 const MIN_ZOOM = 2;
 const MAX_ZOOM = 5000;
+const INITIAL_EDGE_MARGIN = 5; // px between the canvas edge and the rink edge at load
 const CANVAS_SCALE = 20; // canvas units per metre, editor drawing only
 
 type ViewState = {
@@ -252,6 +253,9 @@ export class Editor {
   private onContextMenu = (event: MouseEvent) => event.preventDefault();
   private onWindowResize = () => this.resize();
   private resizeObserver: ResizeObserver | null = null;
+  // The canvas may get its real size only after a layout change, so the rink
+  // stays fitted until the first user zoom disables the auto fit.
+  private autoFitRink = true;
 
   constructor(canvas: HTMLCanvasElement, sequences: Sequence[]) {
     this.canvas = canvas;
@@ -270,7 +274,8 @@ export class Editor {
     };
 
     this.resize();
-    this.view.zoom = Math.min(canvas.clientWidth / WIDTH, canvas.clientHeight / LENGTH);
+    // Fit the full rink with a small gap between the canvas edge and the closest rink edge.
+    this.view.zoom = this.rinkFitZoom();
 
     canvas.addEventListener("wheel", this.onWheel, { passive: false });
     canvas.addEventListener("mousedown", this.onMouseDown);
@@ -2757,6 +2762,7 @@ export class Editor {
 
   private handleWheel(event: WheelEvent) {
     event.preventDefault();
+    this.autoFitRink = false;
     const [screenX, screenY] = this.screenPosition(event);
     const worldBefore = this.screenToWorld(screenX, screenY);
 
@@ -2869,6 +2875,7 @@ export class Editor {
     }
 
     const worldUnderMid = this.screenToWorld(this.lastPinchMidX, this.lastPinchMidY);
+    this.autoFitRink = false;
     this.view.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, this.view.zoom * (dist / this.lastPinchDist)));
     // The world point under the previous midpoint stays under the current midpoint.
     this.view.center = new Vector<2>(
@@ -3864,6 +3871,13 @@ export class Editor {
     }
   }
 
+  private rinkFitZoom() {
+    return Math.min(
+      (this.canvas.clientWidth - 2 * INITIAL_EDGE_MARGIN) / WIDTH,
+      (this.canvas.clientHeight - 2 * INITIAL_EDGE_MARGIN) / LENGTH,
+    );
+  }
+
   private resize() {
     this.canvas.width = this.canvas.clientWidth * window.devicePixelRatio;
     this.canvas.height = this.canvas.clientHeight * window.devicePixelRatio;
@@ -3872,6 +3886,9 @@ export class Editor {
     this.ctx.height = this.canvas.clientHeight;
     this.width = this.canvas.clientWidth;
     this.height = this.canvas.clientHeight;
+    if (this.autoFitRink) {
+      this.view.zoom = this.rinkFitZoom();
+    }
     this.draw();
   }
 }
