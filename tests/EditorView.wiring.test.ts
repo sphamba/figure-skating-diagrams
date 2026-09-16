@@ -15,6 +15,8 @@ const recorder = vi.hoisted(() => ({
   constructorArgs: [] as { sequences: unknown[] }[],
   hiddenSets: [] as unknown[],
   sequences: [] as unknown[],
+  isProvisional: false,
+  editor: null as unknown as { onElementChangeRequest: (element: unknown) => void },
 }));
 
 class EditorStub {
@@ -22,6 +24,7 @@ class EditorStub {
 
   constructor(_canvas: unknown, sequences: unknown[]) {
     recorder.constructorArgs.push({ sequences });
+    recorder.editor = this as unknown as { onElementChangeRequest: (element: unknown) => void };
   }
 
   hiddenSequencesSize() {
@@ -31,6 +34,14 @@ class EditorStub {
   setHiddenSequences(next: unknown) {
     this.hiddenSequences = next;
     recorder.hiddenSets.push(next);
+  }
+
+  isProvisional() {
+    return recorder.isProvisional;
+  }
+
+  getSequenceOfElement() {
+    return {};
   }
 
   clearSelection() {}
@@ -45,6 +56,10 @@ class EditorStub {
 vi.mock("@/engine/sequenceEditor/editor", async (importOriginal) => ({
   ...(await importOriginal<{ [key: symbol]: unknown }>()),
   Editor: EditorStub,
+}));
+
+vi.mock("@/engine/sequenceEditor/variantValidation", () => ({
+  checkTurnVariantValidity: () => ({ left: true, forward: true, inside: false }),
 }));
 
 // Stub matchMedia and ResizeObserver: jsdom does not implement them.
@@ -105,6 +120,8 @@ beforeEach(() => {
   recorder.constructorArgs.length = 0;
   recorder.hiddenSets.length = 0;
   recorder.sequences = [];
+  recorder.isProvisional = false;
+  recorder.editor = null;
 });
 
 const timedDiagramJSON = {
@@ -228,6 +245,148 @@ test("loading a diagram after a zero-sequence store reaches the editor", async (
 
   const latestList = recorder.sequences as unknown[];
   expect(latestList).toHaveLength(2);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("opening the element dialog inside an existing variant focuses the short name input", async () => {
+  const wrapper = await mountEditorView();
+  await nextTick();
+
+  recorder.editor.onElementChangeRequest({
+    type: "LeftForwardInsideThreeTurn",
+    shortName: "LFI-3T",
+    start: 0,
+    end: 1,
+  });
+  await nextTick();
+  await nextTick();
+
+  const input = document.getElementById("element-short-name");
+  expect(input, "the short name step should mount on direct open").not.toBeNull();
+  expect(document.activeElement, "the short name input should be focused").toBe(input);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("reaching the short name step from the previous step focuses the short name input", async () => {
+  const wrapper = await mountEditorView();
+  await nextTick();
+
+  recorder.isProvisional = true;
+  recorder.editor.onElementChangeRequest({
+    type: "LeftForwardInsideThreeTurn",
+    shortName: "",
+    start: 0,
+    end: 1,
+  });
+  await nextTick();
+  await nextTick();
+
+  const clickOption = async (label: string) => {
+    const option = Array.from(document.querySelectorAll(".p-listbox-option")).find(
+      (item) => item.textContent?.trim() === label,
+    );
+    expect(option, `the ${label} option should mount`).not.toBeUndefined();
+    option!.click();
+    await nextTick();
+  };
+  await clickOption("One-foot turn");
+  await clickOption("Three-turn");
+  await clickOption("Left");
+  await clickOption("Forward");
+  await clickOption("Inside");
+  await nextTick();
+
+  const input = document.getElementById("element-short-name");
+  expect(input, "the short name step should mount after the last selection").not.toBeNull();
+  expect(document.activeElement, "the short name input should be focused").toBe(input);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("a one-foot glide shows edge options instead of an empty option list", async () => {
+  const wrapper = await mountEditorView();
+  await nextTick();
+
+  recorder.isProvisional = true;
+  recorder.editor.onElementChangeRequest({
+    type: "LeftForwardInsideThreeTurn",
+    shortName: "",
+    start: 0,
+    end: 1,
+  });
+  await nextTick();
+  await nextTick();
+
+  for (const label of ["Glide", "Left", "Forward"]) {
+    const option = Array.from(document.querySelectorAll(".p-listbox-option")).find(
+      (item) => item.textContent?.trim() === label,
+    );
+    expect(option, `the ${label} option should mount`).not.toBeUndefined();
+    option!.click();
+    await nextTick();
+  }
+  await nextTick();
+  const edge = Array.from(document.querySelectorAll(".p-listbox-option")).find(
+    (item) => item.textContent?.trim() === "Inside",
+  );
+  expect(edge, "the edge step should mount populated with options").not.toBeUndefined();
+  edge!.click();
+  await nextTick();
+  await nextTick();
+  expect(document.getElementById("element-short-name")).not.toBeNull();
+  expect(document.activeElement?.id).toBe("element-short-name");
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("the Auto button fills the compatible variant steps and stops where marks end", async () => {
+  const { LeftForwardOpenMohawk } = await import("@/engine/element/mohawk");
+  const { changeElementType } = await import("@/engine/element/turnTypes");
+  const wrapper = await mountEditorView();
+  await nextTick();
+
+  recorder.isProvisional = true;
+  recorder.editor.onElementChangeRequest(new LeftForwardOpenMohawk("footL", 0, 1));
+  await nextTick();
+  await nextTick();
+
+  const clickOption = async (label: string) => {
+    const option = Array.from(document.querySelectorAll(".p-listbox-option")).find(
+      (item) => item.textContent?.trim() === label,
+    );
+    expect(option, `the ${label} option should mount`).not.toBeUndefined();
+    option!.click();
+    await nextTick();
+  };
+  await clickOption("Two-feet turn");
+  await clickOption("Mohawk");
+  await nextTick();
+
+  const auto = Array.from(document.querySelectorAll("button")).find((button) => button.textContent?.trim() === "Auto");
+  expect(auto, "the Auto button should show on a step with a compatible variant").not.toBeUndefined();
+  auto!.click();
+  await nextTick();
+  await nextTick();
+
+  expect(
+    Array.from(document.querySelectorAll("button")).some((button) => button.textContent?.trim() === "Auto"),
+    "the Auto button should hide once the compatible variants are exhausted",
+  ).toBe(false);
+  const openness = Array.from(document.querySelectorAll(".p-listbox-option")).find(
+    (item) => item.textContent?.trim() === "Open",
+  );
+  expect(openness, "the auto selection should stop at the first step without marks").not.toBeUndefined();
+
+  await clickOption("Open");
+  await nextTick();
+
+  const input = document.getElementById("element-short-name") as HTMLInputElement;
+  expect(input, "the short name step should mount after the last variant").not.toBeNull();
+  expect(document.activeElement, "the short name input should be focused").toBe(input);
+  const candidate = changeElementType("LeftForwardOpenMohawk", { type: "LeftForwardOpenMohawk", start: 0, end: 1 });
+  expect(input.value, "the default short name should stay untouched").toBe(candidate.defaultShortName);
   wrapper.unmount();
   vi.unstubAllGlobals();
 });

@@ -255,13 +255,15 @@ const glideStepFinal = computed(
 const currentGlideOptions = computed(() => {
   if (glideStepFinal.value) return [];
   if (glidePath.value.length === 1 && glideSideTwoFoot.value) return glideTwoFeetOptions;
-  if (glidePath.value.length === 2) return glidePoseStep.value ? glidePoseFrontFootOptions : [];
-  return glideLevelOptions[glidePath.value.length];
+  if (glidePath.value.length === 2 && glidePoseStep.value) return glidePoseFrontFootOptions;
+  return glideLevelOptions[glidePath.value.length] ?? [];
 });
 
 const strokeStepFinal = computed(() => strokePath.value.length >= strokeLevelOptions.length);
 
-const currentStrokeOptions = computed(() => (strokeStepFinal.value ? [] : strokeLevelOptions[strokePath.value.length]));
+const currentStrokeOptions = computed(
+  () => (strokeStepFinal.value ? [] : strokeLevelOptions[strokePath.value.length]) ?? [],
+);
 
 type ElementKind = "glide" | "stroke" | "turn" | "twoFeetTurn" | "jump" | "spin";
 
@@ -356,6 +358,51 @@ function jumpTypeValid(name: string): boolean {
   if (config.takeOffForward !== v.forward) return false;
   if (v.inside !== null && config.takeOffEdge !== (v.inside ? "inside" : "outside")) return false;
   return true;
+}
+
+// Auto is offered on any step that shows at least one compatible variant.
+const autoSelectAvailable = computed(() => {
+  if (elementChangeBranch.value === "turn") {
+    const level = turnPath.value.length;
+    return !turnStepFinal.value && currentTurnOptions.value.some((choice) => validFlagAt("turn", level, choice.value));
+  }
+  if (elementChangeBranch.value === "twoFeetTurn") {
+    const level = twoFeetPath.value.length;
+    return (
+      !twoFeetTurnStepFinal.value &&
+      currentTwoFeetTurnOptions.value.some((choice) => validFlagAt("twoFeetTurn", level, choice.value))
+    );
+  }
+  if (elementChangeBranch.value === "jump") {
+    return jumpPath.value.length === 1 && currentJumpOptions.value.some((choice) => jumpTypeValid(choice.value));
+  }
+  return false;
+});
+
+// Selects the compatible variants of the current step and every following one,
+// stopping at the first step without one. The short-name step is never touched,
+// so the default name stays for manual review.
+function autoSelectVariants() {
+  while (autoSelectAvailable.value) {
+    const branch = elementChangeBranch.value;
+    if (branch === "turn") {
+      const level = turnPath.value.length;
+      const option = currentTurnOptions.value.find((choice) => validFlagAt("turn", level, choice.value));
+      if (!option) break;
+      onTurnChange(option.value);
+    } else if (branch === "twoFeetTurn") {
+      const level = twoFeetPath.value.length;
+      const option = currentTwoFeetTurnOptions.value.find((choice) => validFlagAt("twoFeetTurn", level, choice.value));
+      if (!option) break;
+      onTwoFeetTurnChange(option.value);
+    } else if (branch === "jump") {
+      const option = currentJumpOptions.value.find((choice) => jumpTypeValid(choice.value));
+      if (!option) break;
+      onJumpChange(option.value);
+    } else {
+      break;
+    }
+  }
 }
 
 const chosenLabels = computed<string[]>(() => {
@@ -1074,21 +1121,38 @@ function clearPendingChoice() {
 const currentStepFinal = computed(() => {
   switch (elementChangeBranch.value) {
     case "glide":
-      return glideStepFinal.value;
+      return glideStepFinal.value || currentGlideOptions.value.length === 0;
     case "stroke":
-      return strokeStepFinal.value;
+      return strokeStepFinal.value || currentStrokeOptions.value.length === 0;
     case "turn":
-      return turnStepFinal.value;
+      return turnStepFinal.value || currentTurnOptions.value.length === 0;
     case "twoFeetTurn":
-      return twoFeetTurnStepFinal.value;
+      return twoFeetTurnStepFinal.value || currentTwoFeetTurnOptions.value.length === 0;
     case "jump":
-      return jumpStepFinal.value;
+      return jumpStepFinal.value || currentJumpOptions.value.length === 0;
     case "spin":
       return spinStepFinal.value;
     default:
       return false;
   }
 });
+
+const shortNameInputVisible = computed(() => !!elementChangeBranch.value && currentStepFinal.value);
+
+watch([elementChangeOpen, shortNameInputVisible] as const, ([open, visible]) => {
+  if (open && visible) {
+    nextTick(focusShortNameInput);
+  }
+});
+
+function focusShortNameInput() {
+  (document.getElementById("element-short-name") as HTMLInputElement | null)?.focus();
+}
+
+function clearShortNameDraft() {
+  shortNameDraft.value = "";
+  focusShortNameInput();
+}
 
 const jumpHandednessOptions: { label: string; value: string }[] = [
   { label: "Right-handed", value: "Right" },
@@ -1538,7 +1602,7 @@ function closeElementChange() {
         </div>
 
         <Listbox
-          v-if="elementChangeBranch === 'glide' && !glideStepFinal"
+          v-if="elementChangeBranch === 'glide' && !glideStepFinal && currentGlideOptions.length > 0"
           :model-value="null"
           :options="currentGlideOptions"
           option-value="value"
@@ -1554,7 +1618,7 @@ function closeElementChange() {
         </Listbox>
 
         <Listbox
-          v-else-if="elementChangeBranch === 'stroke' && !strokeStepFinal"
+          v-else-if="elementChangeBranch === 'stroke' && !strokeStepFinal && currentStrokeOptions.length > 0"
           :model-value="null"
           :options="currentStrokeOptions"
           option-value="value"
@@ -1570,7 +1634,7 @@ function closeElementChange() {
         </Listbox>
 
         <Listbox
-          v-else-if="elementChangeBranch === 'turn' && !turnStepFinal"
+          v-else-if="elementChangeBranch === 'turn' && !turnStepFinal && currentTurnOptions.length > 0"
           :model-value="null"
           :options="currentTurnOptions"
           option-value="value"
@@ -1593,7 +1657,9 @@ function closeElementChange() {
         </Listbox>
 
         <Listbox
-          v-else-if="elementChangeBranch === 'twoFeetTurn' && !twoFeetTurnStepFinal"
+          v-else-if="
+            elementChangeBranch === 'twoFeetTurn' && !twoFeetTurnStepFinal && currentTwoFeetTurnOptions.length > 0
+          "
           :model-value="null"
           :options="currentTwoFeetTurnOptions"
           option-value="value"
@@ -1616,7 +1682,7 @@ function closeElementChange() {
         </Listbox>
 
         <Listbox
-          v-else-if="elementChangeBranch === 'jump' && !jumpStepFinal"
+          v-else-if="elementChangeBranch === 'jump' && !jumpStepFinal && currentJumpOptions.length > 0"
           :model-value="null"
           :options="currentJumpOptions"
           option-value="value"
@@ -1639,7 +1705,7 @@ function closeElementChange() {
         </Listbox>
 
         <Listbox
-          v-else-if="elementChangeBranch === 'spin' && spinPath.length < 4"
+          v-else-if="elementChangeBranch === 'spin' && !spinStepFinal && currentSpinOptions.length > 0"
           :model-value="null"
           :options="currentSpinOptions"
           option-value="value"
@@ -1670,12 +1736,26 @@ function closeElementChange() {
 
         <div v-else class="editor-view__short-name">
           <label class="editor-view__mode-label" for="element-short-name">Short name</label>
-          <InputText
-            id="element-short-name"
-            v-model="shortNameDraft"
-            class="w-full"
-            @keyup.enter="commitElementChange"
-          />
+          <InputGroup>
+            <InputText
+              id="element-short-name"
+              v-model="shortNameDraft"
+              class="w-full"
+              autofocus
+              @keyup.enter="commitElementChange"
+            />
+            <InputGroupAddon>
+              <Button
+                icon="pi pi-times"
+                severity="secondary"
+                text
+                rounded
+                size="small"
+                aria-label="Clear short name"
+                @click="clearShortNameDraft"
+              />
+            </InputGroupAddon>
+          </InputGroup>
         </div>
       </template>
 
@@ -1693,6 +1773,13 @@ function closeElementChange() {
           severity="secondary"
           icon="pi pi-arrow-left"
           @click="previousElementChangeStep"
+        />
+        <Button
+          v-if="autoSelectAvailable"
+          label="Auto"
+          severity="primary"
+          icon="pi pi-bolt"
+          @click="autoSelectVariants"
         />
         <Button
           v-if="elementChangeBranch === 'spin' && !spinStepFinal && spinPath.length === 4"
