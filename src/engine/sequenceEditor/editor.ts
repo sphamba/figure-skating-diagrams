@@ -1,6 +1,6 @@
 import type { Curvilinear, Curve } from "../curve.js";
 import { type AxisRect } from "../curve.js";
-import { bladeLength, CANVAS_FONT, WHEEL_SENSITIVITY } from "../constants.js";
+import { bladeLength, CANVAS_SCALE, RINK_COLOR, WHEEL_SENSITIVITY } from "../constants.js";
 import type { PathCoordinate, Time } from "../coordinates.js";
 import { fullTimeExtentSeconds } from "../diagram.js";
 import { Annotation } from "../annotation.js";
@@ -14,6 +14,7 @@ import { createDefaultFootTurn, isJumpType } from "../element/turnTypes.js";
 import { TimingKeyframe } from "../keyframe.js";
 import { Sequence, DEFAULT_BPM, hasTimeEvolution, sequenceTimeRange } from "../sequence.js";
 import { checkSequenceCurvatures, isStrokeElement } from "./curvatureWarning.js";
+import { LABEL_FONT_SIZE_SMALL, LabelLayer, PillLabel, WhiteCircleLabel, WhitePillLabel } from "./label.js";
 import { Vector } from "../vector.js";
 
 const WARNING_TRIANGLE_COLOR = "#c25205";
@@ -21,6 +22,8 @@ const WARNING_TRIANGLE_SIZE = 30; // px, side length of the filled warning trian
 const HIDDEN_SEQUENCE_ALPHA = 0.3; // hidden sequences keep their foot traces at this opacity
 const OUTSIDE_DRAW_RANGE_ALPHA = 0.3; // path opacity outside the rendered draw range
 const OUTSIDE_DRAW_RANGE_COLOR = "#000";
+const ANNOTATION_LABEL_ALPHA = 0.3; // annotation labels dim to this opacity
+const ANNOTATION_LABEL_TEXT_ALPHA = 0.6; // annotation label text dims to this opacity
 
 export type ControlPointKey = "p0" | "p1" | "p2" | "p3";
 
@@ -47,25 +50,21 @@ export function clampAnnotationSpan(start: number, end: number, left: number, ri
   return [Math.min(Math.max(start, left), right), Math.min(Math.max(end, left), right)];
 }
 
-const RINK_COLOR = "#ddd";
-const RINK_BLUE_COLOR = "#eee"; // blue lines, center face-off circle, goal creases
-const RINK_RED_COLOR = "#eee"; // center line, goal lines, face-off circles
+const RINK_BLUE_COLOR = "#fff"; // blue lines, center face-off circle, goal creases
+const RINK_RED_COLOR = "#fff"; // center line, goal lines, face-off circles
 const RINK_MARKING_WIDTH = 0.1; // m when zoomed in
-const RINK_MARKING_MIN_WIDTH = 3; // px on screen when zoomed out
+const RINK_MARKING_MIN_WIDTH = 2; // px on screen when zoomed out
 const RINK_GOAL_LINE_OFFSET = 4; // m from each end board
 const RINK_FACEOFF_CIRCLE_RADIUS = 4.5; // m, center and end-zone circles
 const RINK_FACEOFF_SPOT_LATERAL = 7; // m, end-zone spot lateral offset from the length axis
 const RINK_FACEOFF_SPOT_LONGITUDINAL = 6; // m, end-zone spot distance from the goal line
 const RINK_CREASE_RADIUS = 1.8; // m, goal crease semicircle
 const PATH_WIDTH = 1; // px
-const MIN_TRACE_WIDTH = 2; // px
+const MIN_TRACE_WIDTH = 1.5; // px
 const MIN_BLADE_LENGTH = 25; // px, only effective when zoomed out
 const MIN_MARK_SIZE = 12; // px minimum toe-pick mark diameter when zoomed out
 const MIN_DRAW_INCREMENT = 2; // px
 const ELEMENTS_PATH_COLOR = "#000";
-const LABEL_FONT_SIZE = 14; // px
-const LABEL_OFFSET = 15; // px
-const LABEL_FONT_SIZE_SMALL = 12; // px
 const CHANGE_EDGE_LABEL = "CE";
 const ELEMENT_DRAW_INCREMENT = 0.02; // m
 const NODE_SIZE = 10; // px
@@ -109,8 +108,6 @@ const ANNOTATION_SELECTED_COLOR = "#d33";
 const MIN_ZOOM = 2;
 const MAX_ZOOM = 5000;
 const INITIAL_EDGE_MARGIN = 5; // px between the canvas edge and the rink edge at load
-const CANVAS_SCALE = 20; // canvas units per metre, editor drawing only
-
 type ViewState = {
   center: Vector<2>;
   zoom: number; // pixel per meter
@@ -248,6 +245,8 @@ export class Editor {
   private drawScheduled = false;
   private drawFrameHandle: number | null = null;
   private destroyed = false;
+  // Labels collected during the frame, drawn together after collision resolution.
+  private labelLayer = new LabelLayer();
 
   private onWheel = (event: WheelEvent) => this.handleWheel(event);
   private onMouseDown = (event: MouseEvent) => this.handleMouseDown(event);
@@ -501,13 +500,13 @@ export class Editor {
         this.drawElements();
       } else if (this.mode === "view") {
         this.drawTraces();
-        this.drawTimingBeatLabels();
+        this.collectTimingBeatLabels();
       } else if (this.mode === "timing") {
         this.drawTimingElements();
         this.drawTimingKeyframes();
         this.drawTimingButtons();
-        this.drawTimingTimeLabels();
-        this.drawTimingBeatLabels();
+        this.collectTimingTimeLabels();
+        this.collectTimingBeatLabels();
       } else if (this.mode === "annotations") {
         this.drawAnnotationButtons();
       }
@@ -515,13 +514,12 @@ export class Editor {
         this.drawCurvatureWarnings();
       }
       for (const sequence of this.editSequences()) {
-        this.drawElementLabels(sequence);
+        this.collectElementLabels(sequence);
+        this.collectAnnotationLabels(sequence);
       }
-      for (const sequence of this.editSequences()) {
-        this.drawAnnotationLabels(sequence);
-      }
-      this.drawInflectionLabels();
-      this.drawStartLabels();
+      this.collectInflectionLabels();
+      this.collectStartLabels();
+      this.labelLayer.resolveAndDraw(this.ctx);
     } finally {
       if (this.ctxTransformApplied) {
         this.ctxTransformApplied = false;
@@ -1383,18 +1381,22 @@ export class Editor {
     return { point, outside: inside };
   }
 
-  private drawTimingTimeLabels() {
+  private collectTimingTimeLabels() {
     for (const sequence of this.editSequences()) {
       if (sequence.path.curves.length === 0) continue;
       for (const keyframe of this.sortedTimingKeyframes(sequence)) {
         if (keyframe.kind !== "time") continue;
         const geometry = this.getLabelGeometryInside(sequence.path, keyframe.pathCoordinate);
-        this.drawWhiteRectLabel(formatTimingLabel(keyframe.value), geometry.point, geometry.outside);
+        this.labelLayer.add(
+          new WhitePillLabel(formatTimingLabel(keyframe.value), geometry.point, geometry.outside, this.view.zoom, {
+            fontSizePx: LABEL_FONT_SIZE_SMALL,
+          }),
+        );
       }
     }
   }
 
-  private drawTimingBeatLabels() {
+  private collectTimingBeatLabels() {
     for (const sequence of this.editSequences()) {
       if (sequence.path.curves.length === 0) continue;
       const sorted = this.sortedTimingKeyframes(sequence);
@@ -1405,54 +1407,13 @@ export class Editor {
         if (!previous) continue;
         const mid = (((previous.pathCoordinate as number) + keyframe.pathCoordinate) as number) / 2;
         const geometry = this.getLabelGeometryInside(sequence.path, mid as PathCoordinate);
-        this.drawWhiteCircleLabel(String(Math.round(keyframe.value)), geometry.point, geometry.outside);
+        this.labelLayer.add(
+          new WhiteCircleLabel(String(Math.round(keyframe.value)), geometry.point, geometry.outside, this.view.zoom, {
+            fontSizePx: LABEL_FONT_SIZE_SMALL,
+          }),
+        );
       }
     }
-  }
-
-  private drawWhiteRectLabel(text: string, point: Vector<2>, inside: Vector<2>, fontSize = LABEL_FONT_SIZE_SMALL) {
-    const ctx = this.ctx;
-    const offset = (LABEL_OFFSET * CANVAS_SCALE) / this.view.zoom;
-    ctx.font = `${(fontSize * CANVAS_SCALE) / this.view.zoom}px ${CANVAS_FONT}`;
-    const metrics = ctx.measureText(text);
-    const width = metrics.width;
-    const height = (metrics.actualBoundingBoxAscent ?? 0) + (metrics.actualBoundingBoxDescent ?? 0);
-    if (width === 0 && height === 0) return;
-    const pad = (3 * CANVAS_SCALE) / this.view.zoom;
-    const a = (width + 2 * pad) / 2;
-    const b = (height + 2 * pad) / 2;
-    const total = offset + this.ellipseSupport(Math.abs(inside.x), Math.abs(inside.y), a, b);
-    const cx = point.x * CANVAS_SCALE + inside.x * total;
-    const cy = -(point.y * CANVAS_SCALE + inside.y * total);
-    ctx.fillStyle = "white";
-    ctx.fillRect(cx - a, cy - b, width + 2 * pad, height + 2 * pad);
-    ctx.fillStyle = "#000";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(text, cx, cy);
-  }
-
-  private drawWhiteCircleLabel(text: string, point: Vector<2>, inside: Vector<2>, fontSize = LABEL_FONT_SIZE_SMALL) {
-    const ctx = this.ctx;
-    const offset = (LABEL_OFFSET * CANVAS_SCALE) / this.view.zoom;
-    ctx.font = `${(fontSize * CANVAS_SCALE) / this.view.zoom}px ${CANVAS_FONT}`;
-    const metrics = ctx.measureText(text);
-    const width = metrics.width;
-    const height = (metrics.actualBoundingBoxAscent ?? 0) + (metrics.actualBoundingBoxDescent ?? 0);
-    if (width === 0 && height === 0) return;
-    const pad = (2 * CANVAS_SCALE) / this.view.zoom;
-    const radius = Math.max(Math.hypot(width, height) / 2 + pad, (10 * CANVAS_SCALE) / this.view.zoom);
-    const total = offset + radius;
-    const cx = point.x * CANVAS_SCALE + inside.x * total;
-    const cy = -(point.y * CANVAS_SCALE + inside.y * total);
-    ctx.fillStyle = "white";
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
-    ctx.fill();
-    ctx.fillStyle = "#000";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(text, cx, cy);
   }
 
   private timingNeighbourBoundsAround(
@@ -1728,10 +1689,6 @@ export class Editor {
     return { point, outside };
   }
 
-  private ellipseSupport(ux: number, uy: number, a: number, b: number): number {
-    return 1 / Math.hypot(ux / a, uy / b);
-  }
-
   private drawCurvatureWarnings() {
     for (const sequence of this.editSequences()) {
       const checks = checkSequenceCurvatures(sequence);
@@ -1761,26 +1718,31 @@ export class Editor {
     ctx.fill();
   }
 
-  private drawElementLabels(sequence: Sequence) {
+  private collectElementLabels(sequence: Sequence) {
     if (sequence.path.curves.length === 0) return;
     for (const element of sequence.elements) {
       if (this.elementNameHidden(sequence, element)) continue;
       const geometry = this.getElementLabelGeometry(sequence, element);
       if (!geometry) continue;
-      if (isJumpType(element.type)) {
-        if (this.mode !== "view") {
-          this.drawShiftedLabel(element.shortName, geometry.point, geometry.outside);
-        } else {
-          this.drawCenteredLabel(element.shortName, geometry.point);
-        }
+      if (isJumpType(element.type) && this.mode === "view") {
+        this.labelLayer.add(
+          new PillLabel(element.shortName, geometry.point, null, this.view.zoom, { connector: true }),
+        );
       } else {
-        this.drawShiftedLabel(element.shortName, geometry.point, geometry.outside);
+        this.labelLayer.add(
+          new PillLabel(element.shortName, geometry.point, geometry.outside, this.view.zoom, { connector: true }),
+        );
       }
       if (isStrokeElement(element) && element.crossed) {
         const text = this.crossedLabel(sequence, element);
         if (text) {
           const crossedGeometry = this.getLabelGeometryAt(sequence.path, this.getSpanMidpoint(element));
-          this.drawShiftedLabel(text, crossedGeometry.point, crossedGeometry.outside.times(-1), LABEL_FONT_SIZE_SMALL);
+          this.labelLayer.add(
+            new PillLabel(text, crossedGeometry.point, crossedGeometry.outside.times(-1), this.view.zoom, {
+              fontSizePx: LABEL_FONT_SIZE_SMALL,
+              connector: true,
+            }),
+          );
         }
       }
     }
@@ -1802,53 +1764,27 @@ export class Editor {
     return startCurve.getCurvature(startU) * endCurve.getCurvature(endU) < 0;
   }
 
-  private drawCenteredLabel(text: string, point: Vector<2>, fontSize = LABEL_FONT_SIZE) {
-    const ctx = this.ctx;
-    ctx.font = `${(fontSize * CANVAS_SCALE) / this.view.zoom}px ${CANVAS_FONT}`;
-    ctx.fillStyle = "#000";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(text, point.x * CANVAS_SCALE, -point.y * CANVAS_SCALE);
-  }
-
-  private drawShiftedLabel(
-    text: string,
-    point: Vector<2>,
-    outside: Vector<2>,
-    fontSize = LABEL_FONT_SIZE,
-    extraOffset = 0,
-  ) {
-    const ctx = this.ctx;
-    // extraOffset comes in metres, scaled the same way as the px offset.
-    const offset = (LABEL_OFFSET * CANVAS_SCALE) / this.view.zoom + extraOffset * CANVAS_SCALE; // px -> canvas units
-
-    ctx.font = `${(fontSize * CANVAS_SCALE) / this.view.zoom}px ${CANVAS_FONT}`;
-    ctx.fillStyle = "#000";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    const metrics = ctx.measureText(text);
-    const a = metrics.width / 2;
-    const b = ((metrics.actualBoundingBoxAscent ?? 0) + (metrics.actualBoundingBoxDescent ?? 0)) / 2;
-    if (a === 0 && b === 0) return;
-
-    const support = this.ellipseSupport(Math.abs(outside.x), Math.abs(outside.y), a, b);
-    const total = offset + support;
-    const labelX = point.x * CANVAS_SCALE + outside.x * total;
-    const labelY = point.y * CANVAS_SCALE + outside.y * total;
-
-    ctx.fillText(text, labelX, -labelY);
-  }
-
-  private drawStartLabels() {
+  private collectInflectionLabels() {
     for (const sequence of this.editSequences()) {
-      this.drawStartLabel(sequence);
+      if (sequence.path.curves.length === 0) continue;
+      for (const u of [
+        ...this.getUncoveredInflectionCoordinates(sequence),
+        ...this.getUncoveredJointEdgeChangeCoordinates(sequence),
+      ]) {
+        if (this.changeEdgeHidden(sequence, u)) continue;
+        const geometry = this.getLabelGeometryAt(sequence.path, u);
+        this.labelLayer.add(
+          new PillLabel(CHANGE_EDGE_LABEL, geometry.point, geometry.outside, this.view.zoom, {
+            fontSizePx: LABEL_FONT_SIZE_SMALL,
+            connector: true,
+          }),
+        );
+      }
     }
   }
 
-  private drawAnnotationLabels(sequence: Sequence) {
+  private collectAnnotationLabels(sequence: Sequence) {
     if (sequence.path.curves.length === 0) return;
-    const ctx = this.ctx;
     const annotations = [...sequence.annotations];
     const provisional = this.provisionalAnnotations.get(sequence);
     if (provisional) annotations.push(provisional);
@@ -1859,30 +1795,26 @@ export class Editor {
       if (!geometry) continue;
       // The title clears the highlight band before the normal label offset.
       const extraOffset = this.getAnnotationLineWidth() / 2 + ANNOTATION_BUTTON_GAP / this.view.zoom;
-      const previousAlpha = ctx.globalAlpha;
-      ctx.globalAlpha = previousAlpha * 0.3;
-      this.drawShiftedLabel(annotation.title, geometry.point, geometry.outside, LABEL_FONT_SIZE, extraOffset);
-      ctx.globalAlpha = previousAlpha;
+      // The pill uses the annotation color; the text is always black.
+      this.labelLayer.add(
+        new PillLabel(annotation.title, geometry.point, geometry.outside, this.view.zoom, {
+          extraOffset: extraOffset,
+          alpha: ANNOTATION_LABEL_ALPHA,
+          background: annotation.color,
+          textColor: "#000",
+          textAlpha: ANNOTATION_LABEL_TEXT_ALPHA,
+        }),
+      );
     }
   }
 
-  private drawStartLabel(sequence: Sequence) {
-    const geometry = this.getStartLabelGeometry(sequence);
-    if (!geometry) return;
-    this.drawShiftedLabel("start", geometry.point, geometry.outside);
-  }
-
-  private drawInflectionLabels() {
+  private collectStartLabels() {
     for (const sequence of this.editSequences()) {
-      if (sequence.path.curves.length === 0) continue;
-      for (const u of [
-        ...this.getUncoveredInflectionCoordinates(sequence),
-        ...this.getUncoveredJointEdgeChangeCoordinates(sequence),
-      ]) {
-        if (this.changeEdgeHidden(sequence, u)) continue;
-        const geometry = this.getLabelGeometryAt(sequence.path, u);
-        this.drawShiftedLabel(CHANGE_EDGE_LABEL, geometry.point, geometry.outside, LABEL_FONT_SIZE_SMALL);
-      }
+      const geometry = this.getStartLabelGeometry(sequence);
+      if (!geometry) continue;
+      this.labelLayer.add(
+        new PillLabel("start", geometry.point, geometry.outside, this.view.zoom, { connector: true }),
+      );
     }
   }
 

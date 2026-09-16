@@ -691,13 +691,13 @@ onBeforeUnmount(() => {
   border-radius: 1rem;
   background-color: var(--p-surface-200, #e8e8e8);
   color: black;
-  font-weight: 600;
 }
 
 .time-sync-pane__chip--element {
   border: 0;
   font-family: inherit;
   font-size: inherit;
+  font-weight: 400;
   cursor: pointer;
   transition: opacity 0.3s ease;
 }
