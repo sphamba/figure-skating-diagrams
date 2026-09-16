@@ -46,7 +46,7 @@ export function clampAnnotationSpan(start: number, end: number, left: number, ri
   return [Math.min(Math.max(start, left), right), Math.min(Math.max(end, left), right)];
 }
 
-const RINK_COLOR = "#ccc";
+const RINK_COLOR = "#ddd";
 const RINK_CENTERLINE_COLOR = "#fff";
 const RINK_CENTERLINE_WIDTH = 3; // px on screen
 const RINK_CENTERLINE_DASH = 10; // dash, px on screen

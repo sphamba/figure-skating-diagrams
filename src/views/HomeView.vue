@@ -142,11 +142,11 @@ watch(
 );
 
 const helpItems: HelpItem[] = [
-  { keys: ["wheel"], description: "zoom" },
-  { keys: ["left drag"], description: "move the view" },
-  { keys: ["right drag"], description: "move the view" },
-  { keys: ["two fingers"], description: "pinch to zoom and drag to move the view" },
-  { keys: ["one finger"], description: "same as a left click" },
+  { keys: ["left drag"], descriptions: ["move the view"] },
+  { keys: ["right drag"], descriptions: ["move the view"] },
+  { keys: ["wheel"], descriptions: ["zoom"] },
+  { keys: ["one finger"], descriptions: ["same as a left click"] },
+  { keys: ["two fingers"], descriptions: ["pinch to zoom and drag to move the view"] },
 ];
 
 const viewportWidth = ref(0);

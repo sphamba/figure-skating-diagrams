@@ -432,75 +432,105 @@ const chosenLabels = computed<string[]>(() => {
 });
 
 const touchHelpItems: HelpItem[] = [
-  { keys: ["two fingers"], description: "pinch to zoom and drag to move the view" },
-  { keys: ["one finger"], description: "same as a left click" },
+  { keys: ["one finger"], descriptions: ["same as a left click"] },
+  { keys: ["two fingers"], descriptions: ["pinch to zoom and drag to move the view"] },
 ];
 
 const helpItems = computed<HelpItem[]>(() =>
   editMode.value === "view"
     ? [
-        { keys: ["wheel"], description: "zoom" },
-        { keys: ["left drag"], description: "move the view" },
-        { keys: ["right drag"], description: "move the view" },
+        { keys: ["left drag"], descriptions: ["move the view"] },
+        { keys: ["right drag"], descriptions: ["move the view"] },
+        { keys: ["wheel"], descriptions: ["zoom"] },
         ...touchHelpItems,
       ]
     : editMode.value === "timing"
       ? [
-          { keys: ["wheel"], description: "zoom" },
-          { keys: ["right drag"], description: "move the view" },
-          { keys: ["left drag"], description: "on empty space: draw a selection rectangle" },
-          { keys: ["left click"], description: "on a timing point: select it" },
-          { keys: ["ctrl", "left click"], description: "add or remove from the selection" },
-          { keys: ["left click"], description: "on the path: create a provisional timing point" },
+          {
+            keys: ["left click"],
+            descriptions: ["on a timing point: select it", "on the path: create a provisional timing point"],
+          },
           {
             keys: ["left drag"],
-            description: "on the path: create a provisional timing point at the release position",
+            descriptions: [
+              "on empty space: draw a selection rectangle",
+              "on the path: create a provisional timing point at the release position",
+            ],
           },
-          { keys: ["drag"], description: "a timing point: move it" },
-          { keys: ["+"], description: "button on the provisional timing point: open the timing keyframe dialog" },
-          { keys: ["cog"], description: "on a selected timing point: open the timing keyframe dialog" },
-          { keys: ["−"], description: "button beside a selected timing point: remove it" },
+          { keys: ["drag"], descriptions: ["a timing point: move it"] },
+          { keys: ["ctrl", "left click"], descriptions: ["add or remove from the selection"] },
+          { keys: ["right drag"], descriptions: ["move the view"] },
+          { keys: ["wheel"], descriptions: ["zoom"] },
+          { keys: ["+"], descriptions: ["button on the provisional timing point: open the timing keyframe dialog"] },
+          { keys: ["\u2212"], descriptions: ["button beside a selected timing point: remove it"] },
+          { keys: ["cog"], descriptions: ["on a selected timing point: open the timing keyframe dialog"] },
           ...touchHelpItems,
         ]
       : editMode.value === "annotations"
         ? [
-            { keys: ["wheel"], description: "zoom" },
-            { keys: ["right drag"], description: "move the view" },
-            { keys: ["left drag"], description: "on empty space: draw a selection rectangle" },
-            { keys: ["left click"], description: "on the path: create a provisional annotation" },
-            { keys: ["left drag"], description: "on the path: create a provisional annotation over the dragged range" },
-            { keys: ["drag"], description: "an annotation: move it or its ends" },
-            { keys: ["left click"], description: "on an annotation: select it" },
-            { keys: ["ctrl", "left click"], description: "add or remove from the selection" },
-            { keys: ["+"], description: "on the provisional annotation: open the annotation dialog" },
-            { keys: ["cog"], description: "on a selected annotation: open the annotation dialog" },
-            { keys: ["−"], description: "button beside a selected annotation: remove it" },
+            {
+              keys: ["left click"],
+              descriptions: ["on the path: create a provisional annotation", "on an annotation: select it"],
+            },
+            {
+              keys: ["left drag"],
+              descriptions: [
+                "on empty space: draw a selection rectangle",
+                "on the path: create a provisional annotation over the dragged range",
+              ],
+            },
+            { keys: ["drag"], descriptions: ["an annotation: move it or its ends"] },
+            { keys: ["ctrl", "left click"], descriptions: ["add or remove from the selection"] },
+            { keys: ["right drag"], descriptions: ["move the view"] },
+            { keys: ["wheel"], descriptions: ["zoom"] },
+            { keys: ["+"], descriptions: ["on the provisional annotation: open the annotation dialog"] },
+            { keys: ["\u2212"], descriptions: ["button beside a selected annotation: remove it"] },
+            { keys: ["cog"], descriptions: ["on a selected annotation: open the annotation dialog"] },
             ...touchHelpItems,
           ]
         : editMode.value === "elements"
           ? [
-              { keys: ["wheel"], description: "zoom" },
-              { keys: ["right drag"], description: "move the view" },
-              { keys: ["left drag"], description: "on empty space: draw a selection rectangle" },
-              { keys: ["left click"], description: "on the path: create a provisional element" },
-              { keys: ["left drag"], description: "on the path: create a provisional element over the dragged range" },
-              { keys: ["drag"], description: "a provisional element: move it or its ends" },
-              { keys: ["+"], description: "on the provisional element: open the element selection dialog" },
+              { keys: ["left click"], descriptions: ["on the path: create a provisional element"] },
+              {
+                keys: ["left drag"],
+                descriptions: [
+                  "on empty space: draw a selection rectangle",
+                  "on the path: create a provisional element over the dragged range",
+                ],
+              },
+              { keys: ["drag"], descriptions: ["a provisional element: move it or its ends"] },
+              { keys: ["right drag"], descriptions: ["move the view"] },
+              { keys: ["wheel"], descriptions: ["zoom"] },
+              { keys: ["+"], descriptions: ["on the provisional element: open the element selection dialog"] },
+              { keys: ["−"], descriptions: ["button beside a selected element: remove it"] },
+              { keys: ["cog"], descriptions: ["on a selected element: open the element selection dialog"] },
               ...touchHelpItems,
             ]
           : [
-              { keys: ["wheel"], description: "zoom" },
-              { keys: ["left click"], description: "on a control point: select it" },
-              { keys: ["left click"], description: "on a line: select that curve" },
-              { keys: ["drag"], description: "a selected curve: move it (and the others selected)" },
-              { keys: ["left drag"], description: "on empty space: draw a selection rectangle" },
-              { keys: ["drag"], description: "one of the selected points: move all selected points" },
-              { keys: ["ctrl", "left click"], description: "add or remove from the selection" },
-              { keys: ["ctrl", "A"], description: "select all" },
-              { keys: ["right drag"], description: "move the view" },
-              { keys: ["+"], description: "button near the end of the path: add a segment" },
-              { keys: ["+"], description: "button at the midpoint of a selected curve: split it" },
-              { keys: ["−"], description: "button beside a selected point: remove that point" },
+              {
+                keys: ["left click"],
+                descriptions: ["on a control point: select it", "on a line: select that curve"],
+              },
+              { keys: ["left drag"], descriptions: ["on empty space: draw a selection rectangle"] },
+              {
+                keys: ["drag"],
+                descriptions: [
+                  "a selected curve: move it (and the others selected)",
+                  "one of the selected points: move all selected points",
+                ],
+              },
+              { keys: ["ctrl", "left click"], descriptions: ["add or remove from the selection"] },
+              { keys: ["ctrl", "A"], descriptions: ["select all"] },
+              { keys: ["right drag"], descriptions: ["move the view"] },
+              { keys: ["wheel"], descriptions: ["zoom"] },
+              {
+                keys: ["+"],
+                descriptions: [
+                  "button near the end of the path: add a segment",
+                  "button at the midpoint of a selected curve: split it",
+                ],
+              },
+              { keys: ["\u2212"], descriptions: ["button beside a selected point: remove that point"] },
               ...touchHelpItems,
             ],
 );

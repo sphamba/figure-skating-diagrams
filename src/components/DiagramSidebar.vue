@@ -1,5 +1,5 @@
 <script lang="ts">
-export type HelpItem = { keys: string[]; description: string };
+export type HelpItem = { keys: string[]; descriptions: string[] };
 export type SidebarMode = "home" | "editor";
 </script>
 
