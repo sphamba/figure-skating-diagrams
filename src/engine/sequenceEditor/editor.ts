@@ -1778,9 +1778,9 @@ export class Editor {
       if (isStrokeElement(element) && element.crossed) {
         const text = this.crossedLabel(sequence, element);
         if (text) {
-          const crossedGeometry = this.getLabelGeometryAt(sequence.path, this.getSpanMidpoint(element));
+          const crossedGeometry = this.getLabelGeometryInside(sequence.path, element.start);
           this.labelLayer.add(
-            new PillLabel(text, crossedGeometry.point, crossedGeometry.outside.times(-1), this.view.zoom, {
+            new PillLabel(text, crossedGeometry.point, crossedGeometry.outside, this.view.zoom, {
               fontSizePx: LABEL_FONT_SIZE_SMALL,
               connector: true,
             }),

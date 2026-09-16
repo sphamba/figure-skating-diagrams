@@ -34,7 +34,12 @@ import { getJumpBaseConfig } from "@/engine/element/jump";
 import type { Jump } from "@/engine/element/jump";
 import { Spin, type SpinType } from "@/engine/element/spin";
 import { parseVariantFlags, type VariantFlags } from "@/engine/element/variantFlags";
-import { checkTurnVariantValidity, type TurnVariantValidity } from "@/engine/sequenceEditor/variantValidation";
+import {
+  checkOneFootVariantValidity,
+  checkTurnVariantValidity,
+  type OneFootVariantValidity,
+  type TurnVariantValidity,
+} from "@/engine/sequenceEditor/variantValidation";
 import { OneFootTurn } from "@/engine/element/oneFootTurn";
 import { TwoFeetTurn } from "@/engine/element/twoFeetTurn";
 import type { Element } from "@/engine/element/element";
@@ -77,6 +82,7 @@ const elementChangeBranch = ref<"glide" | "stroke" | "turn" | "twoFeetTurn" | "j
 const isProvisionalTarget = ref(false);
 const oldVariant = ref<VariantFlags | null>(null);
 const validVariant = ref<TurnVariantValidity | null>(null);
+const validOneFootVariant = ref<OneFootVariantValidity | null>(null);
 const oldKind = ref<"glide" | "stroke" | "turn" | "twoFeetTurn" | "jump" | "spin" | null>(null);
 const pendingReplacement = shallowRef<Element | null>(null);
 const shortNameDraft = ref("");
@@ -346,6 +352,17 @@ function validFlagAt(branch: ElementKind, level: number, value: string): boolean
   return false;
 }
 
+// Valid direction and edge of a one-foot glide or stroke from the geometry; they
+// become known after the foot is selected at the first step, so the same check
+// flags apply to both the glide and the stroke levels.
+function oneFootValidAt(level: number, value: string): boolean {
+  const v = validOneFootVariant.value;
+  if (!v) return false;
+  if (level === 1) return v.forward !== null && value === (v.forward ? "Forward" : "Backward");
+  if (level === 2) return v.inside !== null && value === (v.inside ? "Inside" : "Outside");
+  return false;
+}
+
 // Valid jumps from the geometry; the take-off foot and direction are gated by handedness-mirrored take-off foot.
 function jumpTypeValid(name: string): boolean {
   const v = validVariant.value;
@@ -377,6 +394,14 @@ const autoSelectAvailable = computed(() => {
   if (elementChangeBranch.value === "jump") {
     return jumpPath.value.length === 1 && currentJumpOptions.value.some((choice) => jumpTypeValid(choice.value));
   }
+  if (elementChangeBranch.value === "glide") {
+    const level = glidePath.value.length;
+    return !glideStepFinal.value && currentGlideOptions.value.some((choice) => oneFootValidAt(level, choice.value));
+  }
+  if (elementChangeBranch.value === "stroke") {
+    const level = strokePath.value.length;
+    return !strokeStepFinal.value && currentStrokeOptions.value.some((choice) => oneFootValidAt(level, choice.value));
+  }
   return false;
 });
 
@@ -400,6 +425,16 @@ function autoSelectVariants() {
       const option = currentJumpOptions.value.find((choice) => jumpTypeValid(choice.value));
       if (!option) break;
       onJumpChange(option.value);
+    } else if (branch === "glide") {
+      const level = glidePath.value.length;
+      const option = currentGlideOptions.value.find((choice) => oneFootValidAt(level, choice.value));
+      if (!option) break;
+      onGlideChange(option.value);
+    } else if (branch === "stroke") {
+      const level = strokePath.value.length;
+      const option = currentStrokeOptions.value.find((choice) => oneFootValidAt(level, choice.value));
+      if (!option) break;
+      onStrokeChange(option.value);
     } else {
       break;
     }
@@ -1064,6 +1099,7 @@ onMounted(() => {
     oldKind.value = isProvisionalTarget.value ? null : kindOfType(element.type);
     oldVariant.value = isProvisionalTarget.value ? null : parseVariantFlags(element.type);
     validVariant.value = null;
+    validOneFootVariant.value = null;
     if (element instanceof TwoFeetTurn || element instanceof OneFootTurn) {
       const elementSequence = editorInstance.getSequenceOfElement(element);
       if (elementSequence) validVariant.value = checkTurnVariantValidity(elementSequence, element);
@@ -1318,6 +1354,7 @@ function openAtExistingVariant() {
 
 function chooseElementBranch(branch: ElementKind) {
   elementChangeBranch.value = branch;
+  validOneFootVariant.value = null;
   glidePath.value = [];
   strokePath.value = [];
   turnPath.value = [];
@@ -1355,6 +1392,9 @@ function onFinalChoice(type: string) {
 function onGlideChange(value: string) {
   const next = [...glidePath.value, value];
   glidePath.value = next;
+  if (next.length === 1) {
+    validOneFootVariant.value = value === "TwoFoot" ? null : computeOneFootValidity(value);
+  }
   const poseStep = next[0] === "TwoFoot" && (next[1] === "SpreadEagle" || next[1] === "InaBauer");
   if (next.length >= (next[0] === "TwoFoot" ? (poseStep ? 3 : 2) : 3)) {
     const [side, direction, third] = next;
@@ -1371,6 +1411,7 @@ function onGlideChange(value: string) {
 function onStrokeChange(value: string) {
   const next = [...strokePath.value, value];
   strokePath.value = next;
+  if (next.length === 1) validOneFootVariant.value = computeOneFootValidity(value);
   if (next.length >= strokeLevelOptions.length) {
     const [side, direction, edge, crossed] = next;
     onFinalChoice(`${side}${crossed}${direction}${edge === "Neither" ? "" : edge}Glide`);
@@ -1400,6 +1441,14 @@ function onTwoFeetTurnChange(value: string) {
   }
 }
 
+function computeOneFootValidity(side: string): OneFootVariantValidity {
+  const element = elementToChange.value;
+  if (!element) return { forward: null, inside: null };
+  const sequence = editor?.getSequenceOfElement(element);
+  if (!sequence) return { forward: null, inside: null };
+  return checkOneFootVariantValidity(sequence, element, side === "Left" ? "footL" : "footR");
+}
+
 function commitElementChange() {
   const replacement = pendingReplacement.value;
   if (!replacement || !elementToChange.value) {
@@ -1424,6 +1473,7 @@ function commitElementChange() {
 
 function startElementChange() {
   elementChangeBranch.value = null;
+  validOneFootVariant.value = null;
   glidePath.value = [];
   strokePath.value = [];
   turnPath.value = [];
@@ -1626,8 +1676,15 @@ function closeElementChange() {
           @change="(event) => onGlideChange(event.value)"
         >
           <template #option="{ option }">
-            <span :class="{ 'editor-view__option-old': oldValueAt('glide', glidePath.length, option.value) }">
-              {{ option.label }}
+            <span class="editor-view__option-row">
+              <span :class="{ 'editor-view__option-old': oldValueAt('glide', glidePath.length, option.value) }">
+                {{ option.label }}
+              </span>
+              <i
+                v-if="oneFootValidAt(glidePath.length, option.value)"
+                class="pi pi-check-circle editor-view__valid-check"
+                aria-label="Valid variant flag"
+              ></i>
             </span>
           </template>
         </Listbox>
@@ -1642,8 +1699,15 @@ function closeElementChange() {
           @change="(event) => onStrokeChange(event.value)"
         >
           <template #option="{ option }">
-            <span :class="{ 'editor-view__option-old': oldValueAt('stroke', strokePath.length, option.value) }">
-              {{ option.label }}
+            <span class="editor-view__option-row">
+              <span :class="{ 'editor-view__option-old': oldValueAt('stroke', strokePath.length, option.value) }">
+                {{ option.label }}
+              </span>
+              <i
+                v-if="oneFootValidAt(strokePath.length, option.value)"
+                class="pi pi-check-circle editor-view__valid-check"
+                aria-label="Valid variant flag"
+              ></i>
             </span>
           </template>
         </Listbox>

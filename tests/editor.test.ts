@@ -722,7 +722,7 @@ test("a stroke with no following element anchors its label at the path end", () 
   editor.destroy();
 });
 
-test("a crossed stroke draws a second 10px label anchored to the element middle, shifted inside", () => {
+test("a crossed stroke draws a second 10px label anchored to the element start, shifted inside", () => {
   const { editor, canvas } = makeEditor();
   editorRef(editor).mode = "elements";
   const ctx = canvas.getContext() as unknown as Record<string, unknown>;
@@ -752,11 +752,12 @@ test("a crossed stroke draws a second 10px label anchored to the element middle,
   const px = (font: string) => Number(font.replace(/px.*$/, ""));
   expect(px(crossedLabels[0]!.font) * 12).toBeCloseTo(px(mainLabels[0]!.font) * 10, 9);
 
-  // Anchors sit on the path line, so the inside shift mirrors the main label:
-  // the crossed label is on the opposite side of the path. Collision resolution
-  // may push labels apart, so the anchor only bounds the resolved position and
-  // the push may change the exact mirrored y values.
-  expect(Math.abs(crossedLabels[0]!.x - 0.4 * 20)).toBeLessThanOrEqual(LABEL_ANCHOR_LIMIT * halfB(editorRef(editor).view.zoom));
+  // Anchors sit on the path line at the element start, so the inside shift
+  // mirrors the main label: the crossed label is on the opposite side of the
+  // path. Collision resolution may push labels apart, so the anchor only bounds
+  // the resolved position and the push may change the exact mirrored y values.
+  expect(Math.abs(crossedLabels[0]!.x - 0.2 * 20)).toBeLessThanOrEqual(LABEL_ANCHOR_LIMIT * halfB(editorRef(editor).view.zoom));
+  expect(Math.abs(crossedLabels[0]!.x - 0.2 * 20)).toBeLessThan(Math.abs(crossedLabels[0]!.x - 0.4 * 20));
   mainLabels.forEach((label, index) => {
     expect(crossedLabels[index]!.y).toBeGreaterThan(0); // opposite sides of the path line
     expect(label.y).toBeLessThan(0);

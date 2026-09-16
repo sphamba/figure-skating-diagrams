@@ -9,7 +9,10 @@ import { FootKeyframe } from "../src/engine/keyframe";
 import { LeftForwardInsideThreeTurn, LeftForwardOutsideThreeTurn, LeftBackwardInsideThreeTurn } from "../src/engine/element/threeTurn";
 import { LeftForwardOpenMohawk } from "../src/engine/element/mohawk";
 import { glideConstructorsByType, LeftForwardInsideGlide } from "../src/engine/element/glide";
-import { checkTurnVariantValidity } from "../src/engine/sequenceEditor/variantValidation";
+import {
+  checkOneFootVariantValidity,
+  checkTurnVariantValidity,
+} from "../src/engine/sequenceEditor/variantValidation";
 
 function getArcCurve(center: Vector<2>, radius: number, startAngle: number, endAngle: number): Curve {
   const angle = endAngle - startAngle;
@@ -175,4 +178,61 @@ test("a provisional element probes the last element before its start", () => {
     (path.length) as PathCoordinate,
   );
   expect(checkTurnVariantValidity(sequence, provisional)).toEqual({ left: true, forward: false, inside: false });
+});
+
+test("a forward left glide on a clockwise path computes forward and the curvature-implied edge", () => {
+  const path = clockwisePath();
+  const sequence = new Sequence(path);
+  const glide = new LeftForwardInsideGlide(0 as PathCoordinate, (path.length * 0.3) as PathCoordinate);
+  sequence.addElement(glide);
+
+  expect(checkOneFootVariantValidity(sequence, glide, "footL")).toEqual({ forward: true, inside: true });
+});
+
+test("a forward right glide on a clockwise path computes the outside edge", () => {
+  const path = clockwisePath();
+  const sequence = new Sequence(path);
+  const glide = new (glideConstructorsByType["RightForwardOutsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => LeftForwardInsideGlide)(0 as PathCoordinate, (path.length * 0.3) as PathCoordinate);
+  sequence.addElement(glide);
+
+  expect(checkOneFootVariantValidity(sequence, glide, "footR")).toEqual({ forward: true, inside: false });
+});
+
+test("a backward left glide on a counterclockwise path computes a backward direction", () => {
+  const path = counterclockwisePath();
+  const sequence = new Sequence(path);
+  const glide = new (glideConstructorsByType["LeftBackwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => LeftForwardInsideGlide)(0 as PathCoordinate, (path.length * 0.3) as PathCoordinate);
+  sequence.addElement(glide);
+
+  expect(checkOneFootVariantValidity(sequence, glide, "footL")).toEqual({ forward: false, inside: true });
+});
+
+test("a selected foot without trace data computes no valid flags", () => {
+  const path = clockwisePath();
+  const sequence = new Sequence(path);
+  const glide = new LeftForwardInsideGlide(0 as PathCoordinate, (path.length * 0.3) as PathCoordinate);
+
+  expect(checkOneFootVariantValidity(sequence, glide, "footR")).toEqual({ forward: null, inside: null });
+});
+
+test("the edge reads the curvature at the ending point instead of the start", () => {
+  const path = new Path();
+  path.addCurveEnd(getArcCurve(new Vector(0, -5), 5, (3 * Math.PI) / 2, Math.PI / 2));
+  path.addCurveEnd(getArcCurve(new Vector(0, 5), 5, -Math.PI / 2, Math.PI / 2));
+  const sequence = new Sequence(path);
+  const glide = new LeftForwardInsideGlide(
+    (path.length * 0.4) as PathCoordinate,
+    (path.length * 0.9) as PathCoordinate,
+  );
+  sequence.addElement(glide);
+
+  // The element starts on the clockwise arc and ends on the counterclockwise
+  // arc: the ending curvature implies the outside edge for a left forward glide.
+  expect(checkOneFootVariantValidity(sequence, glide, "footL")).toEqual({ forward: true, inside: false });
 });
