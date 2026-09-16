@@ -4,8 +4,6 @@ import Accordion from "openvue/accordion";
 import AccordionContent from "openvue/accordioncontent";
 import AccordionHeader from "openvue/accordionheader";
 import AccordionPanel from "openvue/accordionpanel";
-import Button from "openvue/button";
-import Drawer from "openvue/drawer";
 import { sequenceTimeRange, type Sequence } from "@/engine/sequence";
 import { WHEEL_SENSITIVITY } from "@/engine/constants";
 import type { Annotation } from "@/engine/annotation";
@@ -200,7 +198,6 @@ function setStripRef(index: number, element: unknown) {
 
 const observedContainers = new WeakSet<HTMLElement>();
 let resizeObserver: ResizeObserver | null = null;
-let resizeObserverHost: ResizeObserver | null = null;
 
 const lastCurrent = new Map<number, number>();
 
@@ -455,9 +452,6 @@ function clearObsoleteSeeked() {
 
 // ---- Row unfold transition ----
 
-const open = ref(true);
-
-// Same curve as the drawer's open transition, so rows unfold in sync.
 const ROW_TRANSITION = "0.5s cubic-bezier(0.32, 0.72, 0, 1)";
 const rowTimers = new Map<Element, ReturnType<typeof setTimeout>>();
 
@@ -514,71 +508,7 @@ onBeforeUnmount(() => {
   rowTimers.clear();
 });
 
-const handleRef = ref<{ $el?: HTMLElement | null } | null>(null);
-const drawerRect = ref({ left: 0, width: 0, bottom: 0 });
-const HANDLE_GAP = 6;
-const drawerHeight = ref(0);
-let drawerObserver: ResizeObserver | null = null;
-
-function updateDrawerRect() {
-  const element = handleRef.value?.$el;
-  const host = element?.parentElement;
-  if (!host) return;
-  const rect = host.getBoundingClientRect();
-  drawerRect.value = { left: rect.left, width: rect.width, bottom: rect.bottom };
-}
-
-function measureDrawerHeight() {
-  const drawer = document.querySelector<HTMLElement>(".p-drawer-mask .p-drawer");
-  drawerHeight.value = drawer?.offsetHeight ?? 0;
-  if (drawer && !drawerObserver && typeof ResizeObserver !== "undefined") {
-    drawerObserver = new ResizeObserver(measureDrawerHeight);
-    drawerObserver.observe(drawer);
-  }
-}
-
-// The mask centers the drawer, so a margin-left of twice the canvas offset minus the
-// viewport plus the canvas width aligns the drawer exactly under the canvas.
-const drawerRootStyle = computed(() => {
-  const { left, width } = drawerRect.value;
-  const margin = 2 * left - document.documentElement.clientWidth + width;
-  return {
-    width: `${width}px`,
-    marginLeft: `${margin}px`,
-    height: "auto",
-    maxHeight: "60%",
-    borderWidth: 0,
-    pointerEvents: "auto",
-  };
-});
-
-watch(
-  open,
-  (value) => {
-    if (value) {
-      updateDrawerRect();
-      nextTick(() => {
-        requestAnimationFrame(() => {
-          measureDrawerHeight();
-          resendCurrentOnResize();
-        });
-      });
-      return;
-    }
-    drawerHeight.value = 0;
-    drawerObserver?.disconnect();
-    drawerObserver = null;
-  },
-  { immediate: true },
-);
-
 onMounted(() => {
-  updateDrawerRect();
-  const host = handleRef.value?.$el?.parentElement;
-  if (host && typeof ResizeObserver !== "undefined") {
-    resizeObserverHost = new ResizeObserver(updateDrawerRect);
-    resizeObserverHost.observe(host);
-  }
   if (typeof ResizeObserver !== "undefined") {
     resizeObserver = new ResizeObserver(resendCurrentOnResize);
   }
@@ -594,154 +524,113 @@ onBeforeUnmount(() => {
   lastSeeked.clear();
   resizeObserver?.disconnect();
   resizeObserver = null;
-  resizeObserverHost?.disconnect();
-  resizeObserverHost = null;
-  drawerObserver?.disconnect();
-  drawerObserver = null;
-});
-
-const handleStyle = computed(() => {
-  if (!open.value || drawerHeight.value <= 0) return { bottom: "1rem", right: "1rem" };
-  // Place the handle above the drawer's top edge.
-  const drawerTop = window.innerHeight - drawerHeight.value;
-  const bottom = drawerRect.value.bottom - (drawerTop - HANDLE_GAP);
-  return { bottom: `${bottom}px`, right: "1rem" };
 });
 </script>
 
 <template>
-  <Button
-    ref="handleRef"
-    class="time-sync-pane__handle"
-    :style="handleStyle"
-    :label="open ? 'Hide elements' : 'Show elements'"
-    :icon="open ? 'pi pi-chevron-down' : 'pi pi-chevron-up'"
-    :aria-label="open ? 'Fold the drawer down' : 'Unfold the drawer'"
-    :aria-expanded="open"
-    severity="secondary"
-    rounded
-    size="small"
-    @click="open = !open"
-  />
-  <Drawer
-    v-model:visible="open"
-    position="bottom"
-    :modal="false"
-    :dismissable="false"
-    :block-scroll="false"
-    :show-close-icon="false"
-    :pt="{
-      root: { style: drawerRootStyle },
-      header: { style: { display: 'none' } },
-      content: {
-        style: { paddingTop: '0.25rem', paddingBottom: '0.25rem', paddingLeft: '0.25rem', paddingRight: '0.25rem' },
-      },
-    }"
-  >
-    <div class="time-sync-pane">
-      <Accordion
-        :multiple="true"
-        :lazy="true"
-        :value="openAnnotationRows"
-        @update:value="(v) => (openAnnotationRows = toOpenRows(v))"
+  <div class="time-sync-pane">
+    <Accordion
+      :multiple="true"
+      :lazy="true"
+      :value="openAnnotationRows"
+      @update:value="(v) => (openAnnotationRows = toOpenRows(v))"
+    >
+      <TransitionGroup
+        tag="div"
+        :css="false"
+        @before-enter="rowBeforeEnter"
+        @enter="rowEnter"
+        @before-leave="rowBeforeLeave"
+        @leave="rowLeave"
       >
-        <TransitionGroup
-          tag="div"
-          :css="false"
-          @before-enter="rowBeforeEnter"
-          @enter="rowEnter"
-          @before-leave="rowBeforeLeave"
-          @leave="rowLeave"
-        >
-          <AccordionPanel v-for="(row, index) in annotationRows" :key="row.key" :value="index">
-            <AccordionHeader asChild v-slot="{ active }">
-              <div class="time-sync-pane__annotation-header">
-                <span
-                  class="time-sync-pane__chip time-sync-pane__chip--annotation"
-                  :style="{ background: row.color, color: textColorFor(row.color) }"
-                  >{{ row.title }}</span
-                >
-                <button
-                  type="button"
-                  class="time-sync-pane__toggle"
-                  :aria-label="active ? 'Hide description' : 'Show description'"
-                  :aria-expanded="active"
-                  @click.stop="toggleAnnotationOpen(index)"
-                >
-                  <span :class="active ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"></span>
-                </button>
-              </div>
-            </AccordionHeader>
-            <AccordionContent>
-              <p class="time-sync-pane__detail">{{ row.description || "No description" }}</p>
-            </AccordionContent>
-          </AccordionPanel>
-        </TransitionGroup>
-      </Accordion>
+        <AccordionPanel v-for="(row, index) in annotationRows" :key="row.key" :value="index">
+          <AccordionHeader asChild v-slot="{ active }">
+            <div class="time-sync-pane__annotation-header">
+              <span
+                class="time-sync-pane__chip time-sync-pane__chip--annotation"
+                :style="{ background: row.color, color: textColorFor(row.color) }"
+                >{{ row.title }}</span
+              >
+              <button
+                type="button"
+                class="time-sync-pane__toggle"
+                :aria-label="active ? 'Hide description' : 'Show description'"
+                :aria-expanded="active"
+                @click.stop="toggleAnnotationOpen(index)"
+              >
+                <span :class="active ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"></span>
+              </button>
+            </div>
+          </AccordionHeader>
+          <AccordionContent>
+            <p class="time-sync-pane__detail">{{ row.description || "No description" }}</p>
+          </AccordionContent>
+        </AccordionPanel>
+      </TransitionGroup>
+    </Accordion>
 
-      <Accordion
-        :multiple="true"
-        :lazy="true"
-        :value="openStripKeys"
-        @update:value="(v) => (openStripKeys = toOpenStripKeys(v))"
+    <Accordion
+      :multiple="true"
+      :lazy="true"
+      :value="openStripKeys"
+      @update:value="(v) => (openStripKeys = toOpenStripKeys(v))"
+    >
+      <TransitionGroup
+        tag="div"
+        :css="false"
+        @before-enter="rowBeforeEnter"
+        @enter="rowEnter"
+        @before-leave="rowBeforeLeave"
+        @leave="rowLeave"
       >
-        <TransitionGroup
-          tag="div"
-          :css="false"
-          @before-enter="rowBeforeEnter"
-          @enter="rowEnter"
-          @before-leave="rowBeforeLeave"
-          @leave="rowLeave"
-        >
-          <AccordionPanel v-for="(strip, stripIndex) in elementStrips" :key="strip.key" :value="strip.key">
-            <AccordionHeader asChild v-slot="{ active }">
-              <div class="time-sync-pane__strip-header">
-                <div
-                  :ref="(element) => setStripRef(stripIndex, element)"
-                  class="time-sync-pane__strip"
-                  @pointerdown="onStripPointerDown"
-                  @wheel="onStripWheel"
-                  @scroll="onStripScroll"
-                  @scrollend="onStripScrollEnd"
-                >
-                  <div class="time-sync-pane__strip-track">
-                    <button
-                      v-for="(item, itemIndex) in strip.items"
-                      :key="item.key"
-                      type="button"
-                      class="time-sync-pane__chip time-sync-pane__chip--element"
-                      :class="{
-                        'time-sync-pane__chip--dim':
-                          itemIndex !== strip.current && itemIndex !== previewCurrent[stripIndex],
-                      }"
-                      :title="item.fullName"
-                      @click="seekTo(strip, item)"
-                    >
-                      {{ item.label }}
-                    </button>
-                  </div>
+        <AccordionPanel v-for="(strip, stripIndex) in elementStrips" :key="strip.key" :value="strip.key">
+          <AccordionHeader asChild v-slot="{ active }">
+            <div class="time-sync-pane__strip-header">
+              <div
+                :ref="(element) => setStripRef(stripIndex, element)"
+                class="time-sync-pane__strip"
+                @pointerdown="onStripPointerDown"
+                @wheel="onStripWheel"
+                @scroll="onStripScroll"
+                @scrollend="onStripScrollEnd"
+              >
+                <div class="time-sync-pane__strip-track">
+                  <button
+                    v-for="(item, itemIndex) in strip.items"
+                    :key="item.key"
+                    type="button"
+                    class="time-sync-pane__chip time-sync-pane__chip--element"
+                    :class="{
+                      'time-sync-pane__chip--dim':
+                        itemIndex !== strip.current && itemIndex !== previewCurrent[stripIndex],
+                    }"
+                    :title="item.fullName"
+                    @click="seekTo(strip, item)"
+                  >
+                    {{ item.label }}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  class="time-sync-pane__toggle"
-                  :aria-label="active ? 'Fold element names' : 'Unfold element names'"
-                  :aria-expanded="active"
-                  @click.stop="toggleStripOpen(strip.key)"
-                >
-                  <span :class="active ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"></span>
-                </button>
               </div>
-            </AccordionHeader>
-            <AccordionContent>
-              <p class="time-sync-pane__strip-fullname">{{ strip.items[strip.current]?.fullName }}</p>
-            </AccordionContent>
-          </AccordionPanel>
-        </TransitionGroup>
-      </Accordion>
+              <button
+                type="button"
+                class="time-sync-pane__toggle"
+                :aria-label="active ? 'Fold element names' : 'Unfold element names'"
+                :aria-expanded="active"
+                @click.stop="toggleStripOpen(strip.key)"
+              >
+                <span :class="active ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"></span>
+              </button>
+            </div>
+          </AccordionHeader>
+          <AccordionContent>
+            <p class="time-sync-pane__strip-fullname">{{ strip.items[strip.current]?.fullName }}</p>
+          </AccordionContent>
+        </AccordionPanel>
+      </TransitionGroup>
+    </Accordion>
 
-      <span v-if="!hasRows" class="time-sync-pane__empty">No element yet</span>
-    </div>
-  </Drawer>
+    <span v-if="!hasRows" class="time-sync-pane__empty">No element yet</span>
+  </div>
 </template>
 
 <style scoped lang="scss">
@@ -749,17 +638,18 @@ const handleStyle = computed(() => {
   padding: 0 0.5rem 0.25rem;
 }
 
-.time-sync-pane__handle {
-  position: absolute;
-  transition: bottom 0.5s cubic-bezier(0.32, 0.72, 0, 1);
-  z-index: 1200;
-}
-
 .time-sync-pane {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   gap: 0.25rem;
+  padding: 0.25rem;
+  max-height: 40vh;
+  overflow-y: auto;
   font-size: 0.875rem;
+  /* The pane floats above the canvas: an opaque background keeps the text readable. */
+  background: var(--p-content-background, #ffffff);
+  border-top: 1px solid var(--p-content-border-color);
 }
 
 .time-sync-pane :deep(.p-accordionpanel) {

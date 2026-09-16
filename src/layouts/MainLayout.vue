@@ -17,7 +17,7 @@ const year = new Date().getFullYear();
 
 <template>
   <div class="main-layout" :class="{ 'main-layout--full-bleed': isFullBleed }">
-    <header class="main-layout__header">
+    <header v-if="!isFullBleed" class="main-layout__header">
       <Menubar :model="items">
         <template #start>
           <span class="main-layout__brand">Figure Skating Diagrams</span>

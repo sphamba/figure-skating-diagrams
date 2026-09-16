@@ -35,6 +35,7 @@ class EditorStub {
 
   clearSelection() {}
   requestDraw() {}
+  draw() {}
   setSequences(list: unknown[]) {
     recorder.sequences = list;
   }
@@ -46,7 +47,7 @@ vi.mock("@/engine/sequenceEditor/editor", async (importOriginal) => ({
   Editor: EditorStub,
 }));
 
-// Stub matchMedia: jsdom does not implement it.
+// Stub matchMedia and ResizeObserver: jsdom does not implement them.
 if (typeof window !== "undefined") {
   Object.defineProperty(window, "matchMedia", {
     writable: true,
@@ -63,6 +64,16 @@ if (typeof window !== "undefined") {
   });
 }
 
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
+}
+
 async function mountEditorView() {
   vi.stubGlobal("fetch", vi.fn());
   const { default: view } = await import("@/views/EditorView.vue");
@@ -76,7 +87,10 @@ async function mountEditorView() {
     attachTo: document.body,
     global: {
       plugins: [
-        [OpenVue, { theme: { preset: appPreset, options: { prefix: "p", darkModeSelector: "system", cssLayer: false } } }],
+        [
+          OpenVue,
+          { theme: { preset: appPreset, options: { prefix: "p", darkModeSelector: "system", cssLayer: false } } },
+        ],
         [ConfirmationService],
       ],
       stubs: { SelectButton: true, ColorPicker: true },
@@ -179,7 +193,7 @@ test("downloading the diagram clears the unsaved mark", async () => {
 
   expect(click).toHaveBeenCalled();
   expect(store.isUnsaved()).toBe(false);
-  const tag = wrapper.find(".editor-view__unsaved-tag");
+  const tag = wrapper.find(".diagram-sidebar__unsaved-tag");
   expect(tag.text()).toBe("Saved");
   click.mockRestore();
   wrapper.unmount();

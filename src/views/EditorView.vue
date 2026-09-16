@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import Button from "openvue/button";
-import Card from "openvue/card";
 import Tag from "openvue/tag";
-import Fieldset from "openvue/fieldset";
 import SelectButton from "openvue/selectbutton";
-import Slider from "openvue/slider";
-import Checkbox from "openvue/checkbox";
+import Tabs from "openvue/tabs";
+import Tab from "openvue/tab";
+import TabList from "openvue/tablist";
 import Dialog from "openvue/dialog";
 import InputText from "openvue/inputtext";
 import InputNumber from "openvue/inputnumber";
@@ -15,20 +14,14 @@ import InputGroup from "openvue/inputgroup";
 import InputGroupAddon from "openvue/inputgroupaddon";
 import Listbox from "openvue/listbox";
 import ColorPicker from "openvue/colorpicker";
-import ToggleSwitch from "openvue/toggleswitch";
-import Inplace from "openvue/inplace";
-import ConfirmPopup from "openvue/confirmpopup";
-import ConfirmDialog from "openvue/confirmdialog";
 import Splitter from "openvue/splitter";
 import SplitterPanel from "openvue/splitterpanel";
-import { useConfirm } from "openvue/useconfirm";
-import DiagramTree, { type DiagramTreeSource } from "@/components/DiagramTree.vue";
 import TimeSyncPane from "@/components/TimeSyncPane.vue";
-import { textColorFor } from "@/utils/contrast";
+import DiagramSidebar, { type HelpItem } from "@/components/DiagramSidebar.vue";
 import { Editor, formatTimingLabel, type EditMode } from "@/engine/sequenceEditor/editor";
 import { TimingKeyframe, type TimingKind } from "@/engine/keyframe";
 import { DEFAULT_ANNOTATION_COLOR, type Annotation } from "@/engine/annotation";
-import type { Sequence, SequenceJSON, FootKey } from "@/engine/sequence";
+import type { Sequence } from "@/engine/sequence";
 import {
   changeElementType,
   isJumpType,
@@ -45,32 +38,26 @@ import { checkTurnVariantValidity, type TurnVariantValidity } from "@/engine/seq
 import { OneFootTurn } from "@/engine/element/oneFootTurn";
 import { TwoFeetTurn } from "@/engine/element/twoFeetTurn";
 import type { Element } from "@/engine/element/element";
-import type { PatternJSON } from "@/engine/pattern";
-import { earliestTimeKeyframeSeconds, fullTimeExtentSeconds, type DiagramJSON } from "@/engine/diagram";
+import { earliestTimeKeyframeSeconds, fullTimeExtentSeconds } from "@/engine/diagram";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import { useMediaQuery } from "@/composables/useMediaQuery";
 import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
 import { usePlaybackSpeed } from "@/composables/usePlaybackSpeed";
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
-const fileInput = ref<HTMLInputElement | null>(null);
 
 const editModeOptions = [
-  { label: "View", value: "view" },
-  { label: "Path", value: "path" },
-  { label: "Elements", value: "elements" },
-  { label: "Timing", value: "timing" },
-  { label: "Annotations", value: "annotations" },
+  { label: "View", value: "view", icon: "pi pi-eye" },
+  { label: "Path", value: "path", icon: "pi pi-signature" },
+  { label: "Elements", value: "elements", icon: "pi pi-objects-column" },
+  { label: "Timing", value: "timing", icon: "pi pi-clock" },
+  { label: "Annotations", value: "annotations", icon: "pi pi-tag" },
 ];
 const editMode = ref<EditMode>("view");
 const scaleElements = ref(true);
 
 const isMobile = useMediaQuery("(max-width: 767.98px)");
-const sidebarOpen = ref(true);
-
-watch(isMobile, (mobile) => {
-  sidebarOpen.value = !mobile;
-});
+const drawerOpen = ref(false);
 
 function onVideoError() {
   if (videoSet.value) videoStatus.value = "invalid";
@@ -444,8 +431,6 @@ const chosenLabels = computed<string[]>(() => {
   return labels;
 });
 
-type HelpItem = { keys: string[]; description: string };
-
 const touchHelpItems: HelpItem[] = [
   { keys: ["two fingers"], description: "pinch to zoom and drag to move the view" },
   { keys: ["one finger"], description: "same as a left click" },
@@ -527,26 +512,18 @@ const store = useSequenceEditorStore();
 const sequences = computed(() => store.getSequences());
 const activeSequence = computed(() => store.getActiveSequence());
 const hiddenSequenceSet = computed(() => new Set(sequences.value.filter((sequence) => !store.isVisible(sequence))));
-const diagramName = computed({
-  get: () => store.getDiagram().name,
-  set: (value) => store.setDiagramName(value),
-});
 
-const diagramBpm = computed({
-  get: () => store.getDiagram().bpm,
-  set: (value) => {
-    if (typeof value === "number") {
-      store.setDiagramBpm(value);
-      if (editor) editor.bpm = getBpm();
-    } else {
-      store.setDiagramBpm(undefined);
-    }
-    editor?.draw();
-  },
-});
+function getBpm(): number {
+  return store.getDiagram().bpm || 120;
+}
 
-const isUnsaved = computed(() => store.isUnsaved());
-const loadFailed = ref(false);
+const bpm = computed(() => getBpm());
+
+// The draw range and the bpm can change from the sidebar, so the canvas editor follows through here.
+watch(bpm, (value) => {
+  if (editor) editor.bpm = value;
+  editor?.draw();
+});
 
 const drawRange = computed({
   get: () => store.getDrawRange(),
@@ -563,61 +540,12 @@ watch(
   { immediate: true },
 );
 
-async function loadDiagramSource({ path }: DiagramTreeSource) {
-  loadFailed.value = false;
-  try {
-    const response = await fetch(`${import.meta.env.BASE_URL}${path}`);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const text = await response.text();
-    const json = JSON.parse(text) as PatternJSON | DiagramJSON | SequenceJSON;
-    resetPlaybackSpeed();
-    if (isPattern(json)) {
-      store.loadFromJSON(json);
-    } else if (isSequenceJSON(json)) {
-      store.loadFromJSON({ name: "Diagram", sequences: [json] });
-    } else {
-      store.loadFromJSON(json);
-    }
-  } catch (error) {
-    loadFailed.value = true;
-    console.error("Could not open the diagram file:", error);
-  }
-}
-
-function openDiagramSource(source: DiagramTreeSource) {
-  if (!store.isUnsaved()) {
-    void loadDiagramSource(source);
-    return;
-  }
-  confirm.require({
-    group: "editor-save",
-    header: "Unsaved changes",
-    message: "The current diagram has unsaved changes. Open the new diagram and lose them?",
-    icon: "pi pi-exclamation-triangle",
-    rejectLabel: "Cancel",
-    acceptLabel: "Open",
-    acceptProps: { severity: "warning" },
-    rejectProps: { severity: "secondary", text: true },
-    accept: () => {
-      void loadDiagramSource(source);
-    },
-  });
-}
-
 const videoRef = ref<HTMLVideoElement | null>(null);
-const videoUrl = computed<string>({
-  get: () => store.getDiagram().videoUrl ?? "",
-  set: (value) => store.setDiagramVideoUrl(value),
-});
+const videoUrl = computed(() => store.getDiagram().videoUrl ?? "");
 const videoSet = computed(() => videoUrl.value.trim() !== "");
 const videoStatus = ref<"empty" | "pending" | "valid" | "invalid">("empty");
 const videoValid = computed(() => videoStatus.value === "valid");
-const {
-  speed: playbackSpeed,
-  options: playbackSpeedOptions,
-  apply: applyPlaybackSpeed,
-  reset: resetPlaybackSpeed,
-} = usePlaybackSpeed(videoRef);
+const { speed: playbackSpeed, options: playbackSpeedOptions, apply: applyPlaybackSpeed } = usePlaybackSpeed(videoRef);
 const {
   seconds: videoTime,
   setTimestamp,
@@ -744,89 +672,17 @@ function commitAnnotationChange() {
   closeAnnotationChange();
 }
 
-const confirm = useConfirm();
-
 const viewportWidth = ref(0);
 const viewportHeight = ref(0);
 
 const splitLayout = computed(() => {
-  const sidebarSpace = !isMobile.value && sidebarOpen.value ? 360 : 0;
+  const sidebarSpace = !isMobile.value ? 360 : 0;
   return (viewportWidth.value - sidebarSpace) / viewportHeight.value > 1 ? "horizontal" : "vertical";
 });
 
 function updateViewportSizes() {
   viewportWidth.value = window.innerWidth;
   viewportHeight.value = window.innerHeight;
-}
-
-const sequenceInfos = computed(
-  () =>
-    new Map(
-      store
-        .getSequences()
-        .map(
-          (sequence) =>
-            [sequence, { name: sequence.name, footL: sequence.traceColorL, footR: sequence.traceColorR }] as const,
-        ),
-    ),
-);
-
-const footSwatches = [
-  { footKey: "footL" as FootKey, letter: "L" },
-  { footKey: "footR" as FootKey, letter: "R" },
-];
-
-const renameDraft = ref("");
-const renamingTarget = shallowRef<Sequence | null>(null);
-
-function startRename(sequence: Sequence) {
-  renamingTarget.value = sequence;
-  renameDraft.value = sequence.name;
-}
-
-function commitRename() {
-  const sequence = renamingTarget.value;
-  if (!sequence) return;
-  const name = renameDraft.value.trim();
-  if (name && name !== sequence.name) store.renameSequence(sequence, name);
-  renamingTarget.value = null;
-}
-
-function cancelRename() {
-  renamingTarget.value = null;
-}
-
-function setTraceColor(sequence: Sequence, footKey: FootKey, color: string) {
-  store.setTraceColor(sequence, footKey, color);
-  editor?.draw();
-}
-
-const selectedSequence = computed({
-  get: () => activeSequence.value,
-  set: (value) => {
-    if (value) store.setActiveSequence(value);
-  },
-});
-
-const confirmPopupRef = ref<{ alignOverlay: () => void } | null>(null);
-
-function confirmDelete(sequence: Sequence, event: Event) {
-  confirm.require({
-    group: "editor-delete",
-    target: event.currentTarget as HTMLElement,
-    message: `Delete "${sequence.name}"? This cannot be undone.`,
-    icon: "pi pi-exclamation-triangle",
-    rejectLabel: "Cancel",
-    acceptLabel: "Delete",
-    rejectProps: { severity: "secondary", text: true },
-    acceptProps: { severity: "danger" },
-    accept: () => store.removeSequence(sequence),
-    onShow: () => {
-      nextTick(() => {
-        requestAnimationFrame(() => confirmPopupRef.value?.alignOverlay());
-      });
-    },
-  });
 }
 
 function parseTimingValue(draft: string): number | null {
@@ -897,10 +753,6 @@ function openTimingKeyframeChange(keyframe: TimingKeyframe, isProvisional: boole
   if (isProvisional && keyframe.kind === "time") prefillVideoTimestamp();
   timingKeyframeOpen.value = true;
   focusTimingValueInput();
-}
-
-function getBpm(): number {
-  return store.getDiagram().bpm || 120;
 }
 
 function onTimingKindChange(kind: TimingKind) {
@@ -1090,8 +942,6 @@ watch([videoTime, activeSequence] as const, () => {
   editor.requestDraw();
 });
 
-const bpm = computed(() => getBpm());
-
 const visibleSequences = computed(() => sequences.value.filter((sequence) => store.isVisible(sequence)));
 
 onMounted(() => {
@@ -1108,85 +958,8 @@ onBeforeUnmount(() => {
   editor = null;
 });
 
-function openFile() {
-  fileInput.value?.click();
-}
-
-function openFileWithGuard() {
-  if (!store.isUnsaved()) {
-    openFile();
-    return;
-  }
-  confirm.require({
-    group: "editor-save",
-    header: "Unsaved changes",
-    message: "The current diagram has unsaved changes. Open the new file and lose them?",
-    icon: "pi pi-exclamation-triangle",
-    rejectLabel: "Cancel",
-    acceptLabel: "Open",
-    acceptProps: { severity: "warning" },
-    rejectProps: { severity: "secondary", text: true },
-    accept: () => openFile(),
-  });
-}
-
-function confirmNew() {
-  const unsaved = !store.isUnsaved() ? "New diagram" : "Unsaved changes";
-  const message = store.isUnsaved()
-    ? "The current diagram has unsaved changes. Create a new diagram and lose them?"
-    : "Create a new diagram? The current diagram will be lost.";
-  confirm.require({
-    group: "editor-save",
-    header: unsaved,
-    message,
-    icon: "pi pi-exclamation-triangle",
-    rejectLabel: "Cancel",
-    acceptLabel: "Create",
-    acceptProps: { severity: "warning" },
-    rejectProps: { severity: "secondary", text: true },
-    accept: () => store.clear(),
-  });
-}
-
-async function onFileSelected(event: Event) {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  if (!file) return;
-
-  try {
-    const json = JSON.parse(await file.text()) as PatternJSON | DiagramJSON | SequenceJSON;
-    resetPlaybackSpeed();
-    if (isPattern(json)) {
-      store.loadFromJSON(json);
-    } else if (isSequenceJSON(json)) {
-      store.loadFromJSON({ name: "Diagram", sequences: [json] });
-    } else {
-      store.loadFromJSON(json);
-    }
-  } catch (error) {
-    console.error("Could not open diagram file:", error);
-  } finally {
-    input.value = "";
-  }
-}
-
-function isPattern(json: PatternJSON | DiagramJSON | SequenceJSON): json is PatternJSON {
-  return Array.isArray((json as PatternJSON).sequences);
-}
-
-function isSequenceJSON(json: PatternJSON | DiagramJSON | SequenceJSON): json is SequenceJSON {
-  return "path" in json && "keyframes" in json;
-}
-
-function downloadFile() {
-  const blob = new Blob([store.toJSON()], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = "diagram.json";
-  anchor.click();
-  URL.revokeObjectURL(url);
-  store.markSaved();
+function redraw() {
+  editor?.draw();
 }
 
 function clearPendingChoice() {
@@ -1525,275 +1298,110 @@ function closeElementChange() {
 
 <template>
   <div class="editor-view">
-    <aside v-if="!isMobile || sidebarOpen" class="editor-view__sidebar">
-      <Card class="editor-view__panel">
-        <template #title>
-          <div class="editor-view__panel-title">
-            <span>Diagram editor</span>
-            <Button
-              v-if="isMobile"
-              icon="pi pi-times"
-              aria-label="Close panel"
-              severity="secondary"
-              text
-              rounded
-              size="small"
-              @click="sidebarOpen = false"
-            />
-          </div>
-        </template>
-        <template #content>
-          <div class="editor-view__actions">
-            <Tag
-              :value="isUnsaved ? 'Unsaved changes' : 'Saved'"
-              :severity="isUnsaved ? 'warn' : 'success'"
-              class="editor-view__unsaved-tag"
-            />
-            <DiagramTree class="w-full" @select="openDiagramSource" />
-            <small v-if="loadFailed" class="editor-view__timing-error">
-              The diagram could not be opened. Check that the json file is valid.
-            </small>
-          </div>
+    <DiagramSidebar
+      v-model:open="drawerOpen"
+      v-model:scale-elements="scaleElements"
+      v-model:draw-range="drawRange"
+      mode="editor"
+      :mobile="isMobile"
+      :help-items="helpItems"
+      :video-error="videoStatus === 'invalid'"
+      @redraw="redraw"
+    />
 
-          <div class="editor-view__actions">
-            <label class="editor-view__mode-label">Diagram name</label>
-            <InputText v-model="diagramName" class="w-full" />
-            <label class="editor-view__mode-label" for="diagram-bpm">BPM</label>
-            <InputNumber
-              id="diagram-bpm"
-              v-model="diagramBpm"
-              :min="1"
-              :step="1"
-              :use-grouping="false"
-              placeholder="120"
-              fluid
-            />
-            <label class="editor-view__mode-label" for="diagram-video-url">Video URL</label>
-            <InputText
-              id="diagram-video-url"
-              v-model="videoUrl"
-              class="w-full"
-              :invalid="videoStatus === 'invalid'"
-              placeholder="https://example.com/video.mp4"
-            />
-            <small v-if="videoStatus === 'invalid'" class="editor-view__timing-error">
-              The video could not be loaded. Use a direct link to an .mp4 file.
-            </small>
-          </div>
-
-          <div class="editor-view__actions">
-            <label class="editor-view__mode-label">Sequences</label>
-            <Listbox
-              v-model="selectedSequence"
-              :options="sequences"
-              option-label="name"
-              class="editor-view__sequence-list"
-            >
-              <template #option="{ option }">
-                <ToggleSwitch
-                  :model-value="store.isVisible(option)"
-                  :aria-label="store.isVisible(option) ? 'Hide sequence' : 'Show sequence'"
-                  @update:model-value="store.toggleVisible(option)"
-                  @click.stop
-                />
-                <span class="editor-view__swatches">
-                  <span
-                    v-for="swatch in footSwatches"
-                    :key="swatch.footKey"
-                    class="editor-view__swatch-wrapper"
-                    @click.stop
-                  >
-                    <ColorPicker
-                      class="editor-view__swatch"
-                      :aria-label="`${sequenceInfos.get(option)?.name ?? 'Sequence'} foot trace color ${swatch.letter}`"
-                      :model-value="sequenceInfos.get(option)?.[swatch.footKey]"
-                      @update:model-value="(value) => setTraceColor(option, swatch.footKey, `#${value}`)"
-                    />
-                    <span
-                      class="editor-view__swatch-letter"
-                      :style="{ color: textColorFor(sequenceInfos.get(option)?.[swatch.footKey] ?? '#ffffff') }"
-                      >{{ swatch.letter }}</span
-                    >
-                  </span>
-                </span>
-                <Inplace
-                  class="editor-view__sequence-name"
-                  :active="renamingTarget === option"
-                  @click.stop
-                  @open="startRename(option)"
-                  @keyup.enter="commitRename"
-                  @keyup.esc="cancelRename"
-                >
-                  <template #display>{{ sequenceInfos.get(option)?.name }}</template>
-                  <template #content>
-                    <InputText v-model="renameDraft" @keydown.stop />
-                  </template>
-                </Inplace>
-                <Button
-                  icon="pi pi-trash"
-                  aria-label="Delete sequence"
-                  severity="danger"
-                  text
-                  rounded
-                  size="small"
-                  @click.stop="confirmDelete(option, $event)"
-                />
-              </template>
-            </Listbox>
-            <Button
-              label="Add sequence"
-              icon="pi pi-plus"
-              severity="secondary"
-              text
-              class="editor-view__add-sequence"
-              @click="store.addSequence()"
-            />
-          </div>
-
-          <div class="editor-view__actions">
-            <Button
-              label="Load JSON"
-              icon="pi pi-folder-open"
-              class="w-full"
-              severity="secondary"
-              @click="openFileWithGuard"
-            />
-            <Button
-              label="Download JSON"
-              icon="pi pi-download"
-              class="w-full"
-              severity="secondary"
-              @click="downloadFile"
-            />
-            <Button label="New" icon="pi pi-plus" class="w-full" severity="secondary" @click="confirmNew" />
-          </div>
-
-          <Fieldset v-if="editMode !== 'elements'" legend="View parameters" toggleable class="editor-view__help">
-            <div class="editor-view__scale-checkbox">
-              <Checkbox v-model="scaleElements" binary input-id="scale-elements-zoom" />
-              <label for="scale-elements-zoom">Scale elements with zoom</label>
-            </div>
-            <label class="editor-view__mode-label editor-view__view-param-label">Draw range</label>
-            <div class="editor-view__slider-param">
-              <span class="editor-view__slider-label">short</span>
-              <Slider
-                v-model="drawRange"
-                :min="0.001"
-                :max="1"
-                :step="0.001"
-                aria-label="Draw range"
-                class="editor-view__slider"
+    <div class="editor-view__main">
+      <div class="editor-view__modebar">
+        <Tabs v-model:value="editMode" class="editor-view__mode-tabs">
+          <TabList>
+            <Tab v-for="mode in editModeOptions" :key="mode.value" :value="mode.value">
+              <i :class="mode.icon" aria-hidden="true" />
+              <small class="editor-view__mode-name">{{ mode.label }}</small>
+            </Tab>
+          </TabList>
+        </Tabs>
+      </div>
+      <div class="editor-view__canvas">
+        <Splitter
+          :layout="splitLayout"
+          :gutter-size="videoSet ? 10 : 0"
+          class="editor-view__splitter"
+          :class="{ 'editor-view__splitter--no-video': !videoSet }"
+        >
+          <SplitterPanel class="editor-view__video-pane" :size="videoSet ? 40 : 0" :min-size="videoSet ? 10 : 0">
+            <video
+              v-if="videoSet"
+              ref="videoRef"
+              class="editor-view__video"
+              :src="videoUrl"
+              controls
+              playsinline
+              @loadeddata="onVideoLoad"
+              @error="onVideoError"
+            ></video>
+          </SplitterPanel>
+          <SplitterPanel class="editor-view__canvas-pane" :min-size="20">
+            <div class="editor-view__canvas-area">
+              <canvas ref="canvasRef" class="editor-view__canvas-element"></canvas>
+              <TimeSyncPane
+                v-if="editMode === 'view'"
+                class="editor-view__elements"
+                :sequences="visibleSequences"
+                :time-seconds="videoTime"
+                :bpm="bpm"
+                @seek="setTimestamp"
+                @scrub-start="onPaneScrubStart"
+                @scrub-end="onPaneScrubEnd"
               />
-              <span class="editor-view__slider-label">long</span>
             </div>
-          </Fieldset>
-
-          <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFileSelected" />
-
-          <Fieldset legend="Input help" toggleable class="editor-view__help">
-            <ul class="editor-view__hint">
-              <li
-                v-for="(item, index) in helpItems"
-                :key="`${index}-${item.description}`"
-                class="editor-view__hint-item"
-              >
-                <span class="editor-view__hint-keys">
-                  <template v-for="(key, index) in item.keys" :key="key">
-                    <Tag :value="key" rounded />
-                    <span v-if="index < item.keys.length - 1" class="editor-view__hint-separator">+</span>
-                  </template>
-                </span>
-                <span class="editor-view__hint-desc">{{ item.description }}</span>
-              </li>
-            </ul>
-          </Fieldset>
-        </template>
-      </Card>
-    </aside>
-
-    <div v-if="isMobile && sidebarOpen" class="editor-view__backdrop" @click="sidebarOpen = false"></div>
-
-    <div class="editor-view__canvas">
-      <Splitter
-        :layout="splitLayout"
-        :gutter-size="videoSet ? 10 : 0"
-        class="editor-view__splitter"
-        :class="{ 'editor-view__splitter--no-video': !videoSet }"
-      >
-        <SplitterPanel class="editor-view__video-pane" :size="videoSet ? 40 : 0" :min-size="videoSet ? 10 : 0">
-          <video
-            v-if="videoSet"
-            ref="videoRef"
-            class="editor-view__video"
-            :src="videoUrl"
-            controls
-            playsinline
-            @loadeddata="onVideoLoad"
-            @error="onVideoError"
-          ></video>
-        </SplitterPanel>
-        <SplitterPanel class="editor-view__canvas-pane" :min-size="20">
-          <div class="editor-view__canvas-area">
-            <div class="editor-view__floating-stack">
-              <div class="editor-view__floating">
-                <Button
-                  v-if="isMobile && !sidebarOpen"
-                  icon="pi pi-bars"
-                  aria-label="Open panel"
-                  severity="secondary"
-                  rounded
-                  @click="sidebarOpen = true"
-                />
-                <SelectButton
-                  v-model="editMode"
-                  :options="editModeOptions"
-                  option-label="label"
-                  option-value="value"
-                  :allow-empty="false"
-                />
-              </div>
-              <div v-if="editMode === 'view'" class="editor-view__floating">
-                <Button
-                  icon="pi pi-step-backward"
-                  aria-label="Back to the earliest time"
-                  severity="secondary"
-                  rounded
-                  size="small"
-                  @click="jumpToStart"
-                />
-                <Button
-                  :icon="playing ? 'pi pi-pause' : 'pi pi-play'"
-                  :aria-label="playing ? 'Pause the animation' : 'Play the animation'"
-                  severity="secondary"
-                  rounded
-                  size="small"
-                  @click="togglePlayback"
-                />
-                <SelectButton
-                  v-model="playbackSpeed"
-                  :options="playbackSpeedOptions"
-                  option-label="label"
-                  option-value="value"
-                  :allow-empty="false"
-                  size="small"
-                  rounded
-                />
-              </div>
-            </div>
-            <canvas ref="canvasRef" class="editor-view__canvas-element"></canvas>
-          </div>
-          <TimeSyncPane
-            v-if="editMode === 'view'"
-            :sequences="visibleSequences"
-            :time-seconds="videoTime"
-            :bpm="bpm"
-            @seek="setTimestamp"
-            @scrub-start="onPaneScrubStart"
-            @scrub-end="onPaneScrubEnd"
-          />
-        </SplitterPanel>
-      </Splitter>
+          </SplitterPanel>
+        </Splitter>
+      </div>
+      <div v-if="editMode === 'view'" class="editor-view__player">
+        <Button
+          v-if="isMobile"
+          icon="pi pi-bars"
+          aria-label="Open settings"
+          severity="secondary"
+          text
+          rounded
+          @click="drawerOpen = true"
+        />
+        <Button
+          icon="pi pi-step-backward"
+          aria-label="Back to the earliest time"
+          severity="secondary"
+          rounded
+          size="small"
+          @click="jumpToStart"
+        />
+        <Button
+          :icon="playing ? 'pi pi-pause' : 'pi pi-play'"
+          :aria-label="playing ? 'Pause the animation' : 'Play the animation'"
+          rounded
+          @click="togglePlayback"
+        />
+        <SelectButton
+          v-model="playbackSpeed"
+          :options="playbackSpeedOptions"
+          option-label="label"
+          option-value="value"
+          :allow-empty="false"
+          size="small"
+          rounded
+        />
+      </div>
     </div>
+
+    <!-- Outside view mode there is no playback bar, so the drawer needs its own button. -->
+    <Button
+      v-if="isMobile && editMode !== 'view'"
+      icon="pi pi-bars"
+      aria-label="Open settings"
+      severity="secondary"
+      rounded
+      class="editor-view__drawer-button"
+      @click="drawerOpen = true"
+    />
 
     <Dialog
       v-model:visible="elementChangeOpen"
@@ -2109,9 +1717,6 @@ function closeElementChange() {
         <Button label="Close" severity="secondary" icon="pi pi-times" @click="closeAnnotationChange" />
       </template>
     </Dialog>
-
-    <ConfirmPopup ref="confirmPopupRef" group="editor-delete" />
-    <ConfirmDialog group="editor-save" />
   </div>
 </template>
 
@@ -2121,185 +1726,72 @@ function closeElementChange() {
   flex: 1;
   min-height: 0;
   width: 100%;
-  position: relative;
 }
 
-.editor-view__sidebar {
-  flex: 0 0 360px;
-  width: 360px;
-  height: 100%;
-  overflow-y: auto;
-}
-
-.editor-view__panel {
-  border-radius: 0;
-  min-height: 100%;
-}
-
-.editor-view__panel-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.editor-view__actions {
+.editor-view__main {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-}
-
-.editor-view__actions + .editor-view__actions {
-  margin-top: 1rem;
-}
-
-.editor-view__mode-label {
-  display: block;
-  margin-bottom: 0.25rem;
-  color: var(--p-text-muted-color);
-  font-size: 0.875rem;
-}
-
-.editor-view__sequence-list {
-  width: 100%;
-}
-
-.editor-view__sequence-list :deep(.p-listbox-option) {
-  width: 100%;
-  padding-block: 0.2rem;
-}
-
-.editor-view__sequence-name {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+  height: 100%;
 }
 
-.editor-view__sequence-name :deep(.p-inplace-content) {
-  width: 100%;
-  min-width: 0;
-}
-
-.editor-view__sequence-name :deep(.p-inplace-content .p-inputtext) {
-  width: 100%;
-  min-width: 0;
-}
-
-.editor-view__swatches {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  margin-inline: 0.25rem;
-}
-
-.editor-view__swatch-wrapper {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-}
-
-.editor-view__swatch {
-  display: inline-flex;
-}
-
-.editor-view__swatch :deep(input.p-colorpicker-preview) {
-  display: block;
-  width: 1.25rem;
-  height: 1.25rem;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  font-size: 0;
-  cursor: pointer;
-}
-
-.editor-view__swatch-letter {
-  position: absolute;
-  inset: 0;
+.editor-view__modebar {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.625rem;
-  font-weight: 600;
-  line-height: 1;
-  pointer-events: none;
-  user-select: none;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--p-content-border-color);
+  background: var(--p-content-background);
 }
 
-.editor-view__add-sequence {
-  align-self: flex-start;
+/* The mode tabs span the width, one icon above and one small label below each tab. */
+.editor-view__mode-tabs,
+.editor-view__mode-tabs :deep(.p-tablist-tab-list) {
+  width: 100%;
 }
 
-.editor-view__help {
-  margin-top: 1rem;
-}
-
-.editor-view__unsaved-tag {
-  align-self: flex-start;
-}
-
-.editor-view__scale-checkbox {
+.editor-view__mode-tabs :deep(.p-tab) {
+  flex: 1 1 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.125rem;
+  padding: 0.625rem 0.25rem 0.375rem;
 }
 
-.editor-view__slider-param {
+.editor-view__mode-tabs :deep(.pi) {
+  font-size: 1rem;
+}
+
+.editor-view__mode-name {
+  font-size: 0.75rem;
+  color: var(--p-text-muted-color);
+}
+
+.editor-view__player {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-}
-
-.editor-view__slider-label {
-  color: var(--p-text-muted-color);
-  font-size: 0.875rem;
   flex-shrink: 0;
+  padding: 0.375rem 0.75rem;
+  border-top: 1px solid var(--p-content-border-color);
+  background: var(--p-content-background);
 }
 
-.editor-view__view-param-label {
-  margin-top: 0.75rem;
-}
-
-.editor-view__slider {
-  flex: 1;
-}
-
-.editor-view__hint {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.editor-view__hint-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-  font-size: 0.875rem;
-}
-
-.editor-view__hint-keys {
-  display: flex;
-  gap: 0.25rem;
-  flex-shrink: 0;
-}
-
-.editor-view__hint-separator {
-  display: flex;
-  align-items: center;
-  color: var(--p-text-muted-color);
-}
-
-.editor-view__hint-desc {
-  color: var(--p-text-muted-color);
+/* Outside view mode the drawer button sits alone at the bottom left of the screen. */
+.editor-view__drawer-button {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  z-index: 5;
 }
 
 .editor-view__canvas {
   display: flex;
   flex: 1 1 auto;
   min-width: 0;
-  height: 100%;
-  position: relative;
+  min-height: 0;
   background: white;
 }
 
@@ -2341,7 +1833,6 @@ function closeElementChange() {
 .editor-view__canvas-pane {
   position: relative;
   display: flex;
-  flex-direction: column;
   overflow: hidden;
   background: white;
 }
@@ -2350,43 +1841,18 @@ function closeElementChange() {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
+  width: 100%;
 }
 
-.editor-view__floating-stack {
+/* The elements pane floats above the canvas, so its rows can change without
+   resizing the canvas or the playback bar below. */
+.editor-view__elements {
   position: absolute;
-  top: 1rem;
-  left: 1rem;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: auto;
   z-index: 5;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.5rem;
-}
-
-.editor-view__floating {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-}
-
-.editor-view__backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 35;
-  background: rgba(0, 0, 0, 0.4);
-}
-
-@media (max-width: 767.98px) {
-  .editor-view__sidebar {
-    position: absolute;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    z-index: 40;
-    flex: none;
-    width: min(360px, 85vw);
-    box-shadow: 0.5rem 0 1.5rem rgba(0, 0, 0, 0.2);
-  }
 }
 
 .editor-view__canvas-element {

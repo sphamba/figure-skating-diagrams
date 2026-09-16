@@ -160,7 +160,7 @@ test("the tree loader mounts the player and fills the url", async () => {
   const video = document.querySelector("video");
   expect(video, "the player should mount after load").not.toBeNull();
   expect(video?.getAttribute("src")).toBe("https://example.com/video.mp4");
-  expect(document.querySelector(".home-view__sidebar")?.textContent)?.toContain("https://example.com/video.mp4");
+  expect(document.querySelector(".diagram-sidebar")?.textContent)?.toContain("https://example.com/video.mp4");
   wrapper.unmount();
   vi.unstubAllGlobals();
 });
@@ -171,7 +171,7 @@ test("a failed tree load clears the select and shows an error", async () => {
   await nextTick();
   await nextTick();
   await nextTick();
-  const small = document.querySelector(".home-view__load-error");
+  const small = document.querySelector(".diagram-sidebar__load-error");
   expect(small !== null).toBe(true);
   wrapper.unmount();
   vi.unstubAllGlobals();

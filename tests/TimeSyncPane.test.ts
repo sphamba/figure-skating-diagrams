@@ -25,7 +25,7 @@ function buildSequence(): Sequence {
 async function openPane(sequences: Sequence[], time: number | null): Promise<HTMLElement | null> {
   const wrapper = mount(TimeSyncPane, { props: { sequences, timeSeconds: time, bpm: 120 } });
   await new Promise((resolve) => setTimeout(resolve, 0));
-  const content = document.body.querySelector(".p-drawer-content");
+  const content = wrapper.find(".time-sync-pane").element as HTMLElement | null;
   wrapper.unmount();
   return content;
 }
@@ -69,6 +69,7 @@ function buildFallbackSequence(): Sequence {
 
 test("shows the description below the annotation only after unfolding", async () => {
   const wrapper = mount(TimeSyncPane, {
+    attachTo: document.body,
     props: { sequences: [buildSequence()], timeSeconds: 3.9, bpm: 120 },
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -85,6 +86,7 @@ test("shows the description below the annotation only after unfolding", async ()
 
 test("shows the current element full name below only after the arrow unfolds the strip", async () => {
   const wrapper = mount(TimeSyncPane, {
+    attachTo: document.body,
     props: { sequences: [buildFallbackSequence()], timeSeconds: 4.5, bpm: 120 },
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -125,6 +127,7 @@ test("shows only named elements, with only the current one at full opacity", asy
 
 test("seeks for the element at the center of the strip only when the scroll has settled", async () => {
   const wrapper = mount(TimeSyncPane, {
+    attachTo: document.body,
     props: { sequences: [buildFallbackSequence()], timeSeconds: 4.5, bpm: 120 },
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -150,7 +153,7 @@ test("emits exactly one seek when a pill is clicked with multiple sequences pres
     props: { sequences: [buildFallbackSequence(), buildFallbackSequence()], timeSeconds: 4.5, bpm: 120 },
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
-  const chips = elementChips(document.body.querySelector(".p-drawer-content"));
+  const chips = elementChips(wrapper.find(".time-sync-pane").element);
   chips[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 0));
   // One click is the ground truth: exactly one seek, no reactions from the other strip.
@@ -165,7 +168,7 @@ test("emits seek with the start time of the clicked element", async () => {
     props: { sequences: [buildFallbackSequence()], timeSeconds: 4.5, bpm: 120 },
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
-  const chips = elementChips(document.body.querySelector(".p-drawer-content"));
+  const chips = elementChips(wrapper.find(".time-sync-pane").element);
   const current = chips.find((chip) => !chip.classList.contains("time-sync-pane__chip--dim"));
   current?.dispatchEvent(new MouseEvent("click", { bubbles: true })); // click the current element
   await new Promise((resolve) => setTimeout(resolve, 0));
