@@ -308,6 +308,12 @@ const programmaticUntil = new WeakMap<HTMLElement, number>();
 const lastUserScroll = new WeakMap<HTMLElement, number>();
 
 function markProgrammaticScroll(container: HTMLElement) {
+  // A programmatic scroll is never the continuation of a user gesture. Without
+  // this, a recent click on an element still marks user input, so the automatic
+  // recenter after the seek reads as a scroll gesture and pauses the playback
+  // until the snap settles. A live press is kept: the drag that follows it is
+  // still a user gesture, even without a scroll event yet.
+  if (!pressedPointers.has(container)) userInputUntil.delete(container);
   programmaticUntil.set(container, Date.now() + PROGRAMMATIC_GRACE);
 }
 
@@ -336,6 +342,10 @@ function isUserScrolling(container: HTMLElement): boolean {
 }
 
 const lastSeeked = new Map<Sequence, number>();
+
+// Strips with a pointer pressed down, so a programmatic scroll can tell a live
+// press from a finished click.
+const pressedPointers = new WeakSet<HTMLElement>();
 
 // ---- User scroll gestures ----
 
@@ -402,7 +412,15 @@ function onStripWheel(event: WheelEvent) {
 }
 
 function onStripPointerDown(event: PointerEvent) {
-  markUserInput(event.currentTarget as HTMLElement);
+  const container = event.currentTarget as HTMLElement;
+  pressedPointers.add(container);
+  markUserInput(container);
+}
+
+// A drag right after a pointer release is a new gesture, so a press that
+// outlives its scroll events cannot keep the gesture classification alive.
+function onStripPointerUp(event: PointerEvent) {
+  pressedPointers.delete(event.currentTarget as HTMLElement);
 }
 
 function onStripScroll(event: Event) {
@@ -590,6 +608,8 @@ onBeforeUnmount(() => {
                 :ref="(element) => setStripRef(stripIndex, element)"
                 class="time-sync-pane__strip"
                 @pointerdown="onStripPointerDown"
+                @pointerup="onStripPointerUp"
+                @pointercancel="onStripPointerUp"
                 @wheel="onStripWheel"
                 @scroll="onStripScroll"
                 @scrollend="onStripScrollEnd"
