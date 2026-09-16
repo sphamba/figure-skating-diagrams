@@ -55,7 +55,10 @@ const year = new Date().getFullYear();
   flex-direction: column;
 
   &--full-bleed {
+    /* dvh keeps the layout inside the visible viewport when the mobile
+       browser shows the bottom url or search bar. */
     height: 100vh;
+    height: 100dvh;
     min-height: 0;
     overflow: hidden;
   }

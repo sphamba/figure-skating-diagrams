@@ -26,6 +26,10 @@ export function initCanvas() {
   ctx.scale(SIZE_X / LENGTH, SIZE_Y / WIDTH);
   ctx.translate(ctx.width / 2, ctx.height / 2);
 
-  canvas.style.width = `min(100vw, ${(100 * LENGTH) / WIDTH}vh)`;
-  canvas.style.height = `min(${(100 * WIDTH) / LENGTH}vw, 100vh)`;
+  // dvh keeps the canvas inside the visible viewport when the mobile browser
+  // shows the bottom url or search bar; dvh is not available everywhere.
+  const viewportHeight = CSS.supports("height", "1dvh") ? "100dvh" : "100vh";
+
+  canvas.style.width = `min(100vw, ${(100 * LENGTH) / WIDTH}${viewportHeight})`;
+  canvas.style.height = `min(${(100 * WIDTH) / LENGTH}vw, ${viewportHeight})`;
 }
