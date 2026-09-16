@@ -149,7 +149,10 @@ test("A glide round-trips and keeps its pose keyframes", () => {
   expect(glide).toBeInstanceOf(LeftForwardInsideGlide);
   expect(glide.getLeftFootKeyframes()).toHaveLength(2);
   expect(glide.getRightFootKeyframes()).toHaveLength(2);
-  expect(glide.getHipsKeyframes()).toHaveLength(2);
+  const glideHips = glide.getHipsKeyframes();
+  expect(glideHips).toHaveLength(1);
+  expect(glideHips[0]!.coordinate).toBe(end);
+  expect(glideHips[0]!.data.orientation!.angle).toBeCloseTo(0, 10);
   const onIce = glide.getLeftFootKeyframes()[0]!.data;
   expect(onIce.position!.y).toBeCloseTo(0, 5);
   expect(onIce.position!.z).toBeCloseTo(0, 5);
@@ -174,7 +177,7 @@ test("A turn gives keyframes to the on-ice foot, the free foot and the hips", ()
   expect(free[0]!.data.position!.y).toBeCloseTo(-0.15, 5);
   expect(free[0]!.data.position!.z).toBeCloseTo(0.2, 5);
   expect(free[0]!.data.contactPoint).toBe(0.5);
-  expect(turn.getHipsKeyframes().length).toBeGreaterThanOrEqual(2);
+  expect(turn.getHipsKeyframes().length).toBe(3);
 });
 
 test("The on-ice foot has no shift relative to the centerline at both ends", () => {
@@ -225,4 +228,13 @@ test("Loop hips make a full turn at the start, the center and the end", () => {
   expect(angles[0]).toBeCloseTo(0, 10);
   expect(angles[1]).toBeCloseTo(Math.PI, 10);
   expect(angles[2]).toBeCloseTo(2 * Math.PI, 10);
+  // The hips keyframes reuse the on-ice foot keyframes, but they enter and
+  // exit linearly instead of copying the smooth entry and exit segments.
+  const foot = loop.getLeftFootKeyframes();
+  expect(hips[0]!.transitionIn).toBe(foot[0]!.transitionIn);
+  expect(hips[0]!.transitionOut).toBe("linear");
+  expect(hips[1]!.transitionIn).toBe(foot[1]!.transitionIn);
+  expect(hips[1]!.transitionOut).toBe(foot[1]!.transitionOut);
+  expect(hips[2]!.transitionIn).toBe("linear");
+  expect(hips[2]!.transitionOut).toBe(foot[2]!.transitionOut);
 });

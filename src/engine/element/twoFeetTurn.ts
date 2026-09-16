@@ -145,20 +145,23 @@ export abstract class TwoFeetTurn extends FootTurn {
   }
 
   protected createHipsKeyframes(start: PathCoordinate, end: PathCoordinate): HipsKeyframe[] {
-    const middle = ((start + end) / 2) as PathCoordinate;
-    const angles = [
-      this.initialAngle,
-      this.initialAngle + (this.rotationSign * Math.PI) / 2,
-      this.initialAngle + this.rotationSign * Math.PI,
-    ];
-    const coordinates = [start, middle, end];
+    const footKeyframes = this.createOnIceFootKeyframes(start, end);
+    // Three keyframes at 0%, 50%, and 100%, like the simple one-foot turns: the
+    // coordinates and the transitions copy the on-ice foot keyframes, with
+    // linear entry and exit. The hips rotation direction follows the entry foot
+    // only: a left entry turns clockwise like a left forward inside three turn,
+    // a right entry turns counterclockwise, regardless of the initial
+    // direction. The first angle stays the entry-foot angle, so only the
+    // angles change with it, never the rotation direction.
+    const sign = this.left ? -1 : 1;
+    const angles = [this.initialAngle, this.initialAngle + (sign * Math.PI) / 2, this.initialAngle + sign * Math.PI];
     return angles.map((angle, index) => {
-      const data = { position: new Vector<3>(0, 0, 0), orientation: getQuaternionFromAngleAxis(angle) };
+      const footKeyframe = footKeyframes[index]!;
       return new HipsKeyframe(
-        coordinates[index]!,
-        data,
-        index === 1 ? "linear" : "smooth",
-        index === 1 ? "linear" : "smooth",
+        footKeyframe.coordinate,
+        { position: new Vector<3>(0, 0, 0), orientation: getQuaternionFromAngleAxis(angle) },
+        index === footKeyframes.length - 1 ? "linear" : footKeyframe.transitionIn,
+        index === 0 ? "linear" : footKeyframe.transitionOut,
       );
     });
   }

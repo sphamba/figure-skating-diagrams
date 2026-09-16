@@ -2,12 +2,17 @@
 import Checkbox from "openvue/checkbox";
 import Slider from "openvue/slider";
 
+const showLabels = defineModel<boolean>("showLabels", { required: true });
 const scaleElements = defineModel<boolean>("scaleElements", { required: true });
 const drawRange = defineModel<number>("drawRange", { required: true });
 </script>
 
 <template>
   <div class="diagram-sidebar__options">
+    <div class="diagram-sidebar__scale-checkbox">
+      <Checkbox v-model="showLabels" binary input-id="show-labels" />
+      <label for="show-labels">Show labels</label>
+    </div>
     <div class="diagram-sidebar__scale-checkbox">
       <Checkbox v-model="scaleElements" binary input-id="scale-elements-zoom" />
       <label for="scale-elements-zoom">Scale elements with zoom</label>

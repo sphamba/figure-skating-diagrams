@@ -34,8 +34,13 @@ test("glide registry lists all static and dynamic glide kinds", () => {
 	expect(Object.keys(glideConstructorsByType)).toContain("LeftCrossedBackForwardInsideGlide");
 });
 
-test("a normal forward left glide starts on two feet and lifts the right foot at the end", () => {
+	test("a normal forward left glide starts on two feet and lifts the right foot at the end", () => {
 	const g = glide("LeftNormalForwardInsideGlide");
+
+	const hips = g.getHipsKeyframes();
+	expect(hips).toHaveLength(1);
+	expect(hips[0]!.coordinate).toBe(end);
+	expect(hips[0]!.data.orientation!.angle).toBeCloseTo(0, 10);
 
 	const left = g.getLeftFootKeyframes();
 	expect(left).toHaveLength(3);
@@ -68,6 +73,12 @@ test("a normal backwards glide keeps the keyframe side, the foot orientation mir
 	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 0, start), 0, -SPACING, 0);
 	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 1, T95), FREE_OFFSET, -2 * SPACING, 0);
 	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 2, end), FREE_OFFSET, -2 * SPACING, 0.2);
+
+	const hips = g.getHipsKeyframes();
+	expect(hips).toHaveLength(1);
+	expect(hips[0]!.coordinate).toBe(end);
+	// The backward hips orientation mirrors the glide direction.
+	expect(hips[0]!.data.orientation!.angle).toBeCloseTo(Math.PI, 10);
 });
 
 test("a crossed backwards glide swaps the sides like a crossed forward one", () => {

@@ -17,6 +17,7 @@ import { usePlaybackSpeed } from "@/composables/usePlaybackSpeed";
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 
 const scaleElements = ref(true);
+const showLabels = ref(true);
 
 const isMobile = useMediaQuery("(max-width: 767.98px)");
 const drawerOpen = ref(false);
@@ -121,6 +122,17 @@ watch(
   (value) => {
     if (editor) {
       editor.scaleElements = value;
+      editor.draw();
+    }
+  },
+  { immediate: true },
+);
+
+watch(
+  showLabels,
+  (value) => {
+    if (editor) {
+      editor.showLabels = value;
       editor.draw();
     }
   },
@@ -244,6 +256,7 @@ function createEditor() {
   editor = editorInstance;
   editorInstance.mode = "view";
   editorInstance.scaleElements = scaleElements.value;
+  editorInstance.showLabels = showLabels.value;
   editorInstance.drawRange = store.getDrawRange();
   editorInstance.setHiddenSequences(hiddenSequenceSet.value);
   editorInstance.onVideoTimeChange = (seconds) => setTimestamp(seconds);
@@ -317,6 +330,7 @@ onBeforeUnmount(() => {
     <DiagramSidebar
       v-model:open="drawerOpen"
       v-model:scale-elements="scaleElements"
+      v-model:show-labels="showLabels"
       v-model:draw-range="drawRange"
       mode="home"
       :mobile="isMobile"

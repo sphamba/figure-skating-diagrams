@@ -1,6 +1,6 @@
 import { bladeLength } from "../constants.js";
 import type { PathCoordinate } from "../coordinates.js";
-import { FootKeyframe, type FootData, HipsKeyframe } from "../keyframe.js";
+import { FootKeyframe, type FootData } from "../keyframe.js";
 import { getQuaternionFromAngleAxis } from "../quaternion.js";
 import { Vector } from "../vector.js";
 import { defineOneFootTurnKinds, OneFootTurn } from "./oneFootTurn.js";
@@ -22,29 +22,6 @@ export abstract class Loop extends OneFootTurn {
 
   protected get contactPointTurn(): number {
     return this.forward ? 0 : 1;
-  }
-
-  protected createHipsKeyframes(start: PathCoordinate, end: PathCoordinate): HipsKeyframe[] {
-    const pathCoordinate = ((start + end) / 2) as PathCoordinate;
-    const coordinates = [start, pathCoordinate, end];
-
-    const keyframes: HipsKeyframe[] = [];
-    for (let i = 0; i < 3; i++) {
-      const angle = this.initialAngle + i * this.angleIncrement;
-      const keyframeData = {
-        position: new Vector<3>(0, 0, 0),
-        orientation: getQuaternionFromAngleAxis(angle),
-      };
-
-      const keyframe = new HipsKeyframe(
-        coordinates[i]!,
-        keyframeData,
-        i != 1 ? "smooth" : "linear",
-        i != 1 ? "smooth" : "linear",
-      );
-      keyframes.push(keyframe);
-    }
-    return keyframes;
   }
 
   createOnIceFootKeyframes(start: PathCoordinate, end: PathCoordinate, lateralScale?: number): FootKeyframe[] {

@@ -94,9 +94,12 @@ const SELECTION_RECT_FILL = "rgba(100, 149, 237, 0.2)"; // gentle blue fill
 const SELECTION_RECT_STROKE = "rgba(100, 149, 237, 0.9)";
 const ZOOM_FACTOR = 1.005;
 
-const VIDEO_CIRCLE_RADIUS = 0.25; // m, half of the 0.5 m timestamp circle diameter
-const VIDEO_CIRCLE_MIN_SIZE = 50; // px, minimum on-screen diameter when zoomed out
-const VIDEO_CIRCLE_FILL = "rgba(0, 0, 0, 0.10)";
+const VIDEO_CURSOR_RADIUS = 0.25; // m, half of the 0.5 m cursor circumdiameter
+const VIDEO_CURSOR_MIN_SIZE = 50; // px, minimum on-screen circumdiameter when zoomed out
+const VIDEO_CURSOR_FILL = "rgba(68, 0, 0, 0.2)";
+const VIDEO_CURSOR_REAR_DEPTH = 0.5; // rear corners behind as a fraction of the radius
+const VIDEO_CURSOR_WIDTH = 0.6; // arrowhead width as a fraction of the unthinned width
+const VIDEO_CURSOR_INSET = 0.25; // inset depth behind as a fraction of the radius
 
 const ANNOTATION_SCALE = 0.6; // 0.3 m line width with the 30 px minimum on-screen when zoomed out
 const ANNOTATION_PICK_RADIUS = 15; // px, half of the 30 px highlight line diameter
@@ -143,6 +146,7 @@ export class Editor {
   sequences: Sequence[] = [];
   mode: EditMode = "view";
   scaleElements = true;
+  showLabels = true;
   activeSequence: Sequence | null = null;
 
   private _drawRange = 1;
@@ -163,7 +167,7 @@ export class Editor {
   onVideoTimeChange?: (seconds: number) => void;
   onTimeScrubStart?: () => void;
   onTimeScrubEnd?: () => void;
-  private isDraggingVideoCircle = false;
+  private isDraggingVideoCursor = false;
   private dragVideoSequence: Sequence | null = null;
   private view: ViewState;
 
@@ -341,7 +345,7 @@ export class Editor {
     this.dragSequence = null;
     this.dragElement = null;
     this.touchMode = "none";
-    this.isDraggingVideoCircle = false;
+    this.isDraggingVideoCursor = false;
     this.dragVideoSequence = null;
     this.isDraggingPoint = false;
     this.isDraggingCurve = false;
@@ -482,7 +486,7 @@ export class Editor {
       this.drawRink();
       // Annotations render just above the rink, behind everything else, in every mode.
       this.drawAnnotations();
-      this.drawVideoCircle();
+      this.drawVideoCursor();
       if (this.mode !== "view") {
         for (const sequence of this.sequences) {
           this.drawPath(sequence);
@@ -500,7 +504,7 @@ export class Editor {
         this.drawElements();
       } else if (this.mode === "view") {
         this.drawTraces();
-        this.collectTimingBeatLabels();
+        if (this.showLabels) this.collectTimingBeatLabels();
       } else if (this.mode === "timing") {
         this.drawTimingElements();
         this.drawTimingKeyframes();
@@ -513,12 +517,15 @@ export class Editor {
       if (this.mode === "path" || this.mode === "elements") {
         this.drawCurvatureWarnings();
       }
-      for (const sequence of this.editSequences()) {
-        this.collectElementLabels(sequence);
-        this.collectAnnotationLabels(sequence);
+      // Labels hide only in view mode, so the other edit modes keep their labels.
+      if (this.showLabels || this.mode !== "view") {
+        for (const sequence of this.editSequences()) {
+          this.collectElementLabels(sequence);
+          this.collectAnnotationLabels(sequence);
+        }
+        this.collectInflectionLabels();
+        this.collectStartLabels();
       }
-      this.collectInflectionLabels();
-      this.collectStartLabels();
       this.labelLayer.resolveAndDraw(this.ctx);
     } finally {
       if (this.ctxTransformApplied) {
@@ -544,12 +551,12 @@ export class Editor {
     });
   }
 
-  private getVideoCircleRadius(): number {
-    return Math.max(VIDEO_CIRCLE_RADIUS, VIDEO_CIRCLE_MIN_SIZE / 2 / this.view.zoom);
+  private getVideoCursorRadius(): number {
+    return Math.max(VIDEO_CURSOR_RADIUS, VIDEO_CURSOR_MIN_SIZE / 2 / this.view.zoom);
   }
 
   private getAnnotationLineWidth(): number {
-    return 2 * this.getVideoCircleRadius() * ANNOTATION_SCALE;
+    return 2 * this.getVideoCursorRadius() * ANNOTATION_SCALE;
   }
 
   private setTimeCursorToElementCenter(element: Element) {
@@ -570,7 +577,7 @@ export class Editor {
     this.onVideoTimeChange?.(seconds);
   }
 
-  private getVideoCircleFor(sequence: Sequence): Vector<2> | null {
+  private getVideoCursorPosition(sequence: Sequence): PathCoordinate | null {
     if (this.videoTimeSeconds === null) return null;
     if (!hasTimeEvolution(sequence)) return null;
     const range = sequenceTimeRange(sequence, this.bpm);
@@ -579,18 +586,34 @@ export class Editor {
     if (time < range[0] || time > range[1]) return null;
     const path = sequence.path;
     if (path.curves.length === 0) return null;
-    const u = sequence.getPathCoordinateFromTime(time, this.bpm);
-    return path.getPosition(u);
+    return sequence.getPathCoordinateFromTime(time, this.bpm);
   }
 
-  private hitVideoCircle(screenX: number, screenY: number): Sequence | null {
+  private getVideoCursorPoint(sequence: Sequence): Vector<2> | null {
+    const u = this.getVideoCursorPosition(sequence);
+    return u === null ? null : sequence.path.getPosition(u);
+  }
+
+  private getVideoCursorGeometry(sequence: Sequence): { point: Vector<2>; angle: number } | null {
+    const u = this.getVideoCursorPosition(sequence);
+    if (u === null) return null;
+    // The orientation comes from the path direction and the interpolated hips
+    // keyframes: a sequence without hips orientation data falls back to the path
+    // direction alone.
+    const angle = sequence.keyframes.hips.some((keyframe) => keyframe.data.orientation !== undefined)
+      ? sequence.getFloorAngle("hips", u)
+      : sequence.getFloorAngleFromPath(u);
+    return { point: sequence.path.getPosition(u), angle };
+  }
+
+  private hitVideoCursor(screenX: number, screenY: number): Sequence | null {
     if (this.videoTimeSeconds === null) return null;
     const cursor = this.screenToWorld(screenX, screenY);
-    const tolerance = Math.max(this.getVideoCircleRadius() + 0.05, PICK_RADIUS / this.view.zoom);
+    const tolerance = Math.max(this.getVideoCursorRadius() + 0.05, PICK_RADIUS / this.view.zoom);
     let best: Sequence | null = null;
     let bestDistance = Infinity;
     for (const sequence of this.editSequences()) {
-      const point = this.getVideoCircleFor(sequence);
+      const point = this.getVideoCursorPoint(sequence);
       if (!point) continue;
       const distance = point.minus(cursor).length();
       if (distance <= tolerance && distance < bestDistance) {
@@ -603,7 +626,7 @@ export class Editor {
 
   private hitNearPath(screenX: number, screenY: number): Sequence | null {
     const cursor = this.screenToWorld(screenX, screenY);
-    const tolerance = Math.max(this.getVideoCircleRadius() + 0.05, PICK_RADIUS / this.view.zoom);
+    const tolerance = Math.max(this.getVideoCursorRadius() + 0.05, PICK_RADIUS / this.view.zoom);
     let best: Sequence | null = null;
     let bestDistance = Infinity;
     for (const sequence of this.editSequences()) {
@@ -618,7 +641,7 @@ export class Editor {
     return best;
   }
 
-  private dragVideoCircle(screenX: number, screenY: number) {
+  private dragVideoCursor(screenX: number, screenY: number) {
     const sequence = this.dragVideoSequence ?? this.activeSequence;
     if (!sequence) return;
     const cursor = this.screenToWorld(screenX, screenY);
@@ -629,15 +652,34 @@ export class Editor {
     this.onVideoTimeChange?.(seconds);
   }
 
-  private drawVideoCircle() {
+  private drawVideoCursor() {
     for (const sequence of this.editSequences()) {
-      const point = this.getVideoCircleFor(sequence);
-      if (!point) continue;
+      const geometry = this.getVideoCursorGeometry(sequence);
+      if (!geometry) continue;
       this.drawMetres(() => {
         const ctx = this.ctx;
-        ctx.fillStyle = VIDEO_CIRCLE_FILL;
+        const radius = this.getVideoCursorRadius();
+        // The cursor is an isosceles triangle, tip forward, with a low
+        // triangular inset cut behind. The tip lies on the circle of the former
+        // timestamp circle, so the length stays the same; the arrowhead is
+        // thinned to 60% of the unthinned width.
+        const rear = -VIDEO_CURSOR_REAR_DEPTH * radius;
+        const halfBase = VIDEO_CURSOR_WIDTH * Math.sin(Math.acos(-rear / radius)) * radius;
+        const cos = Math.cos(geometry.angle);
+        const sin = Math.sin(geometry.angle);
+        const rotate = (x: number, y: number): Vector<2> =>
+          new Vector<2>(geometry.point.x + x * cos - y * sin, geometry.point.y + x * sin + y * cos);
+        const vertices = [
+          rotate(radius, 0),
+          rotate(rear, halfBase),
+          rotate(rear + VIDEO_CURSOR_INSET * radius, 0),
+          rotate(rear, -halfBase),
+        ];
+        ctx.fillStyle = VIDEO_CURSOR_FILL;
         ctx.beginPath();
-        ctx.arc(point.x, -point.y, this.getVideoCircleRadius(), 0, 2 * Math.PI);
+        ctx.moveTo(vertices[0]!.x, -vertices[0]!.y);
+        for (const vertex of vertices.slice(1)) ctx.lineTo(vertex.x, -vertex.y);
+        ctx.closePath();
         ctx.fill();
       });
     }
@@ -2364,13 +2406,13 @@ export class Editor {
 
   private startProvisionalCreation(sequence: Sequence, u: number) {
     this.placeProvisionalElement(sequence, u);
-    this.moveVideoCircleToProvisionalElement(sequence);
+    this.moveVideoCursorToProvisionalElement(sequence);
     this.isCreatingProvisional = true;
     this.creatingSequence = sequence;
     this.provisionalOriginU = u;
   }
 
-  private moveVideoCircleToProvisionalElement(sequence: Sequence) {
+  private moveVideoCursorToProvisionalElement(sequence: Sequence) {
     const element = this.provisionalElements.get(sequence);
     if (element) this.setTimeCursorToElementCenter(element);
   }
@@ -2386,7 +2428,7 @@ export class Editor {
     } else {
       this.setProvisionalSpan(sequence, Math.min(origin, u), Math.max(origin, u), origin);
     }
-    this.moveVideoCircleToProvisionalElement(sequence);
+    this.moveVideoCursorToProvisionalElement(sequence);
   }
 
   private placeProvisionalElement(sequence: Sequence, u: number) {
@@ -2870,12 +2912,12 @@ export class Editor {
   }
 
   private handlePrimaryDown(screenX: number, screenY: number, ctrlKey: boolean) {
-    // Panning is the only interaction below the time circle, so in view mode
+    // Panning is the only interaction below the time cursor, so in view mode
     // the circle keeps priority.
     if (this.mode === "view") {
-      const grabbed = this.hitVideoCircle(screenX, screenY);
+      const grabbed = this.hitVideoCursor(screenX, screenY);
       if (grabbed) {
-        this.isDraggingVideoCircle = true;
+        this.isDraggingVideoCursor = true;
         this.dragVideoSequence = grabbed;
         this.onTimeScrubStart?.();
         return;
@@ -2883,10 +2925,10 @@ export class Editor {
       const nearPath = this.hitNearPath(screenX, screenY);
       if (nearPath) {
         // Clicking near the path scrubs the time cursor, so the drag starts at once.
-        this.isDraggingVideoCircle = true;
+        this.isDraggingVideoCursor = true;
         this.dragVideoSequence = nearPath;
         this.onTimeScrubStart?.();
-        this.dragVideoCircle(screenX, screenY);
+        this.dragVideoCursor(screenX, screenY);
         return;
       }
       this.handleSecondaryDown(screenX, screenY);
@@ -2926,9 +2968,9 @@ export class Editor {
         this.draw();
         return;
       }
-      const grabbedTiming = this.hitVideoCircle(screenX, screenY);
+      const grabbedTiming = this.hitVideoCursor(screenX, screenY);
       if (grabbedTiming) {
-        this.isDraggingVideoCircle = true;
+        this.isDraggingVideoCursor = true;
         this.dragVideoSequence = grabbedTiming;
         this.onTimeScrubStart?.();
         return;
@@ -2982,9 +3024,9 @@ export class Editor {
         if (pathHit) {
           this.startProvisionalAnnotationCreation(pathHit.sequence, pathHit.u);
         } else {
-          const grabbedAnnotation = this.hitVideoCircle(screenX, screenY);
+          const grabbedAnnotation = this.hitVideoCursor(screenX, screenY);
           if (grabbedAnnotation) {
-            this.isDraggingVideoCircle = true;
+            this.isDraggingVideoCursor = true;
             this.dragVideoSequence = grabbedAnnotation;
             this.onTimeScrubStart?.();
             return;
@@ -3044,9 +3086,9 @@ export class Editor {
         if (pathHit) {
           this.startProvisionalCreation(pathHit.sequence, pathHit.u);
         } else {
-          const grabbedElement = this.hitVideoCircle(screenX, screenY);
+          const grabbedElement = this.hitVideoCursor(screenX, screenY);
           if (grabbedElement) {
-            this.isDraggingVideoCircle = true;
+            this.isDraggingVideoCursor = true;
             this.dragVideoSequence = grabbedElement;
             this.onTimeScrubStart?.();
             return;
@@ -3144,9 +3186,9 @@ export class Editor {
           this.makeMoveSnapshots(this.sequences.filter((s) => (this.selectedCurves.get(s)?.size ?? 0) > 0));
         }
       } else {
-        const grabbedPath = this.hitVideoCircle(screenX, screenY);
+        const grabbedPath = this.hitVideoCursor(screenX, screenY);
         if (grabbedPath) {
-          this.isDraggingVideoCircle = true;
+          this.isDraggingVideoCursor = true;
           this.dragVideoSequence = grabbedPath;
           this.onTimeScrubStart?.();
           return;
@@ -3164,8 +3206,8 @@ export class Editor {
   }
 
   private handleMove(screenX: number, screenY: number) {
-    if (this.isDraggingVideoCircle) {
-      this.dragVideoCircle(screenX, screenY);
+    if (this.isDraggingVideoCursor) {
+      this.dragVideoCursor(screenX, screenY);
       this.requestDraw();
       return;
     }
@@ -3811,8 +3853,8 @@ export class Editor {
     this.isPanning = false;
     this.isDraggingPoint = false;
     this.isDraggingCurve = false;
-    const wasScrubbing = this.isDraggingVideoCircle;
-    this.isDraggingVideoCircle = false;
+    const wasScrubbing = this.isDraggingVideoCursor;
+    this.isDraggingVideoCursor = false;
     this.dragVideoSequence = null;
     this.isDraggingElementPoint = false;
     this.isDraggingElementSegment = false;

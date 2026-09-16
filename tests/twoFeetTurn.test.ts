@@ -175,6 +175,18 @@ test("A backward choctaw keeps the same midpoint foot placement rule", () => {
 
   const hips = choctaw.getHipsKeyframes();
   expectOrientation(hips[0], Math.PI);
+  // The left entry turns clockwise regardless of the backward direction.
+  expectOrientation(hips[1], Math.PI / 2);
+  expectOrientation(hips[2], 0);
+});
+
+test("A right backward choctaw turns counterclockwise like the right entry", () => {
+  const choctaw = new RightBackwardOpenChoctaw("footR", start, end);
+
+  const hips = choctaw.getHipsKeyframes();
+  expect(hips).toHaveLength(3);
+  expectOrientation(hips[0], Math.PI);
+  // The right entry turns counterclockwise regardless of the backward direction.
   expectOrientation(hips[1], (3 * Math.PI) / 2);
   expectOrientation(hips[2], 2 * Math.PI);
 });
@@ -195,8 +207,9 @@ test("A backward mohawk places the entry foot behind and the free foot ahead at 
 
   const hips = mohawk.getHipsKeyframes();
   expectOrientation(hips[0], Math.PI);
-  expectOrientation(hips[1], (3 * Math.PI) / 2);
-  expectOrientation(hips[2], 2 * Math.PI);
+  // The left entry turns clockwise regardless of the backward direction.
+  expectOrientation(hips[1], Math.PI / 2);
+  expectOrientation(hips[2], 0);
 });
 
 test("Mohawk and choctaw modules list eight variants each", () => {

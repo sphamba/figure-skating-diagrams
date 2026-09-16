@@ -186,21 +186,32 @@ export abstract class Jump extends Element {
   }
 
   getHipsKeyframes(spanScale?: number): HipsKeyframe[] {
-    const [start, end] = this.keyframeSpan(spanScale);
-    return [
-      new HipsKeyframe(
-        start,
-        { position: new Vector<3>(0, 0, 0), orientation: getQuaternionFromAngleAxis(0) },
-        "smooth",
-        "smooth",
-      ),
-      new HipsKeyframe(
-        end,
-        { position: new Vector<3>(0, 0, 0), orientation: getQuaternionFromAngleAxis(0) },
-        "smooth",
-        "smooth",
-      ),
-    ];
+    const [spanStart, spanEnd] = this.keyframeSpan(spanScale);
+    const start = spanStart as number;
+    const span = (spanEnd as number) - start;
+    // A backward take off turns rotations times; the forward axel take off
+    // adds the half turn of the backwards landing. The rotation is
+    // counterclockwise.
+    const takeOffAngle = this.takeOffForward ? 0 : Math.PI;
+    const quarters = this.takeOffForward ? 4 * this.rotations + 2 : 4 * this.rotations;
+    const keyframes: HipsKeyframe[] = [];
+    for (let i = 0; i <= quarters; i++) {
+      const coordinate = (start + span * (0.1 + (0.85 * i) / quarters)) as PathCoordinate;
+      keyframes.push(
+        new HipsKeyframe(coordinate, {
+          position: new Vector<3>(0, 0, 0),
+          orientation: getQuaternionFromAngleAxis(takeOffAngle + (i * Math.PI) / 2),
+        }),
+      );
+    }
+    if (!this.leftHanded) return keyframes;
+    return keyframes.map(
+      (keyframe) =>
+        new HipsKeyframe(keyframe.coordinate, {
+          position: keyframe.data.position!.copy(),
+          orientation: keyframe.data.orientation!.copy().conjugate(),
+        }),
+    );
   }
 
   toJSON(): JumpJSON {

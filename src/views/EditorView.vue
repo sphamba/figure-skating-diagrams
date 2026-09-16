@@ -55,6 +55,7 @@ const editModeOptions = [
 ];
 const editMode = ref<EditMode>("view");
 const scaleElements = ref(true);
+const showLabels = ref(true);
 
 const isMobile = useMediaQuery("(max-width: 767.98px)");
 const drawerOpen = ref(false);
@@ -1023,11 +1024,24 @@ watch(
   { immediate: true },
 );
 
+watch(
+  showLabels,
+  (value) => {
+    if (editor) {
+      editor.showLabels = value;
+      editor.draw();
+    }
+  },
+  { immediate: true },
+);
+
 onMounted(() => {
   if (!canvasRef.value) return;
   const editorInstance = new Editor(canvasRef.value, sequences.value);
   editor = editorInstance;
   editorInstance.setHiddenSequences(hiddenSequenceSet.value);
+  editorInstance.scaleElements = scaleElements.value;
+  editorInstance.showLabels = showLabels.value;
 
   editorInstance.onVideoTimeChange = (seconds) => setTimestamp(seconds);
   editorInstance.onTimeScrubStart = () => {
@@ -1469,6 +1483,7 @@ function closeElementChange() {
     <DiagramSidebar
       v-model:open="drawerOpen"
       v-model:scale-elements="scaleElements"
+      v-model:show-labels="showLabels"
       v-model:draw-range="drawRange"
       mode="editor"
       :mobile="isMobile"

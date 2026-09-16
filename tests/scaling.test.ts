@@ -43,7 +43,7 @@ test("a glide keeps the real span under a span scale", () => {
 
   const glide = sequence.elements[0];
   expect(glide!.getLeftFootKeyframes(2).map((keyframe) => keyframe.coordinate)).toEqual([0.3, 0.7]);
-  expect(glide!.getHipsKeyframes(2).map((keyframe) => keyframe.coordinate)).toEqual([0.3, 0.7]);
+  expect(glide!.getHipsKeyframes(2).map((keyframe) => keyframe.coordinate)).toEqual([0.7]);
 
   expect(sequence.getDrawFootKeyframes("footL", 2).map((keyframe) => keyframe.coordinate)).toEqual([0.3, 0.7]);
 });

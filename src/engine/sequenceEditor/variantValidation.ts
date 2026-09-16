@@ -42,12 +42,11 @@ function isFootOnIce(sequence: Sequence, footKey: FootKey, u: PathCoordinate): b
   return contactRotated.z <= 0;
 }
 
-// Mirrors the trace drawing construction of the blade direction: the toe lies
-// along the local positive x axis, rotated by the foot then the path frame.
+// The direction matches the getWorldForwardDirection construction used by the
+// trace drawing: the toe lies along the local positive x axis, rotated by the
+// interpolated foot then the path frame.
 function footPointsForward(sequence: Sequence, footKey: FootKey, u: PathCoordinate): boolean {
-  const relativeOrientation = sequence.getInterpolatedValue(footKey, "orientation", u) as Quaternion;
-  const footDirection = new Vector<3>(1, 0, 0).rotate(relativeOrientation);
-  const footDirectionWorld = footDirection.rotate(sequence.getPathOrientation(u));
+  const footDirectionWorld = sequence.getWorldForwardDirection(footKey, u);
   const tangent = sequence.path.getDerivative(u).normalized();
   return tangent.x * footDirectionWorld.x + tangent.y * footDirectionWorld.y > 0;
 }

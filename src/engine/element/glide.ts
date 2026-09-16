@@ -67,19 +67,13 @@ export abstract class Glide extends Element {
   }
 
   getHipsKeyframes(_spanScale?: number): HipsKeyframe[] {
+    // Single hips keyframe at the element end: the hips orientation follows the
+    // glide direction. The glide keeps the real span, so no span scale applies.
     return [
-      new HipsKeyframe(
-        this.start,
-        { position: new Vector<3>(0, 0, 0), orientation: getQuaternionFromAngleAxis(0) },
-        "smooth",
-        "smooth",
-      ),
-      new HipsKeyframe(
-        this.end,
-        { position: new Vector<3>(0, 0, 0), orientation: getQuaternionFromAngleAxis(0) },
-        "smooth",
-        "smooth",
-      ),
+      new HipsKeyframe(this.end, {
+        position: new Vector<3>(0, 0, 0),
+        orientation: getQuaternionFromAngleAxis(this.forward ? 0 : Math.PI),
+      }),
     ];
   }
 

@@ -93,20 +93,32 @@ export abstract class Spin extends Element {
   }
 
   getHipsKeyframes(_spanScale?: number): HipsKeyframe[] {
-    return [
-      new HipsKeyframe(
-        this.start,
-        { position: new Vector<3>(0, 0, 0), orientation: getQuaternionFromAngleAxis(0) },
-        "smooth",
-        "smooth",
-      ),
-      new HipsKeyframe(
-        this.end,
-        { position: new Vector<3>(0, 0, 0), orientation: getQuaternionFromAngleAxis(0) },
-        "smooth",
-        "smooth",
-      ),
-    ];
+    // Entry and exit orientations match the on-ice foot; the spin keeps the
+    // real span, so no span scale applies. In between, keyframes sit every
+    // quarter turn and linearly cover the revolutions: a right-handed spin
+    // rotates counterclockwise, a left-handed spin clockwise, like the feet.
+    const entryAngle = this.backwardOrientation ? Math.PI : 0;
+    const sign = this.rightHanded ? 1 : -1;
+    const quarters = 4 * this.spinRevolutions;
+    const start = this.start as number;
+    const span = (this.end as number) - start;
+    const keyframes: HipsKeyframe[] = [];
+    for (let i = 0; i <= quarters; i++) {
+      keyframes.push(
+        new HipsKeyframe((start + (span * i) / quarters) as PathCoordinate, {
+          position: new Vector<3>(0, 0, 0),
+          orientation: getQuaternionFromAngleAxis(entryAngle + (sign * i * Math.PI) / 2),
+        }),
+      );
+    }
+    if (!this.leftHanded) return keyframes;
+    return keyframes.map(
+      (keyframe) =>
+        new HipsKeyframe(keyframe.coordinate, {
+          position: keyframe.data.position!.copy(),
+          orientation: keyframe.data.orientation!.copy().conjugate(),
+        }),
+    );
   }
 
   toJSON(): SpinJSON {

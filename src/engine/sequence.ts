@@ -584,7 +584,7 @@ export class Sequence {
         drawKeyframes,
       ) as Vector<3>;
 
-      const footRelativeDirection = new Vector<3>(1, 0, 0).rotate(footRelativeOrientation);
+      const footRelativeDirection = getRelativeForwardDirection(footRelativeOrientation);
 
       let contactRelativePosition = footRelativePosition.copy();
       contactRelativePosition.x += (contactPoint - 0.5) * drawBladeLength;
@@ -759,7 +759,7 @@ export class Sequence {
       ctx.lineWidth = minTraceWidth === undefined ? traceWidth : Math.max(traceWidth, minTraceWidth);
       // A backwards foot uses a dashed line: dash length "step", space "step",
       // where "step" is the real-length draw increment of the current zoom level.
-      const backwards = new Vector<3>(1, 0, 0).rotate(data.orientation).x < 0;
+      const backwards = getRelativeForwardDirection(data.orientation).x < 0;
       ctx.setLineDash(backwards ? [step, step] : []);
       for (const coordinate of circleCoordinates) {
         const pathOrientation = this.getPathOrientation(coordinate);
@@ -839,6 +839,19 @@ export class Sequence {
     return getQuaternionFromAngleAxis(pathAngle);
   }
 
+  getWorldForwardDirection(partKey: FootOrHipsKey, pathCoordinate: PathCoordinate): Vector<3> {
+    const orientation = this.getInterpolatedValue(partKey, "orientation", pathCoordinate) as Quaternion;
+    return getRelativeForwardDirection(orientation).rotate(this.getPathOrientation(pathCoordinate));
+  }
+
+  getFloorAngle(partKey: FootOrHipsKey, pathCoordinate: PathCoordinate): number {
+    return getFloorAngleFromDirection(this.getWorldForwardDirection(partKey, pathCoordinate));
+  }
+
+  getFloorAngleFromPath(pathCoordinate: PathCoordinate): number {
+    return getFloorAngleFromDirection(this.getPathDirection(pathCoordinate));
+  }
+
   getKeyframesAround<
     Key extends FootOrHipsKey,
     KeyframeType extends SequenceKeyframes[Key][number],
@@ -868,13 +881,13 @@ export class Sequence {
     const keyframeBeforeIndex = Math.max(0, keyframeAfterIndex - 1);
     const keyframeBefore = filtered[keyframeBeforeIndex]!;
 
-    let relativeCoordinate =
-      (coordinate - keyframeBefore.coordinate) / (keyframeAfter.coordinate - keyframeBefore.coordinate);
-    relativeCoordinate = Math.max(0, Math.min(1, relativeCoordinate));
+    // Coincident keyframes (also a single keyframe at the exact coordinate) have
+    // no span to interpolate over: the eased coordinate stays 0.
+    const coordinateDelta = keyframeAfter.coordinate - keyframeBefore.coordinate;
+    const relativeCoordinate = coordinateDelta === 0 ? 0 : (coordinate - keyframeBefore.coordinate) / coordinateDelta;
+    const relative = Math.max(0, Math.min(1, relativeCoordinate)) as Relative;
 
-    const easedCoordinate = getEasedTime(keyframeBefore, keyframeAfter, relativeCoordinate as Relative);
-
-    return [keyframeBefore, keyframeAfter, easedCoordinate as Relative];
+    return [keyframeBefore, keyframeAfter, relative];
   }
 
   getInterpolatedValue<
@@ -923,6 +936,14 @@ function getEasedTime(
   }
 
   return easedCoordinate;
+}
+
+function getFloorAngleFromDirection(direction: Vector<3>): number {
+  return Math.atan2(direction.y, direction.x);
+}
+
+function getRelativeForwardDirection(orientation: Quaternion): Vector<3> {
+  return new Vector<3>(1, 0, 0).rotate(orientation);
 }
 
 function getTraceWidth(

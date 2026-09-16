@@ -15,6 +15,7 @@ import type { CanvasRenderingContext2DSized } from "../src/engine/rinkCanvas.js"
 import { Curve } from "../src/engine/curve.js";
 import { Path } from "../src/engine/path.js";
 import { Vector } from "../src/engine/vector.js";
+import type { Quaternion } from "../src/engine/quaternion.js";
 
 const start = 0;
 const end = 2;
@@ -205,6 +206,35 @@ test("the on-ice foot orientation depends on foot, edge and handedness", () => {
 			instance.onIceFoot === "footL" ? instance.getLeftFootKeyframes() : instance.getRightFootKeyframes();
 		const direction = new Vector<3>(1, 0, 0).rotate(keyframes[0].data.orientation!);
 		expect(direction.x).toBeCloseTo(expected === "forward" ? 1 : -1, 10);
+	}
+});
+
+test("spin hips match the on-ice foot at entry and exit and sweep the revolutions", () => {
+	// A right-handed spin rotates counterclockwise from the on-ice foot orientation.
+	const right = spin("RightInsideSpin", false, 1); // forward on-ice foot orientation
+	const hips = right.getHipsKeyframes();
+	expect(hips).toHaveLength(5); // entry + one keyframe per quarter turn
+	for (let i = 0; i < 5; i++) {
+		expect(hips[i]!.coordinate).toBeCloseTo(start + ((end - start) * i) / 4, 10);
+		const expectedAngle = (i * Math.PI) / 2; // forward entry angle, ccw rotation
+		expect(hips[i]!.data.orientation!.real).toBeCloseTo(Math.cos(expectedAngle / 2), 10);
+		expect(hips[i]!.data.orientation!.vector.z).toBeCloseTo(Math.sin(expectedAngle / 2), 10);
+	}
+	// The entry and the exit keep the on-ice foot orientation.
+	const footDirection = new Vector<3>(1, 0, 0).rotate(right.getRightFootKeyframes()[0].data.orientation!);
+	const hipsDirection = new Vector<3>(1, 0, 0).rotate(hips[0].data.orientation!);
+	expect(hipsDirection.x).toBeCloseTo(footDirection.x, 10);
+	const exitHipsDirection = new Vector<3>(1, 0, 0).rotate(hips[4].data.orientation!);
+	expect(exitHipsDirection.x).toBeCloseTo(footDirection.x, 10);
+
+	// A left-handed spin mirrors the hips rotation like the feet: the entry
+	// direction flips and the sweep rotates the mirrored way.
+	const left = spin("RightInsideSpin", true, 1);
+	const leftHips = left.getHipsKeyframes();
+	const directionX = (keyframe: { data: { orientation?: Quaternion } }) =>
+		new Vector(1, 0, 0).rotate(keyframe.data.orientation!).x;
+	for (let i = 0; i < leftHips.length; i++) {
+		expect(directionX(leftHips[i])).toBeCloseTo(-directionX(hips[i]), 10);
 	}
 });
 

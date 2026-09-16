@@ -11,7 +11,7 @@ function jump(typeName: string): Jump {
 	return new (jumpConstructorsByType[typeName] as unknown as new (start: number, end: number) => Jump)(start, end);
 }
 
-test("jumps scale visually along the path line with the span scale like turns", () => {
+	test("jumps scale visually along the path line with the span scale like turns", () => {
 	const toeLoop = jump("ToeLoop1");
 	expect(toeLoop.scalable).toBe(true);
 	for (const keyframes of [toeLoop.getLeftFootKeyframes(2), toeLoop.getRightFootKeyframes(2)]) {
@@ -19,8 +19,9 @@ test("jumps scale visually along the path line with the span scale like turns", 
 			[expect.closeTo(-1, 10), expect.closeTo(-0.6, 10), expect.closeTo(1, 10), expect.closeTo(2.8, 10), expect.closeTo(3, 10)],
 		);
 	}
+	// Hips keyframes: one at the 10% take off, then every quarter turn to the 95% landing.
 	expect(toeLoop.getHipsKeyframes(2).map((keyframe) => keyframe.coordinate)).toEqual(
-		[expect.closeTo(-1, 10), expect.closeTo(3, 10)],
+		[expect.closeTo(-0.6, 10), expect.closeTo(0.25, 10), expect.closeTo(1.1, 10), expect.closeTo(1.95, 10), expect.closeTo(2.8, 10)],
 	);
 });
 
@@ -250,6 +251,36 @@ test("a left-handed jump mirrors the feet, the lateral shifts and the orientatio
 	expect(takeOff[3]!.data.toePick).toBe(true);
 	expect(takeOff[4]!.data.position!.y).toBeCloseTo(-halfFeetSpacing, 10);
 	expect(takeOff[4]!.data.contactPoint).toBeCloseTo(0.5, 10);
+});
+
+test("jump hips take off by the jump and land backwards, sweeping the revolutions", () => {
+	// A backward take-off jump turns rotations times: 4 quarter-turn keyframes over 1 revolution.
+	const toeLoop = jump("ToeLoop1");
+	const hips = toeLoop.getHipsKeyframes();
+	expect(hips).toHaveLength(5); // take off + one keyframe per quarter turn
+	expect(hips[0]!.coordinate).toBeCloseTo(0.2, 10);
+	expect(hips[4]!.coordinate).toBeCloseTo(1.9, 10);
+	// The quaternion real component is cos(angle / 2).
+	for (let i = 0; i < 5; i++) {
+		expect(hips[i]!.data.orientation!.real).toBeCloseTo(Math.cos((Math.PI + (i * Math.PI) / 2) / 2), 10);
+	}
+
+	// The forward axel take off adds the backward landing half turn.
+	const axel = jump("Axel1");
+	const axelHips = axel.getHipsKeyframes();
+	expect(axelHips).toHaveLength(7); // take off + 6 quarter turns
+	for (let i = 0; i < 7; i++) {
+		expect(axelHips[i]!.data.orientation!.real).toBeCloseTo(Math.cos((i * Math.PI) / 4), 10);
+	}
+
+	// Left-handed jumps mirror the rotation the same way the feet do.
+	const left = Jump.fromJSON({ type: "ToeLoop1", start, end, leftHanded: true });
+	const leftHips = left.getHipsKeyframes();
+	const rightHips = toeLoop.getHipsKeyframes();
+	for (let i = 0; i < leftHips.length; i++) {
+		expect(leftHips[i]!.data.orientation!.real).toBeCloseTo(rightHips[i]!.data.orientation!.real, 10);
+		expect(leftHips[i]!.data.orientation!.vector.z).toBeCloseTo(-rightHips[i]!.data.orientation!.vector.z, 10);
+	}
 });
 
 test("left-handed jumps round-trip through JSON and jumps default to right-handed", () => {

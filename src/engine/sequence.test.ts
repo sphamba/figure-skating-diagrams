@@ -3,6 +3,8 @@ import { Path } from "./path";
 import { Vector } from "./vector";
 import { Sequence } from "./sequence";
 import { createDefaultFootTurn } from "./element/turnTypes";
+import { LeftForwardInsideGlide } from "./element/glide";
+import { LeftForwardInsideThreeTurn } from "./element/threeTurn";
 
 function makeSequence(): { sequence: Sequence; start: number; end: number } {
   const path = new Path();
@@ -53,6 +55,38 @@ describe("path real lengths", () => {
 
     for (let u = 0.4; u <= path.length - 0.4; u += 0.5) {
       expect(path.arcLengthBetween((u - 0.4) as never, (u + 0.4) as never)).toBeCloseTo(0.8, 2);
+    }
+  });
+});
+
+describe("sequence-level hips keyframes", () => {
+  it("a single glide keeps finite hips orientation at the exact element end", () => {
+    const path = new Path();
+    path.addCurveEnd();
+    const sequence = new Sequence(path);
+    sequence.addElement(new LeftForwardInsideGlide(0 as never, 1 as never));
+
+    expect(sequence.keyframes.hips).toHaveLength(1);
+    expect(sequence.keyframes.hips[0]!.coordinate).toBe(1);
+    expect(sequence.keyframes.hips[0]!.data.orientation!.real).toBeCloseTo(1, 10);
+    // The single keyframe gives no span to interpolate over, so the angle stays finite.
+    expect(Number.isFinite(sequence.getFloorAngle("hips", 1 as never))).toBe(true);
+    expect(Number.isFinite(sequence.getFloorAngle("hips", path.length as never))).toBe(true);
+  });
+
+  it("a glide followed by a turn interpolates the hips across the boundary", () => {
+    const path = new Path();
+    path.addCurveEnd();
+    const sequence = new Sequence(path);
+    sequence.addElement(new LeftForwardInsideGlide(0 as never, 1 as never));
+    sequence.addElement(new LeftForwardInsideThreeTurn("footL", 1 as never, 2 as never));
+
+    const coordinates = sequence.keyframes.hips.map((keyframe) => keyframe.coordinate);
+    expect(coordinates).toEqual([1, 1.001, 1.5, 2]);
+    // The glide keeps its forward hips orientation from a single keyframe.
+    expect(sequence.keyframes.hips[0]!.data.orientation!.real).toBeCloseTo(1, 10);
+    for (const u of [0.0, 0.5, 1, 1.25, 1.75, 2]) {
+      expect(Number.isFinite(sequence.getFloorAngle("hips", u as never))).toBe(true);
     }
   });
 });

@@ -11,7 +11,8 @@ import { glideConstructorsByType, LeftForwardOutsideGlide } from "../src/engine/
 import { jumpConstructorsByType } from "../src/engine/element/jump";
 import type { Element } from "../src/engine/element/element";
 import { LeftNormalForwardInsideGlide } from "../src/engine/element/stroke";
-import { TimingKeyframe } from "../src/engine/keyframe";
+import { HipsKeyframe, TimingKeyframe } from "../src/engine/keyframe";
+import { getQuaternionFromAngleAxis } from "../src/engine/quaternion";
 import { Annotation } from "../src/engine/annotation";
 
 function makeStraightPath(): Path {
@@ -443,6 +444,84 @@ test("a hidden sequence draws dim traces and skips the mode overlays", () => {
   arcs = 0;
   editor.draw();
   expect(arcs).toBe(visibleVertices);
+
+  editor.destroy();
+});
+
+test("view mode draws the element, annotation, and beat labels", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "view";
+  const ctx = canvas.getContext() as unknown as Record<string, unknown>;
+  const drawn: string[] = [];
+  ctx.fillText = (text: string) => {
+    drawn.push(String(text));
+  };
+
+  const sequence = editor.getSequences()[0];
+  sequence.addElement(new LeftForwardOutsideGlide(0.2 as PathCoordinate, 0.6 as PathCoordinate));
+  sequence.addAnnotation(new Annotation(0 as PathCoordinate, 1 as PathCoordinate));
+  sequence.keyframes.time = [
+    new TimingKeyframe(0.2 as PathCoordinate, "time", 1),
+    new TimingKeyframe(0.8 as PathCoordinate, "beats", 4),
+  ];
+  editor.draw();
+
+  expect(drawn).toContain("LFO");
+  expect(drawn).toContain("Annotation");
+  expect(drawn).toContain("4");
+
+  editor.destroy();
+});
+
+test("view mode draws no labels when the show labels option is off", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "view";
+  const ctx = canvas.getContext() as unknown as Record<string, unknown>;
+  const drawn: string[] = [];
+  ctx.fillText = (text: string) => {
+    drawn.push(String(text));
+  };
+
+  const sequence = editor.getSequences()[0];
+  const crossed = new (glideConstructorsByType["LeftCrossedBackwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => LeftNormalForwardInsideGlide)(0.2 as PathCoordinate, 0.6 as PathCoordinate);
+  sequence.addElement(crossed);
+  // A second curve with the opposite curvature draws an uncovered CE label.
+  sequence.path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(4 / 3, -1 / 3), new Vector(5 / 3, -2 / 3), new Vector(2, -4)));
+  sequence.addAnnotation(new Annotation(0 as PathCoordinate, 1 as PathCoordinate));
+  sequence.keyframes.time = [
+    new TimingKeyframe(0.2 as PathCoordinate, "time", 1),
+    new TimingKeyframe(0.8 as PathCoordinate, "beats", 4),
+  ];
+  editorRef(editor).showLabels = false;
+  editor.draw();
+
+  expect(drawn, "the option must hide every pill in view mode").toEqual([]);
+
+  editor.destroy();
+});
+
+test("hidden labels come back in the edit modes with the show labels option off", () => {
+  const { editor, canvas } = makeEditor();
+  const ctx = canvas.getContext() as unknown as Record<string, unknown>;
+  const drawn: string[] = [];
+  ctx.fillText = (text: string) => {
+    drawn.push(String(text));
+  };
+
+  editor.getSequences()[0].addElement(new LeftForwardOutsideGlide(0.2 as PathCoordinate, 0.6 as PathCoordinate));
+  editorRef(editor).showLabels = false;
+
+  editorRef(editor).mode = "view";
+  editor.draw();
+  expect(drawn).toEqual([]);
+
+  drawn.length = 0;
+  editorRef(editor).mode = "elements";
+  editor.draw();
+  expect(drawn).toContain("LFO");
 
   editor.destroy();
 });
@@ -1163,7 +1242,7 @@ test("a click within the cursor draw radius but beyond the pick radius still mov
   const sx = (wx: number) => 512 + wx * zoom;
   const sy = (wy: number) => 512 - wy * zoom;
   const mid = path.getPosition((path.length / 2) as PathCoordinate);
-  expect(editorRef(editor).getVideoCircleRadius()).toBeGreaterThan(1.1);
+  expect(editorRef(editor).getVideoCursorRadius()).toBeGreaterThan(1.1);
 
   // 1 m off the path: beyond the PICK_RADIUS tolerance, within the cursor draw radius.
   mouse("mousedown", canvas, { clientX: sx(mid.x), clientY: sy(1), button: 0, ctrlKey: false });
@@ -1195,12 +1274,12 @@ test("clicking near the path in view mode places the time cursor at the nearest 
   const sx = (wx: number) => 512 + wx * zoom;
   const sy = (wy: number) => 512 - wy * zoom;
   const mid = path.getPosition((path.length / 2) as PathCoordinate);
-  // 4 px off the path on screen: within the pick tolerance, and the time circle is
+  // 4 px off the path on screen: within the pick tolerance, and the time cursor is
   // hidden so the click cannot hit it.
   const off = 4 / zoom;
 
   mouse("mousedown", canvas, { clientX: sx(mid.x), clientY: sy(mid.y - off), button: 0, ctrlKey: false });
-  expect(editorRef(editor).isDraggingVideoCircle).toBe(true);
+  expect(editorRef(editor).isDraggingVideoCursor).toBe(true);
   expect(editorRef(editor).dragVideoSequence).toBe(editor.getSequences()[0]);
   expect(editor.videoTimeSeconds).toBeCloseTo(2, 3);
   expect(reported).toBeCloseTo(2, 3);
@@ -1226,7 +1305,7 @@ test("clicking far from the path in view mode pans and leaves the time cursor al
   const centerX = editorRef(editor).view.center.x;
   const centerY = editorRef(editor).view.center.y;
 
-  // 2 m off the path: far from both the time circle and the pick tolerance.
+  // 2 m off the path: far from both the time cursor and the pick tolerance.
   mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(2), button: 0, ctrlKey: false });
   mouse("mousemove", window, { clientX: sx(0) + 10, clientY: sy(2) + 10 });
   mouse("mouseup", window, {});
@@ -1254,17 +1333,18 @@ test("each edited sequence shows a synchronized time cursor for the same time", 
   const { editor, canvas } = makeTwoSequences();
   editorRef(editor).mode = "view";
   const ctx = canvas.getContext() as unknown as Record<string, unknown>;
-  const arcs: { x: number; y: number }[] = [];
-  ctx.arc = (x: number, y: number) => arcs.push({ x, y });
+  const tips: { x: number; y: number }[] = [];
+  ctx.moveTo = (x: number, y: number) => tips.push({ x, y });
 
   editor.videoTimeSeconds = 1; // time 4 over the full path resolves to a quarter of the length
-  editorRef(editor).drawVideoCircle();
+  editorRef(editor).drawVideoCursor();
 
-  expect(arcs).toHaveLength(2);
-  const ys = arcs.map((arc) => arc.y).sort((a, b) => a - b);
+  expect(tips).toHaveLength(2);
+  const radius = editorRef(editor).getVideoCursorRadius();
+  const ys = tips.map((tip) => tip.y).sort((a, b) => a - b);
   expect(ys[0]).toBeCloseTo(-4, 6);
   expect(ys[1]).toBeCloseTo(0, 6);
-  for (const arc of arcs) expect(arc.x).toBeCloseTo(0.25, 6);
+  for (const tip of tips) expect(tip.x).toBeCloseTo(0.25 + radius, 6);
   editor.destroy();
 });
 
@@ -1273,39 +1353,60 @@ test("a hidden sequence does not show or pick a time cursor", () => {
   editorRef(editor).mode = "view";
   editor.setHiddenSequences(new Set([second]));
   const ctx = canvas.getContext() as unknown as Record<string, unknown>;
-  const arcs: { x: number; y: number }[] = [];
-  ctx.arc = (x: number, y: number) => arcs.push({ x, y });
+  const tips: { x: number; y: number }[] = [];
+  ctx.moveTo = (x: number, y: number) => tips.push({ x, y });
 
   editor.videoTimeSeconds = 1;
-  editorRef(editor).drawVideoCircle();
-  expect(arcs).toHaveLength(1);
-  expect(arcs[0]!.y).toBeCloseTo(0, 6);
-  expect(arcs[0]!.x).toBeCloseTo(0.25, 6);
+  editorRef(editor).drawVideoCursor();
+  expect(tips).toHaveLength(1);
+  expect(tips[0]!.y).toBeCloseTo(0, 6);
+  expect(tips[0]!.x).toBeCloseTo(0.25 + editorRef(editor).getVideoCursorRadius(), 6);
 
   const zoom = editorRef(editor).view.zoom;
   const sx = (wx: number) => 512 + wx * zoom;
   const sy = (wy: number) => 512 - wy * zoom;
-  // No circle is drawn on the hidden sequence, so no cursor is picked under it.
-  expect(editorRef(editor).hitVideoCircle(sx(0.25), sy(4))).toBe(null);
+  // No cursor is drawn on the hidden sequence, so no cursor is picked under it.
+  expect(editorRef(editor).hitVideoCursor(sx(0.25), sy(4))).toBe(null);
   editor.destroy();
 });
 
-test("clicking a sequence's time circle scrubs that sequence's path", () => {
+test("the time cursor takes its orientation from the interpolated hips keyframes", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "view";
+  const first = editor.getSequences()[0];
+  first.addKeyframe("time", new TimingKeyframe(1 as PathCoordinate, "time", 4));
+  for (const u of [0, 1]) {
+    first.addKeyframe("hips", new HipsKeyframe(u as PathCoordinate, { orientation: getQuaternionFromAngleAxis(Math.PI) }));
+  }
+  const ctx = canvas.getContext() as unknown as Record<string, unknown>;
+  const tips: { x: number; y: number }[] = [];
+  ctx.moveTo = (x: number, y: number) => tips.push({ x, y });
+
+  editor.videoTimeSeconds = 1; // time 4 over the full path resolves to a quarter of the length
+  editorRef(editor).drawVideoCursor();
+  expect(tips).toHaveLength(1);
+  // The hips orientation of Math.PI flips the cursor: the tip points backward.
+  expect(tips[0]!.y).toBeCloseTo(0, 6);
+  expect(tips[0]!.x).toBeCloseTo(0.25 - editorRef(editor).getVideoCursorRadius(), 6);
+  editor.destroy();
+});
+
+test("clicking a sequence's time cursor scrubs that sequence's path", () => {
   const { editor, canvas, first, second } = makeTwoSequences();
   editorRef(editor).mode = "view";
   const zoom = editorRef(editor).view.zoom;
   const sx = (wx: number) => 512 + wx * zoom;
   const sy = (wy: number) => 512 - wy * zoom;
 
-  editor.videoTimeSeconds = 0; // circles at the path starts: (0, 0) and (0, 4)
+  editor.videoTimeSeconds = 0; // cursors at the path starts: (0, 0) and (0, 4)
   mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(0), button: 0, ctrlKey: false });
-  expect(editorRef(editor).isDraggingVideoCircle).toBe(true);
+  expect(editorRef(editor).isDraggingVideoCursor).toBe(true);
   expect(editorRef(editor).dragVideoSequence).toBe(first);
   mouse("mousemove", window, { clientX: sx(0.5), clientY: sy(0) });
   expect(editor.videoTimeSeconds).toBeCloseTo(2, 3);
   mouse("mouseup", window, {});
 
-  // The second sequence's circle sits at its own path midpoint of the same time.
+  // The second sequence's cursor sits at its own path midpoint of the same time.
   mouse("mousedown", canvas, { clientX: sx(0.5), clientY: sy(4), button: 0, ctrlKey: false });
   expect(editorRef(editor).dragVideoSequence).toBe(second);
   mouse("mousemove", window, { clientX: sx(0.25), clientY: sy(4) });
@@ -1332,7 +1433,7 @@ test("clicking an element in elements mode moves the time cursor of every edited
 
   // The shared scalar places a cursor on the other sequence at its own midpoint.
   const second = editor.getSequences()[1];
-  expect(editorRef(editor).hitVideoCircle(
+  expect(editorRef(editor).hitVideoCursor(
     sx(second.path.getPosition((second.path.length / 2) as PathCoordinate).x),
     sy(4),
   )).toBe(second);
@@ -1343,41 +1444,42 @@ test("an out-of-range time draws and picks no time cursor, while a range-edge ti
   const { editor, canvas, first, second } = makeTwoSequences();
   editorRef(editor).mode = "view";
   const ctx = canvas.getContext() as unknown as Record<string, unknown>;
-  const arcs: { x: number; y: number }[] = [];
-  ctx.arc = (x: number, y: number) => arcs.push({ x, y });
+  const tips: { x: number; y: number }[] = [];
+  ctx.moveTo = (x: number, y: number) => tips.push({ x, y });
 
   // Both sequences cover [0, 4] seconds, so 5 is beyond the range of each.
   editor.videoTimeSeconds = 5;
-  editorRef(editor).drawVideoCircle();
-  expect(arcs).toHaveLength(0);
+  editorRef(editor).drawVideoCursor();
+  expect(tips).toHaveLength(0);
   const zoom = editorRef(editor).view.zoom;
   const sx = (wx: number) => 512 + wx * zoom;
   const sy = (wy: number) => 512 - wy * zoom;
-  expect(editorRef(editor).hitVideoCircle(sx(0.25), sy(0))).toBe(null);
+  expect(editorRef(editor).hitVideoCursor(sx(0.25), sy(0))).toBe(null);
 
   // The range edge itself stays inside the range: the cursor sits at the path ends.
-  arcs.length = 0;
+  tips.length = 0;
+  const radius = editorRef(editor).getVideoCursorRadius();
   editor.videoTimeSeconds = 4;
-  editorRef(editor).drawVideoCircle();
-  expect(arcs).toHaveLength(2);
-  for (const arc of arcs) expect(arc.x).toBeCloseTo(1, 6);
-  expect(editorRef(editor).hitVideoCircle(sx(1), sy(0))).toBe(first);
+  editorRef(editor).drawVideoCursor();
+  expect(tips).toHaveLength(2);
+  for (const tip of tips) expect(tip.x).toBeCloseTo(1 + radius, 6);
+  expect(editorRef(editor).hitVideoCursor(sx(1), sy(0))).toBe(first);
 
   // The lower range edge stays inside the range too.
-  arcs.length = 0;
+  tips.length = 0;
   editor.videoTimeSeconds = 0;
-  editorRef(editor).drawVideoCircle();
-  expect(arcs).toHaveLength(2);
-  for (const arc of arcs) expect(arc.x).toBeCloseTo(0, 6);
-  expect(editorRef(editor).hitVideoCircle(sx(0), sy(0))).toBe(first);
+  editorRef(editor).drawVideoCursor();
+  expect(tips).toHaveLength(2);
+  for (const tip of tips) expect(tip.x).toBeCloseTo(radius, 6);
+  expect(editorRef(editor).hitVideoCursor(sx(0), sy(0))).toBe(first);
   expect(second.path.length).toBe(1);
 
-  arcs.length = 0;
+  tips.length = 0;
   editor.videoTimeSeconds = 0;
-  editorRef(editor).drawVideoCircle();
-  expect(arcs).toHaveLength(2);
-  for (const arc of arcs) expect(arc.x).toBeCloseTo(0, 6);
-  expect(editorRef(editor).hitVideoCircle(sx(0), sy(0))).toBe(first);
+  editorRef(editor).drawVideoCursor();
+  expect(tips).toHaveLength(2);
+  for (const tip of tips) expect(tip.x).toBeCloseTo(radius, 6);
+  expect(editorRef(editor).hitVideoCursor(sx(0), sy(0))).toBe(first);
   editor.destroy();
 });
 
@@ -1388,17 +1490,17 @@ test("a sequence without time evolution shows and picks no time cursor", () => {
   expect(first.keyframes.time).toHaveLength(1);
   editorRef(editor).mode = "view";
   const ctx = canvas.getContext() as unknown as Record<string, unknown>;
-  const arcs: { x: number; y: number }[] = [];
-  ctx.arc = (x: number, y: number) => arcs.push({ x, y });
+  const tips: { x: number; y: number }[] = [];
+  ctx.moveTo = (x: number, y: number) => tips.push({ x, y });
 
   editor.videoTimeSeconds = 0;
-  editorRef(editor).drawVideoCircle();
-  expect(arcs).toHaveLength(0);
+  editorRef(editor).drawVideoCursor();
+  expect(tips).toHaveLength(0);
 
   const zoom = editorRef(editor).view.zoom;
   const sx = (wx: number) => 512 + wx * zoom;
   const sy = (wy: number) => 512 - wy * zoom;
-  expect(editorRef(editor).hitVideoCircle(sx(0), sy(0))).toBe(null);
+  expect(editorRef(editor).hitVideoCursor(sx(0), sy(0))).toBe(null);
   editor.destroy();
 });
 
@@ -1413,21 +1515,21 @@ test("a time within one edited sequence's range but outside another's shows a cu
   editor.setSequences([first, second]);
   editorRef(editor).mode = "view";
   const ctx = canvas.getContext() as unknown as Record<string, unknown>;
-  const arcs: { x: number; y: number }[] = [];
-  ctx.arc = (x: number, y: number) => arcs.push({ x, y });
+  const tips: { x: number; y: number }[] = [];
+  ctx.moveTo = (x: number, y: number) => tips.push({ x, y });
 
   editor.videoTimeSeconds = 3; // inside the [0, 4] range of the first, beyond the [0, 2] range of the second
-  editorRef(editor).drawVideoCircle();
-  expect(arcs).toHaveLength(1);
-  expect(arcs[0]!.x).toBeCloseTo(0.75, 6);
-  expect(arcs[0]!.y).toBeCloseTo(0, 6);
+  editorRef(editor).drawVideoCursor();
+  expect(tips).toHaveLength(1);
+  expect(tips[0]!.x).toBeCloseTo(0.75 + editorRef(editor).getVideoCursorRadius(), 6);
+  expect(tips[0]!.y).toBeCloseTo(0, 6);
 
   const zoom = editorRef(editor).view.zoom;
   const sx = (wx: number) => 512 + wx * zoom;
   const sy = (wy: number) => 512 - wy * zoom;
-  expect(editorRef(editor).hitVideoCircle(sx(0.75), sy(0))).toBe(first);
-  // The second sequence has no circle under a time beyond its range.
-  expect(editorRef(editor).hitVideoCircle(sx(0.75), sy(4))).toBe(null);
+  expect(editorRef(editor).hitVideoCursor(sx(0.75), sy(0))).toBe(first);
+  // The second sequence has no cursor under a time beyond its range.
+  expect(editorRef(editor).hitVideoCursor(sx(0.75), sy(4))).toBe(null);
   editor.destroy();
 });
 

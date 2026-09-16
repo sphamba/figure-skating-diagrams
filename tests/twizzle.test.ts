@@ -43,9 +43,20 @@ test.each([
   const twizzle = makeTwizzle(`LeftForwardInsideTwizzle${turns}`);
 
   expect(twizzle.getLeftFootKeyframes()).toHaveLength(keyframeCount);
-  // hips and free foot come from the one-foot turn base behavior
+  // The free foot still comes from the one-foot turn base behavior; the hips
+  // keyframes reuse the on-ice foot keyframes, so they match the same count.
   expect(twizzle.getRightFootKeyframes()).toHaveLength(2);
-  expect(twizzle.getHipsKeyframes()).toHaveLength(2);
+  const hips = twizzle.getHipsKeyframes();
+  expect(hips).toHaveLength(keyframeCount);
+  // The hips keyframes reuse the on-ice foot keyframes, so the interior
+  // transitions match; the entry and the exit are linear instead of smooth.
+  const foot = twizzle.getLeftFootKeyframes();
+  for (let i = 1; i < hips.length - 1; i++) {
+    expect(hips[i]!.transitionIn).toBe(foot[i]!.transitionIn);
+    expect(hips[i]!.transitionOut).toBe(foot[i]!.transitionOut);
+  }
+  expect(hips[0]!.transitionOut).toBe("linear");
+  expect(hips[hips.length - 1]!.transitionIn).toBe("linear");
 });
 
 test("A 1/2-turn twizzle has the same on-ice foot keyframes as a three-turn", () => {

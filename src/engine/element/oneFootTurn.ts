@@ -28,7 +28,20 @@ export abstract class OneFootTurn extends FootTurn {
 
   getHipsKeyframes(spanScale?: number): HipsKeyframe[] {
     const [start, end] = this.keyframeSpan(spanScale);
-    return this.createHipsKeyframes(start, end);
+    // The hips turn with the on-ice foot: the hips keyframes reuse the on-ice
+    // foot keyframes, their orientations, and their transition smoothness. A
+    // regular one-foot turn yields three keyframes, at 0%, 50%, and 100%. The
+    // hips enter and exit linearly: the first and the last keyframe give up the
+    // copied smooth transitions, so the eased segments stay linear.
+    const footKeyframes = this.createOnIceFootKeyframes(start, end);
+    return footKeyframes.map((footKeyframe, index) => {
+      return new HipsKeyframe(
+        footKeyframe.coordinate,
+        { position: new Vector<3>(0, 0, 0), orientation: footKeyframe.data.orientation },
+        index === footKeyframes.length - 1 ? "linear" : footKeyframe.transitionIn,
+        index === 0 ? "linear" : footKeyframe.transitionOut,
+      );
+    });
   }
 
   private partFootKeyframes(footKey: "footL" | "footR", spanScale?: number, lateralScale?: number): FootKeyframe[] {
@@ -48,14 +61,6 @@ export abstract class OneFootTurn extends FootTurn {
       toePick: false,
     };
     return [new FootKeyframe(start, data, "smooth", "smooth"), new FootKeyframe(end, data, "smooth", "smooth")];
-  }
-
-  protected createHipsKeyframes(start: PathCoordinate, end: PathCoordinate): HipsKeyframe[] {
-    const data = {
-      position: new Vector<3>(0, 0, 0),
-      orientation: getQuaternionFromAngleAxis(this.forward ? 0 : Math.PI),
-    };
-    return [new HipsKeyframe(start, data, "smooth", "smooth"), new HipsKeyframe(end, data, "smooth", "smooth")];
   }
 
   protected abstract createOnIceFootKeyframes(

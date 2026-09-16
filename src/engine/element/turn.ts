@@ -1,7 +1,7 @@
 import { bladeLength } from "../constants.js";
 import type { PathCoordinate } from "../coordinates.js";
 import { Element } from "./element.js";
-import type { FootKeyframe, HipsKeyframe } from "../keyframe.js";
+import type { FootKeyframe } from "../keyframe.js";
 import type { FootKey } from "../sequence.js";
 
 export const defaultFootTurnLength = (bladeLength * 1.6) as PathCoordinate; // path units
@@ -56,8 +56,6 @@ export abstract class FootTurn extends Element {
     end: PathCoordinate,
     lateralScale?: number,
   ): FootKeyframe[];
-
-  protected abstract createHipsKeyframes(start: PathCoordinate, end: PathCoordinate): HipsKeyframe[];
 
   toJSON(): FootTurnJSON {
     return {
