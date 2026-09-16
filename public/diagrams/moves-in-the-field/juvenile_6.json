@@ -1,0 +1,431 @@
+{
+  "name": "Juvenile 6 - Forward Double Three Turns",
+  "sequences": [
+    {
+      "name": "Outside",
+      "traceColorL": "#3030d2",
+      "traceColorR": "#9c0000",
+      "path": {
+        "curves": [
+          {
+            "p0": [
+              -7.619866419445871,
+              27.999197468472392
+            ],
+            "p1": [
+              -15.033249984767902,
+              27.938432029412375
+            ],
+            "p2": [
+              -14.741776070512131,
+              16.87866072209109
+            ],
+            "p3": [
+              -7.587304525796682,
+              16.878660722091094
+            ]
+          },
+          {
+            "p0": [
+              -7.587304525796682,
+              16.878660722091094
+            ],
+            "p1": [
+              -0.43283298108123347,
+              16.878660722091098
+            ],
+            "p2": [
+              0.0018569458209301004,
+              5.786867476475944
+            ],
+            "p3": [
+              -7.7857632975659055,
+              5.749679440268805
+            ]
+          },
+          {
+            "p0": [
+              -7.7857632975659055,
+              5.749679440268805
+            ],
+            "p1": [
+              -15.57338354095274,
+              5.712491404061666
+            ],
+            "p2": [
+              -14.945019985033,
+              -5.83694937163418
+            ],
+            "p3": [
+              -7.749906151812942,
+              -5.885566920185332
+            ]
+          },
+          {
+            "p0": [
+              -7.749906151812942,
+              -5.885566920185332
+            ],
+            "p1": [
+              -0.5547923185928827,
+              -5.934184468736484
+            ],
+            "p2": [
+              -0.6245649802092625,
+              -16.69017127855471
+            ],
+            "p3": [
+              -7.734121350231213,
+              -16.629405839494694
+            ]
+          },
+          {
+            "p0": [
+              -7.734121350231213,
+              -16.629405839494694
+            ],
+            "p1": [
+              -14.843677720253165,
+              -16.568640400434678
+            ],
+            "p2": [
+              -14.816154124567834,
+              -27.931008831118234
+            ],
+            "p3": [
+              -7.472812610540496,
+              -27.931008831118234
+            ]
+          }
+        ]
+      },
+      "keyframes": {
+        "footL": [],
+        "footR": [],
+        "hips": [],
+        "time": [
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 0,
+            "data": {
+              "type": "time",
+              "value": 0
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 87.89489692175201,
+            "data": {
+              "type": "time",
+              "value": 20
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          }
+        ]
+      },
+      "elements": [
+        {
+          "type": "LeftForwardOutsideThreeTurn",
+          "start": 5.059901956931851,
+          "end": 5.895916690067763,
+          "shortName": "LFO3"
+        },
+        {
+          "type": "LeftBackwardInsideThreeTurn",
+          "start": 10.679620116067166,
+          "end": 11.51563484920308,
+          "shortName": "LBI3"
+        },
+        {
+          "type": "RightNormalForwardOutsideGlide",
+          "start": 17.115456880680902,
+          "end": 17.88019693165696,
+          "shortName": ""
+        },
+        {
+          "type": "RightForwardOutsideThreeTurn",
+          "start": 23.297759290265926,
+          "end": 24.15417071798096,
+          "shortName": "RFO3"
+        },
+        {
+          "type": "RightBackwardInsideThreeTurn",
+          "start": 28.81484706566134,
+          "end": 29.671276576604363,
+          "shortName": "RBI3"
+        },
+        {
+          "type": "LeftNormalForwardOutsideGlide",
+          "start": 34.744569996383724,
+          "end": 35.585189128140705,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardOutsideThreeTurn",
+          "start": 40.92813327455928,
+          "end": 41.75304732694466,
+          "shortName": "LFO3"
+        },
+        {
+          "type": "LeftBackwardInsideThreeTurn",
+          "start": 46.98752273024891,
+          "end": 47.81243676794537,
+          "shortName": "LBI3"
+        },
+        {
+          "type": "RightNormalForwardOutsideGlide",
+          "start": 52.81892101518213,
+          "end": 53.64728377916819,
+          "shortName": ""
+        },
+        {
+          "type": "RightForwardOutsideThreeTurn",
+          "start": 58.74455032289528,
+          "end": 59.625939842839216,
+          "shortName": "RFO3"
+        },
+        {
+          "type": "RightBackwardInsideThreeTurn",
+          "start": 64.39016504628805,
+          "end": 65.20286720425969,
+          "shortName": "RBI3"
+        },
+        {
+          "type": "LeftNormalForwardOutsideGlide",
+          "start": 70.00156634742153,
+          "end": 70.81442489131676,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardOutsideThreeTurn",
+          "start": 76.13973659732382,
+          "end": 76.94334286061992,
+          "shortName": "LFO3"
+        },
+        {
+          "type": "LeftBackwardInsideThreeTurn",
+          "start": 81.68524099448302,
+          "end": 82.48884725777911,
+          "shortName": "LBI3"
+        }
+      ],
+      "annotations": []
+    },
+    {
+      "name": "Inside",
+      "traceColorL": "#3030d2",
+      "traceColorR": "#9c0000",
+      "path": {
+        "curves": [
+          {
+            "p0": [
+              7.88772157171287,
+              -28.015175123288238
+            ],
+            "p1": [
+              15.07371191320761,
+              -28.080502308210917
+            ],
+            "p2": [
+              15.066984435067933,
+              -16.99781591160584
+            ],
+            "p3": [
+              7.817668459484232,
+              -16.89103087330156
+            ]
+          },
+          {
+            "p0": [
+              7.817668459484232,
+              -16.89103087330156
+            ],
+            "p1": [
+              0.5683524839005312,
+              -16.78424583499728
+            ],
+            "p2": [
+              0.3860983048720792,
+              -5.785528760457536
+            ],
+            "p3": [
+              7.725582246327999,
+              -5.719983766471053
+            ]
+          },
+          {
+            "p0": [
+              7.725582246327999,
+              -5.719983766471053
+            ],
+            "p1": [
+              15.06506618778392,
+              -5.6544387724845695
+            ],
+            "p2": [
+              15.06506618778392,
+              5.45118266437094
+            ],
+            "p3": [
+              7.631873548850223,
+              5.451024028145216
+            ]
+          },
+          {
+            "p0": [
+              7.631873548850223,
+              5.451024028145216
+            ],
+            "p1": [
+              0.19868090991652565,
+              5.450865391919493
+            ],
+            "p2": [
+              -0.037088882957156066,
+              16.854566491563695
+            ],
+            "p3": [
+              7.487112736753102,
+              16.883440025839846
+            ]
+          },
+          {
+            "p0": [
+              7.487112736753102,
+              16.883440025839846
+            ],
+            "p1": [
+              15.01131435646336,
+              16.912313560115997
+            ],
+            "p2": [
+              15.1303933727066,
+              27.858407092849998
+            ],
+            "p3": [
+              7.421785551830422,
+              27.989061462695357
+            ]
+          }
+        ]
+      },
+      "keyframes": {
+        "footL": [],
+        "footR": [],
+        "hips": [],
+        "time": [
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 0,
+            "data": {
+              "type": "time",
+              "value": 20
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 88.31230151842105,
+            "data": {
+              "type": "time",
+              "value": 40
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          }
+        ]
+      },
+      "elements": [
+        {
+          "type": "RightForwardInsideThreeTurn",
+          "start": 5.102240082268359,
+          "end": 5.899249558572833,
+          "shortName": "RFI3"
+        },
+        {
+          "type": "RightBackwardOutsideThreeTurn",
+          "start": 11.06802484200984,
+          "end": 11.865052600556055,
+          "shortName": "RBO3"
+        },
+        {
+          "type": "LeftNormalForwardInsideGlide",
+          "start": 17.146927562698973,
+          "end": 17.95180890045642,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardInsideThreeTurn",
+          "start": 22.81867755959368,
+          "end": 23.61865271496189,
+          "shortName": "LFI3"
+        },
+        {
+          "type": "LeftBackwardOutsideThreeTurn",
+          "start": 28.41076928316879,
+          "end": 29.210769283168787,
+          "shortName": "LBO3"
+        },
+        {
+          "type": "RightNormalForwardInsideGlide",
+          "start": 34.55416218382934,
+          "end": 35.354181405646415,
+          "shortName": ""
+        },
+        {
+          "type": "RightForwardInsideThreeTurn",
+          "start": 40.34990247712787,
+          "end": 41.14988543743075,
+          "shortName": "RFI3"
+        },
+        {
+          "type": "RightBackwardOutsideThreeTurn",
+          "start": 45.624625419075855,
+          "end": 46.42462541907585,
+          "shortName": "RBO3"
+        },
+        {
+          "type": "LeftNormalForwardInsideGlide",
+          "start": 52.22340731358573,
+          "end": 53.0270363712427,
+          "shortName": "LFI"
+        },
+        {
+          "type": "LeftForwardInsideThreeTurn",
+          "start": 58.254799960778925,
+          "end": 59.06054185332611,
+          "shortName": "LFI3"
+        },
+        {
+          "type": "LeftBackwardOutsideThreeTurn",
+          "start": 64.07913775940396,
+          "end": 64.88496304963012,
+          "shortName": "LBO3"
+        },
+        {
+          "type": "RightNormalForwardInsideGlide",
+          "start": 70.09651092950111,
+          "end": 70.9023998744557,
+          "shortName": "RFI"
+        },
+        {
+          "type": "RightForwardInsideThreeTurn",
+          "start": 76.23184914716984,
+          "end": 77.03773990826537,
+          "shortName": "RFI3"
+        },
+        {
+          "type": "RightBackwardOutsideThreeTurn",
+          "start": 81.96795189580962,
+          "end": 82.82146316519983,
+          "shortName": "RBO3"
+        }
+      ],
+      "annotations": []
+    }
+  ]
+}
