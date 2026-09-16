@@ -47,10 +47,15 @@ export function clampAnnotationSpan(start: number, end: number, left: number, ri
 }
 
 const RINK_COLOR = "#ddd";
-const RINK_CENTERLINE_COLOR = "#fff";
-const RINK_CENTERLINE_WIDTH = 3; // px on screen
-const RINK_CENTERLINE_DASH = 10; // dash, px on screen
-const RINK_CENTERLINE_GAP = 6; // gap, px on screen
+const RINK_BLUE_COLOR = "#eee"; // blue lines, center face-off circle, goal creases
+const RINK_RED_COLOR = "#eee"; // center line, goal lines, face-off circles
+const RINK_MARKING_WIDTH = 0.1; // m when zoomed in
+const RINK_MARKING_MIN_WIDTH = 3; // px on screen when zoomed out
+const RINK_GOAL_LINE_OFFSET = 4; // m from each end board
+const RINK_FACEOFF_CIRCLE_RADIUS = 4.5; // m, center and end-zone circles
+const RINK_FACEOFF_SPOT_LATERAL = 7; // m, end-zone spot lateral offset from the length axis
+const RINK_FACEOFF_SPOT_LONGITUDINAL = 6; // m, end-zone spot distance from the goal line
+const RINK_CREASE_RADIUS = 1.8; // m, goal crease semicircle
 const PATH_WIDTH = 1; // px
 const MIN_TRACE_WIDTH = 2; // px
 const MIN_BLADE_LENGTH = 25; // px, only effective when zoomed out
@@ -1133,33 +1138,64 @@ export class Editor {
     ctx.fillRect(-width / 2, -height / 2, width, height);
     ctx.strokeRect(-width / 2, -height / 2, width, height);
 
-    // drawMetres cancels CANVAS_SCALE, so the dash pattern divided by zoom stays constant on-screen;
-    // a half-dash offset from each line start mirrors the dashes around the rink center.
     this.drawMetres(() => {
-      ctx.strokeStyle = RINK_CENTERLINE_COLOR;
-      ctx.lineWidth = RINK_CENTERLINE_WIDTH / this.view.zoom;
       ctx.lineCap = "butt";
-      if (typeof ctx.setLineDash === "function") {
-        ctx.setLineDash([RINK_CENTERLINE_DASH / this.view.zoom, RINK_CENTERLINE_GAP / this.view.zoom]);
-      }
-      const ends: Array<[number, number]> = [
-        [-WIDTH / 2, 0],
-        [WIDTH / 2, 0],
-        [0, -LENGTH / 2],
-        [0, LENGTH / 2],
-      ];
-      for (const [endX, endY] of ends) {
-        ctx.lineDashOffset = RINK_CENTERLINE_DASH / 2 / this.view.zoom;
+      ctx.lineWidth = Math.max(RINK_MARKING_WIDTH, RINK_MARKING_MIN_WIDTH / this.view.zoom);
+      const line = (x0: number, y0: number, x1: number, y1: number) => {
         ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(endX, endY);
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+      };
+      const goalY = LENGTH / 2 - RINK_GOAL_LINE_OFFSET;
+      const blueY = goalY - (LENGTH - 2 * RINK_GOAL_LINE_OFFSET) / 3;
+
+      ctx.strokeStyle = RINK_BLUE_COLOR;
+      for (const y of [blueY, -blueY]) {
+        line(-WIDTH / 2, y, WIDTH / 2, y);
+      }
+      ctx.strokeStyle = RINK_RED_COLOR;
+      line(-WIDTH / 2, 0, WIDTH / 2, 0);
+      const goalHalfWidth = this.zoneLineHalfWidth(goalY);
+      for (const y of [goalY, -goalY]) {
+        line(-goalHalfWidth, y, goalHalfWidth, y);
+      }
+
+      ctx.strokeStyle = RINK_BLUE_COLOR;
+      ctx.beginPath();
+      ctx.arc(0, 0, RINK_FACEOFF_CIRCLE_RADIUS, 0, 2 * Math.PI);
+      ctx.stroke();
+      for (const sign of [1, -1]) {
+        const start = sign > 0 ? Math.PI : 0;
+        ctx.beginPath();
+        ctx.arc(0, sign * goalY, RINK_CREASE_RADIUS, start, start + Math.PI);
         ctx.stroke();
       }
-      ctx.lineDashOffset = 0;
-      if (typeof ctx.setLineDash === "function") {
-        ctx.setLineDash([]);
+
+      ctx.strokeStyle = RINK_RED_COLOR;
+      for (const signX of [1, -1]) {
+        for (const signY of [1, -1]) {
+          ctx.beginPath();
+          ctx.arc(
+            signX * RINK_FACEOFF_SPOT_LATERAL,
+            signY * (goalY - RINK_FACEOFF_SPOT_LONGITUDINAL),
+            RINK_FACEOFF_CIRCLE_RADIUS,
+            0,
+            2 * Math.PI,
+          );
+          ctx.stroke();
+        }
       }
     });
+  }
+
+  // Half width of the rink outline at a given metre y, so end-zone lines stay inside
+  // the rounded corners.
+  private zoneLineHalfWidth(y: number): number {
+    const straight = LENGTH / 2 - CORNER_RADIUS;
+    const centerY = WIDTH / 2 - CORNER_RADIUS;
+    if (Math.abs(y) <= straight) return WIDTH / 2;
+    return centerY + Math.sqrt(CORNER_RADIUS ** 2 - (Math.abs(y) - straight) ** 2);
   }
 
   private drawPath(sequence: Sequence) {
