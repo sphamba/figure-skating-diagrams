@@ -1590,7 +1590,7 @@ function closeElementChange() {
           </SplitterPanel>
         </Splitter>
       </div>
-      <div v-if="editMode === 'view'" class="editor-view__player">
+      <div class="editor-view__player">
         <Button
           v-if="isMobile"
           icon="pi pi-bars"
@@ -1598,44 +1598,37 @@ function closeElementChange() {
           severity="secondary"
           text
           rounded
+          class="editor-view__player-menu"
           @click="drawerOpen = true"
         />
-        <Button
-          icon="pi pi-step-backward"
-          aria-label="Back to the earliest time"
-          severity="secondary"
-          rounded
-          size="small"
-          @click="jumpToStart"
-        />
-        <Button
-          :icon="playing ? 'pi pi-pause' : 'pi pi-play'"
-          :aria-label="playing ? 'Pause the animation' : 'Play the animation'"
-          rounded
-          @click="togglePlayback"
-        />
-        <SelectButton
-          v-model="playbackSpeed"
-          :options="playbackSpeedOptions"
-          option-label="label"
-          option-value="value"
-          :allow-empty="false"
-          size="small"
-          rounded
-        />
+        <div class="editor-view__player-controls">
+          <Button
+            icon="pi pi-step-backward"
+            aria-label="Back to the earliest time"
+            severity="secondary"
+            rounded
+            size="small"
+            @click="jumpToStart"
+          />
+          <Button
+            :icon="playing ? 'pi pi-pause' : 'pi pi-play'"
+            :aria-label="playing ? 'Pause the animation' : 'Play the animation'"
+            rounded
+            @click="togglePlayback"
+          />
+          <SelectButton
+            v-model="playbackSpeed"
+            :options="playbackSpeedOptions"
+            option-label="label"
+            option-value="value"
+            :allow-empty="false"
+            size="small"
+            rounded
+            aria-label="Playback speed"
+          />
+        </div>
       </div>
     </div>
-
-    <!-- Outside view mode there is no playback bar, so the drawer needs its own button. -->
-    <Button
-      v-if="isMobile && editMode !== 'view'"
-      icon="pi pi-bars"
-      aria-label="Open settings"
-      severity="secondary"
-      rounded
-      class="editor-view__drawer-button"
-      @click="drawerOpen = true"
-    />
 
     <Dialog
       v-model:visible="elementChangeOpen"
@@ -2043,19 +2036,18 @@ function closeElementChange() {
 .editor-view__player {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
   flex-shrink: 0;
   padding: 0.375rem 0.75rem;
   border-top: 1px solid var(--p-content-border-color);
   background: var(--p-content-background);
 }
 
-/* Outside view mode the drawer button sits alone at the bottom left of the screen. */
-.editor-view__drawer-button {
-  position: absolute;
-  bottom: 1rem;
-  left: 1rem;
-  z-index: 5;
+/* The hamburger keeps its container gap; the controls group centers on the bar. */
+.editor-view__player-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 auto;
 }
 
 .editor-view__canvas {
@@ -2200,17 +2192,6 @@ function closeElementChange() {
   width: 320px;
   max-width: 90vw;
   min-width: 0;
-}
-
-.editor-view__save-dialog {
-  width: 320px;
-  max-width: 90vw;
-  min-width: 0;
-}
-
-.editor-view__save-dialog .p-dialog-content {
-  display: flex;
-  flex-direction: column;
 }
 
 .editor-view__annotation-dialog {

@@ -1114,7 +1114,7 @@ test("dragging a p0 joint keeps timing keyframes fixed relative to their curves"
   editor.destroy();
 });
 
-test("a jump label is shifted in path, elements and timing modes and centered in view mode", () => {
+test("a jump label is shifted in path and elements modes and centered in view mode", () => {
   const { editor, canvas } = makeEditor();
   const ctx = canvas.getContext() as unknown as Record<string, unknown>;
   const drawn: { text: string; x: number; y: number; font: string }[] = [];
@@ -1127,7 +1127,7 @@ test("a jump label is shifted in path, elements and timing modes and centered in
   sequence.addElement(jump);
 
   let shiftedFont = "";
-  for (const mode of ["elements", "path", "timing"] as const) {
+  for (const mode of ["elements", "path"] as const) {
     editorRef(editor).mode = mode;
     drawn.length = 0;
     editor.draw();
@@ -1153,6 +1153,14 @@ test("a jump label is shifted in path, elements and timing modes and centered in
   expect(Math.abs(centered[0]!.x - 0.5 * 20)).toBeLessThanOrEqual(LABEL_ANCHOR_LIMIT * halfB(editorRef(editor).view.zoom));
   expect(Math.abs(centered[0]!.y)).toBeLessThanOrEqual(LABEL_ANCHOR_LIMIT * halfB(editorRef(editor).view.zoom));
   expect(centered[0]!.font).toBe(shiftedFont);
+
+  // Timing mode hides the element labels and keeps the start and inflection
+  // CE and annotation labels.
+  editorRef(editor).mode = "timing";
+  drawn.length = 0;
+  editor.draw();
+  expect(drawn.filter((label) => label.text === "1T")).toHaveLength(0);
+  expect(drawn.filter((label) => label.text === "start")).toHaveLength(1);
 
   editor.destroy();
 });

@@ -517,10 +517,11 @@ export class Editor {
       if (this.mode === "path" || this.mode === "elements") {
         this.drawCurvatureWarnings();
       }
-      // Labels hide only in view mode, so the other edit modes keep their labels.
+      // Labels hide in view mode via showLabels. Timing mode keeps only the
+      // CE inflection and annotation labels.
       if (this.showLabels || this.mode !== "view") {
         for (const sequence of this.editSequences()) {
-          this.collectElementLabels(sequence);
+          if (this.mode !== "timing") this.collectElementLabels(sequence);
           this.collectAnnotationLabels(sequence);
         }
         this.collectInflectionLabels();
