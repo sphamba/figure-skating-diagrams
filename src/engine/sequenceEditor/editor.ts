@@ -295,8 +295,12 @@ export class Editor {
   // The canvas may get its real size only after a layout change, so the rink
   // stays fitted until the first user zoom disables the auto fit.
   private autoFitRink = true;
+  // The element or annotation pane overlays the top of the canvas and hides it;
+  // the getter returns the occluded height in px so the fit can avoid it.
+  private occludedTop: () => number = () => 0;
 
-  constructor(canvas: HTMLCanvasElement, sequences: Sequence[]) {
+  constructor(canvas: HTMLCanvasElement, sequences: Sequence[], options?: { occludedTop?: () => number }) {
+    this.occludedTop = options?.occludedTop ?? this.occludedTop;
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d") as CanvasRenderingContext2DSized;
     this.sequences = sequences;
@@ -315,7 +319,7 @@ export class Editor {
 
     this.resize();
     // Fit the full rink with a small gap between the canvas edge and the closest rink edge.
-    this.view.zoom = this.rinkFitZoom();
+    this.fitRink();
 
     canvas.addEventListener("wheel", this.onWheel, { passive: false });
     canvas.addEventListener("mousedown", this.onMouseDown);
@@ -4150,11 +4154,22 @@ export class Editor {
     }
   }
 
-  private rinkFitZoom() {
-    return Math.min(
-      (this.canvas.clientWidth - 2 * INITIAL_EDGE_MARGIN) / WIDTH,
-      (this.canvas.clientHeight - 2 * INITIAL_EDGE_MARGIN) / LENGTH,
+  private fitRink() {
+    // The pane hides the top of the canvas, so the rink fits and centers in the
+    // visible band below it. The clamp mirrors the wheel and pinch paths: a
+    // band near zero height (a near full-height pane or canvas) must not
+    // produce a singular zero zoom.
+    const top = Math.max(0, this.occludedTop());
+    this.view.zoom = Math.max(
+      MIN_ZOOM,
+      Math.min(
+        (this.canvas.clientWidth - 2 * INITIAL_EDGE_MARGIN) / WIDTH,
+        (this.canvas.clientHeight - top - 2 * INITIAL_EDGE_MARGIN) / LENGTH,
+      ),
     );
+    // The canvas flips world y, so a larger center.y draws the origin lower on
+    // screen: shift by half the occluded height to center in the visible band.
+    this.view.center = new Vector<2>(0, top / (2 * this.view.zoom));
   }
 
   private resize() {
@@ -4166,8 +4181,16 @@ export class Editor {
     this.width = this.canvas.clientWidth;
     this.height = this.canvas.clientHeight;
     if (this.autoFitRink) {
-      this.view.zoom = this.rinkFitZoom();
+      this.fitRink();
     }
+    this.draw();
+  }
+
+  // Re-run the auto fit after a layout change, for example when the pane above
+  // the canvas grows with its content. Blocked once the user zoomed manually.
+  refit() {
+    if (!this.autoFitRink) return;
+    this.fitRink();
     this.draw();
   }
 }

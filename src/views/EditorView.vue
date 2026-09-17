@@ -626,6 +626,29 @@ let editor: Editor | null = null;
 const isTracking = ref(false);
 const trackingStage = ref<"barycenter" | "cursor">("barycenter");
 
+// The pane above the canvas hides part of it, and its height depends on its
+// content, so the editor reads it fresh at each fit.
+const elementsPane = ref<InstanceType<typeof TimeSyncPane> | null>(null);
+function paneElement(pane: unknown) {
+  return (pane as { $el?: HTMLElement | null } | null)?.$el ?? null;
+}
+const occludedTop = () => paneElement(elementsPane.value)?.offsetHeight ?? 0;
+let paneObserver: ResizeObserver | null = null;
+watch(elementsPane, (pane) => {
+  paneObserver?.disconnect();
+  paneObserver = null;
+  const el = paneElement(pane);
+  // A vanished pane hides nothing anymore, so the rink recenters on the full canvas.
+  if (!el) {
+    editor?.refit();
+    return;
+  }
+  if (typeof ResizeObserver === "undefined") return;
+  paneObserver = new ResizeObserver(() => editor?.refit());
+  paneObserver.observe(el);
+});
+onBeforeUnmount(() => paneObserver?.disconnect());
+
 const store = useSequenceEditorStore();
 
 const sequences = computed(() => store.getSequences());
@@ -1104,7 +1127,7 @@ watch(
 
 onMounted(() => {
   if (!canvasRef.value) return;
-  const editorInstance = new Editor(canvasRef.value, sequences.value);
+  const editorInstance = new Editor(canvasRef.value, sequences.value, { occludedTop });
   editor = editorInstance;
   editorInstance.onTrackingChange = () => {
     isTracking.value = editorInstance.tracking;
@@ -1617,6 +1640,7 @@ function closeElementChange() {
               <TrackingButton :active="isTracking" :mode="trackingStage" @toggle="toggleTracking" />
               <TimeSyncPane
                 v-if="editMode === 'view'"
+                ref="elementsPane"
                 class="editor-view__elements"
                 :sequences="visibleSequences"
                 :time-seconds="videoTime"

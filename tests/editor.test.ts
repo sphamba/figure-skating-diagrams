@@ -106,7 +106,7 @@ const CTX_RESULT: Record<string, () => unknown> = {
   }),
 };
 
-function makeEditor() {
+function makeEditor(options?: { occludedTop?: () => number }) {
   const ctx: Record<string, unknown> = { width: 0, height: 0, globalAlpha: 1 };
   for (const m of CTX_METHODS) ctx[m] = () => {};
   for (const [m, fn] of Object.entries(CTX_RESULT)) ctx[m] = fn;
@@ -122,7 +122,7 @@ function makeEditor() {
   });
   const path = new Path();
   path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
-  const editor = new Editor(canvas, [new Sequence(path)]);
+  const editor = new Editor(canvas, [new Sequence(path)], options);
   editor.mode = "path";
   return { editor, canvas, ctx: ctx as { globalAlpha: number | unknown; arc: unknown } };
 }
@@ -1741,5 +1741,34 @@ test("dragging an element's start point keeps the time cursor at the dragged coo
   expect(el.start as number).toBeCloseTo(0.2, 3);
   expect(editor.videoTimeSeconds).toBeCloseTo(0.8, 3);
   mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("the pane inset shrinks the initial fit zoom and centers below the band edge", () => {
+  const { editor } = makeEditor({ occludedTop: () => 200 });
+  const view = (editor as unknown as { view: { center: Vector; zoom: number } }).view;
+  // The canvas is 1024x1024 and the rink is 30x60 m: the fit zoom is height
+  // constrained, so the occluded 200px shrink the zoom;
+  expect(view.zoom).toBeCloseTo((1024 - 200 - 10) / 60, 6);
+  expect(view.zoom).toBeLessThan((1024 - 10) / 60);
+  expect(view.center.x).toBeCloseTo(0, 6);
+  // The visible band center is 612 canvas px, 100 canvas px below the canvas center;
+  // the world origin draws there at (center.y * zoom) = 100 with the world y flip.
+  expect(view.center.y).toBeCloseTo(200 / (2 * view.zoom), 6);
+  editor.destroy();
+});
+
+test("refit restores the auto fit until a user zoom disables it", () => {
+  const { editor, canvas } = makeEditor({ occludedTop: () => 200 });
+  const view = (editor as unknown as { view: { center: Vector; zoom: number } }).view;
+  const fitZoom = view.zoom;
+  view.zoom = 50;
+  editor.refit();
+  expect(view.zoom).toBeCloseTo(fitZoom, 6);
+  canvas.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }));
+  expect(view.zoom).not.toBeCloseTo(fitZoom, 6);
+  const afterWheel = view.zoom;
+  editor.refit();
+  expect(view.zoom).toBeCloseTo(afterWheel, 6);
   editor.destroy();
 });

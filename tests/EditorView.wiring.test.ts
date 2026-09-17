@@ -24,8 +24,10 @@ const recorder = vi.hoisted(() => ({
 
 class EditorStub {
   hiddenSequences: Set<unknown> = new Set();
+  occludedTop: (() => number) | null = null;
 
-  constructor(_canvas: unknown, sequences: unknown[]) {
+  constructor(_canvas: unknown, sequences: unknown[], options?: { occludedTop?: () => number }) {
+    this.occludedTop = options?.occludedTop ?? null;
     recorder.constructorArgs.push({ sequences });
     recorder.editor = this as unknown as {
       onElementChangeRequest: (element: unknown) => void;
@@ -571,6 +573,14 @@ test("the timing dialog commits the transition checkboxes onto the keyframe", as
   const accelerateAgain = document.getElementById("timing-accelerate-from") as HTMLInputElement;
   expect(decelerateAgain.checked, "the checkboxes should prefill from the keyframe").toBe(true);
   expect(accelerateAgain.checked).toBe(false);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("the editor receives the pane height getter as the occluded top", async () => {
+  const wrapper = await mountEditorView();
+  const stub = recorder.editor as unknown as { occludedTop: (() => number) | null };
+  expect(typeof stub.occludedTop).toBe("function");
   wrapper.unmount();
   vi.unstubAllGlobals();
 });

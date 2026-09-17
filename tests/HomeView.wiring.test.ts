@@ -24,12 +24,14 @@ class EditorStub {
   tracking = false;
   onTrackingChange?: () => void;
 
-  constructor(_canvas: unknown, sequences: unknown[]) {
+  constructor(_canvas: unknown, sequences: unknown[], _options?: { occludedTop?: () => number }) {
     recorder.constructorArgs.push({ sequences });
     recorder.instances.push(this);
   }
 
   trackingStage: "off" | "barycenter" | "cursor" = "off";
+
+  refit() {}
 
   followTimeCursor() {
     this.trackingStage = this.trackingStage === "barycenter" ? "cursor" : "barycenter";
