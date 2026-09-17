@@ -12,6 +12,7 @@ import type { Sequence } from "@/engine/sequence";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import { useMediaQuery } from "@/composables/useMediaQuery";
 import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
+import { usePlaybackKeyToggle } from "@/composables/usePlaybackKeyToggle";
 import { usePlaybackSpeed } from "@/composables/usePlaybackSpeed";
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
@@ -74,6 +75,8 @@ function togglePlayback() {
   if (playing.value) pauseAnimation();
   else playAnimation();
 }
+
+usePlaybackKeyToggle(togglePlayback);
 
 let resumeAfterScrub = false;
 
@@ -159,6 +162,7 @@ const helpItems: HelpItem[] = [
   { keys: ["wheel"], descriptions: ["zoom"] },
   { keys: ["one finger"], descriptions: ["same as a left click"] },
   { keys: ["two fingers"], descriptions: ["pinch to zoom and drag to move the view"] },
+  { keys: ["space"], descriptions: ["toggle the playback"] },
 ];
 
 const viewportWidth = ref(0);
@@ -387,29 +391,32 @@ onBeforeUnmount(() => {
           rounded
           @click="drawerOpen = true"
         />
-        <Button
-          icon="pi pi-step-backward"
-          aria-label="Back to the earliest time"
-          severity="secondary"
-          rounded
-          size="small"
-          @click="jumpToStart"
-        />
-        <Button
-          :icon="playing ? 'pi pi-pause' : 'pi pi-play'"
-          :aria-label="playing ? 'Pause the animation' : 'Play the animation'"
-          rounded
-          @click="togglePlayback"
-        />
-        <SelectButton
-          v-model="playbackSpeed"
-          :options="playbackSpeedOptions"
-          option-label="label"
-          option-value="value"
-          :allow-empty="false"
-          size="small"
-          rounded
-        />
+        <div class="home-view__player-controls">
+          <Button
+            icon="pi pi-step-backward"
+            aria-label="Back to the earliest time"
+            severity="secondary"
+            rounded
+            size="small"
+            @click="jumpToStart"
+          />
+          <Button
+            :icon="playing ? 'pi pi-pause' : 'pi pi-play'"
+            :aria-label="playing ? 'Pause the animation' : 'Play the animation'"
+            rounded
+            @click="togglePlayback"
+          />
+          <SelectButton
+            v-model="playbackSpeed"
+            :options="playbackSpeedOptions"
+            option-label="label"
+            option-value="value"
+            :allow-empty="false"
+            size="small"
+            rounded
+            aria-label="Playback speed"
+          />
+        </div>
       </div>
     </div>
   </div>
@@ -440,11 +447,18 @@ onBeforeUnmount(() => {
 .home-view__player {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
   flex-shrink: 0;
   padding: 0.375rem 0.75rem;
   border-top: 1px solid var(--p-content-border-color);
   background: var(--p-content-background);
+}
+
+/* The hamburger stays left; the controls group centers on the bar. */
+.home-view__player-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 auto;
 }
 
 .home-view__splitter {

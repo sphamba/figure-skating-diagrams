@@ -16,7 +16,10 @@ const recorder = vi.hoisted(() => ({
   hiddenSets: [] as unknown[],
   sequences: [] as unknown[],
   isProvisional: false,
-  editor: null as unknown as { onElementChangeRequest: (element: unknown) => void },
+  editor: null as unknown as {
+    onElementChangeRequest: (element: unknown) => void;
+    onTimingKeyframeChangeRequest: (keyframe: unknown, isProvisional: boolean) => void;
+  },
 }));
 
 class EditorStub {
@@ -24,7 +27,10 @@ class EditorStub {
 
   constructor(_canvas: unknown, sequences: unknown[]) {
     recorder.constructorArgs.push({ sequences });
-    recorder.editor = this as unknown as { onElementChangeRequest: (element: unknown) => void };
+    recorder.editor = this as unknown as {
+      onElementChangeRequest: (element: unknown) => void;
+      onTimingKeyframeChangeRequest: (keyframe: unknown, isProvisional: boolean) => void;
+    };
   }
 
   hiddenSequencesSize() {
@@ -517,6 +523,54 @@ test("EditorView passes the full list and the hidden set tracks visibility toggl
   expect(store.getSequences().includes(hidden)).toBe(true);
   expect(store.isVisible(store.getSequences()[0] as Sequence)).toBe(false);
   expect(store.isVisible(store.getSequences()[1] as Sequence)).toBe(true);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("the timing dialog commits the transition checkboxes onto the keyframe", async () => {
+  const wrapper = await mountEditorView();
+  await nextTick();
+  const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
+  const store = useSequenceEditorStore();
+  store.loadFromJSON(timedDiagramJSON as never);
+  await nextTick();
+  await nextTick();
+
+  const sequence = store.getDiagram().sequences[0] as Sequence;
+  const keyframe = sequence.keyframes.time[0]!;
+  expect(keyframe.transitionIn).toBe("linear");
+  expect(keyframe.transitionOut).toBe("linear");
+
+  recorder.editor.onTimingKeyframeChangeRequest(keyframe, false);
+  await nextTick();
+  await nextTick();
+
+  const decelerate = document.getElementById("timing-decelerate-to") as HTMLInputElement;
+  const accelerate = document.getElementById("timing-accelerate-from") as HTMLInputElement;
+  expect(decelerate, "the decelerate checkbox should mount in the dialog").not.toBeNull();
+  expect(accelerate, "the accelerate checkbox should mount in the dialog").not.toBeNull();
+  expect(decelerate.checked, "both checkboxes should stay unchecked for a linear keyframe").toBe(false);
+  expect(accelerate.checked).toBe(false);
+
+  decelerate.click();
+  await nextTick();
+
+  const ok = Array.from(document.querySelectorAll("button")).find((button) => button.textContent?.trim() === "OK");
+  expect(ok, "the OK button of the timing dialog should mount").not.toBeUndefined();
+  ok!.click();
+  await nextTick();
+  await nextTick();
+
+  expect(keyframe.transitionIn, "decelerate should set the incoming transition to smooth").toBe("smooth");
+  expect(keyframe.transitionOut, "the outgoing transition should stay linear").toBe("linear");
+
+  recorder.editor.onTimingKeyframeChangeRequest(keyframe, false);
+  await nextTick();
+  await nextTick();
+  const decelerateAgain = document.getElementById("timing-decelerate-to") as HTMLInputElement;
+  const accelerateAgain = document.getElementById("timing-accelerate-from") as HTMLInputElement;
+  expect(decelerateAgain.checked, "the checkboxes should prefill from the keyframe").toBe(true);
+  expect(accelerateAgain.checked).toBe(false);
   wrapper.unmount();
   vi.unstubAllGlobals();
 });

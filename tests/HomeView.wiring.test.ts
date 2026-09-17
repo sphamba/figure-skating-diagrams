@@ -275,3 +275,88 @@ test("the view passes the full list and the hidden set tracks visibility toggles
   wrapper.unmount();
   vi.unstubAllGlobals();
 });
+
+const timedReaderSequenceJSON = {
+  name: "Timed",
+  bpm: 110,
+  videoUrl: "",
+  sequences: [
+    {
+      name: "Timed",
+      path: { curves: [{ p0: [0, -1.2], p1: [0, -1.2], p2: [0, 1.2], p3: [0, 1.2] }] },
+      elements: [],
+      keyframes: {
+        footL: [],
+        footR: [],
+        hips: [],
+        time: [
+          {
+            kind: "TimingKeyframe",
+            coordinate: 1,
+            data: { type: "time", value: 5 },
+            transitionIn: "linear",
+            transitionOut: "linear",
+          },
+          {
+            kind: "TimingKeyframe",
+            coordinate: 2,
+            data: { type: "time", value: 8 },
+            transitionIn: "linear",
+            transitionOut: "linear",
+          },
+        ],
+      },
+    },
+  ],
+};
+
+test("the space key toggles the playback and skips text targets", async () => {
+  const wrapper = await mountHomeView(null, true, videoFile);
+  const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
+  const store = useSequenceEditorStore();
+  store.loadFromJSON(timedReaderSequenceJSON as never);
+  await nextTick();
+  await nextTick();
+
+  const findPlayButton = () =>
+    Array.from(document.querySelectorAll("button")).find((button) =>
+      button.getAttribute("aria-label")?.includes("animation"),
+    );
+  const play = findPlayButton();
+  expect(play, "the play button should mount").not.toBeUndefined();
+  expect(play!.getAttribute("aria-label")).toBe("Play the animation");
+
+  const input = document.createElement("input");
+  document.body.appendChild(input);
+  input.dispatchEvent(new KeyboardEvent("keydown", { code: "Space", bubbles: true }));
+  await nextTick();
+  expect(play!.getAttribute("aria-label"), "space in a text field must not toggle the playback").toBe(
+    "Play the animation",
+  );
+  input.remove();
+
+  await wrapper.find(".home-view__player").trigger("keydown", { code: "Space" });
+  await nextTick();
+  expect(play!.getAttribute("aria-label"), "space elsewhere should start the playback").toBe("Pause the animation");
+
+  await wrapper.find(".home-view__player").trigger("keydown", { code: "Space" });
+  await nextTick();
+  expect(play!.getAttribute("aria-label"), "a second space press should pause the playback").toBe("Play the animation");
+
+  const backward = Array.from(document.querySelectorAll("button")).find((button) =>
+    button.getAttribute("aria-label")?.includes("earliest"),
+  );
+  expect(backward, "the jump-to-start button should mount").not.toBeUndefined();
+  backward!.focus();
+  backward!.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+  await nextTick();
+  expect(document.activeElement, "a mouse click should blur the button").not.toBe(backward);
+
+  document.body.dispatchEvent(new KeyboardEvent("keydown", { code: "Space", bubbles: true }));
+  await nextTick();
+  expect(play!.getAttribute("aria-label"), "space should still toggle after a button mouse click").toBe(
+    "Pause the animation",
+  );
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});

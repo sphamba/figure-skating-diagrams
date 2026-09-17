@@ -14,6 +14,7 @@ import InputGroup from "openvue/inputgroup";
 import InputGroupAddon from "openvue/inputgroupaddon";
 import Listbox from "openvue/listbox";
 import ColorPicker from "openvue/colorpicker";
+import Checkbox from "openvue/checkbox";
 import Splitter from "openvue/splitter";
 import SplitterPanel from "openvue/splitterpanel";
 import TimeSyncPane from "@/components/TimeSyncPane.vue";
@@ -47,6 +48,7 @@ import { earliestTimeKeyframeSeconds, fullTimeExtentSeconds } from "@/engine/dia
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import { useMediaQuery } from "@/composables/useMediaQuery";
 import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
+import { usePlaybackKeyToggle } from "@/composables/usePlaybackKeyToggle";
 import { usePlaybackSpeed } from "@/composables/usePlaybackSpeed";
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
@@ -514,9 +516,10 @@ const chosenLabels = computed<string[]>(() => {
   return labels;
 });
 
-const touchHelpItems: HelpItem[] = [
+const sharedHelpItems: HelpItem[] = [
   { keys: ["one finger"], descriptions: ["same as a left click"] },
   { keys: ["two fingers"], descriptions: ["pinch to zoom and drag to move the view"] },
+  { keys: ["space"], descriptions: ["toggle the playback"] },
 ];
 
 const helpItems = computed<HelpItem[]>(() =>
@@ -525,7 +528,7 @@ const helpItems = computed<HelpItem[]>(() =>
         { keys: ["left drag"], descriptions: ["move the view"] },
         { keys: ["right drag"], descriptions: ["move the view"] },
         { keys: ["wheel"], descriptions: ["zoom"] },
-        ...touchHelpItems,
+        ...sharedHelpItems,
       ]
     : editMode.value === "timing"
       ? [
@@ -547,7 +550,7 @@ const helpItems = computed<HelpItem[]>(() =>
           { keys: ["+"], descriptions: ["button on the provisional timing point: open the timing keyframe dialog"] },
           { keys: ["\u2212"], descriptions: ["button beside a selected timing point: remove it"] },
           { keys: ["cog"], descriptions: ["on a selected timing point: open the timing keyframe dialog"] },
-          ...touchHelpItems,
+          ...sharedHelpItems,
         ]
       : editMode.value === "annotations"
         ? [
@@ -569,7 +572,7 @@ const helpItems = computed<HelpItem[]>(() =>
             { keys: ["+"], descriptions: ["on the provisional annotation: open the annotation dialog"] },
             { keys: ["\u2212"], descriptions: ["button beside a selected annotation: remove it"] },
             { keys: ["cog"], descriptions: ["on a selected annotation: open the annotation dialog"] },
-            ...touchHelpItems,
+            ...sharedHelpItems,
           ]
         : editMode.value === "elements"
           ? [
@@ -587,7 +590,7 @@ const helpItems = computed<HelpItem[]>(() =>
               { keys: ["+"], descriptions: ["on the provisional element: open the element selection dialog"] },
               { keys: ["−"], descriptions: ["button beside a selected element: remove it"] },
               { keys: ["cog"], descriptions: ["on a selected element: open the element selection dialog"] },
-              ...touchHelpItems,
+              ...sharedHelpItems,
             ]
           : [
               {
@@ -614,7 +617,7 @@ const helpItems = computed<HelpItem[]>(() =>
                 ],
               },
               { keys: ["\u2212"], descriptions: ["button beside a selected point: remove that point"] },
-              ...touchHelpItems,
+              ...sharedHelpItems,
             ],
 );
 
@@ -684,6 +687,8 @@ function togglePlayback() {
   else playAnimation();
 }
 
+usePlaybackKeyToggle(togglePlayback);
+
 let resumeAfterScrub = false;
 
 // Scroll/drag gestures on the elements pane act like a canvas time cursor scrub:
@@ -727,6 +732,8 @@ const timingKeyframeOpen = ref(false);
 const timingTarget = shallowRef<TimingKeyframe | null>(null);
 const timingIsProvisional = ref(false);
 const timingKind = ref<TimingKind>("time");
+const timingDecelerateTo = ref(false);
+const timingAccelerateFrom = ref(false);
 const timingValueDraft = ref("");
 const timingValueError = ref<"format" | "bounds" | null>(null);
 const timingValueInvalid = computed(() => timingValueError.value !== null);
@@ -935,6 +942,8 @@ function openTimingKeyframeChange(keyframe: TimingKeyframe, isProvisional: boole
   timingOriginalKind.value = keyframe.kind;
   timingOriginalValue.value = keyframe.value;
   timingKind.value = keyframe.kind;
+  timingDecelerateTo.value = keyframe.transitionIn === "smooth";
+  timingAccelerateFrom.value = keyframe.transitionOut === "smooth";
   timingValueDraft.value = keyframe.kind === "time" ? formatTimingLabel(keyframe.value) : String(keyframe.value);
   timingValueError.value = null;
   if (isProvisional && keyframe.kind === "time") prefillVideoTimestamp();
@@ -1023,13 +1032,17 @@ function commitTimingKeyframe() {
     return;
   }
   const value = parseTimingValue(timingValueDraft.value) as number;
+  const transitionIn = timingDecelerateTo.value ? "smooth" : "linear";
+  const transitionOut = timingAccelerateFrom.value ? "smooth" : "linear";
   if (timingIsProvisional.value) {
-    const replacement = new TimingKeyframe(target.pathCoordinate, timingKind.value, value);
+    const replacement = new TimingKeyframe(target.pathCoordinate, timingKind.value, value, transitionIn, transitionOut);
     const sequence = editor?.commitProvisionalTimingKeyframe(target, replacement);
     if (sequence) store.saveToStorage();
   } else {
     target.kind = timingKind.value;
     target.value = value;
+    target.transitionIn = transitionIn;
+    target.transitionOut = transitionOut;
     store.saveToStorage();
   }
   editor?.draw();
@@ -1943,6 +1956,16 @@ function closeElementChange() {
                 : "Enter a number of beats."
           }}
         </small>
+        <div class="editor-view__timing-transitions">
+          <div class="editor-view__timing-transition">
+            <Checkbox v-model="timingDecelerateTo" binary input-id="timing-decelerate-to" />
+            <label for="timing-decelerate-to">Decelerate to</label>
+          </div>
+          <div class="editor-view__timing-transition">
+            <Checkbox v-model="timingAccelerateFrom" binary input-id="timing-accelerate-from" />
+            <label for="timing-accelerate-from">Accelerate from</label>
+          </div>
+        </div>
       </div>
       <template #footer>
         <Button label="OK" icon="pi pi-check" @click="commitTimingKeyframe" />
@@ -2042,7 +2065,7 @@ function closeElementChange() {
   background: var(--p-content-background);
 }
 
-/* The hamburger keeps its container gap; the controls group centers on the bar. */
+/* The hamburger stays left; the controls group centers on the bar. */
 .editor-view__player-controls {
   display: flex;
   align-items: center;
@@ -2230,6 +2253,23 @@ function closeElementChange() {
 .editor-view__timing-value {
   display: flex;
   flex-direction: column;
+}
+
+.editor-view__timing-transitions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+}
+
+.editor-view__timing-transition {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.editor-view__timing-transition label {
+  cursor: pointer;
 }
 
 .editor-view__timing-error {
