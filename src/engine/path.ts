@@ -6,6 +6,9 @@ import { Vector } from "./vector.js";
 export class Path {
   curves: Curve[];
   length: number;
+  // Bumped on every length recomputation: the trace segment cache keys on it,
+  // so in-place curve edits mark the cached geometry stale.
+  generation = 0;
 
   constructor() {
     this.curves = [];
@@ -17,6 +20,7 @@ export class Path {
       curve.updateLength();
     }
     this.length = this.curves.reduce((sum, curve) => sum + curve.length, 0);
+    this.generation++;
   }
 
   toJSON(): { curves: ReturnType<Curve["toJSON"]>[] } {

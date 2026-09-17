@@ -110,9 +110,21 @@ export class Sequence {
     FootKey,
     { scale: number; pathLength: number; version: number; keyframes: FootKeyframe[] }
   >();
+  // Sampled trace geometry per foot. Stride 8:
+  // [uEnd, x0, y0, x1, y1, rawWidth, alphaFactor, 0], in exact doubles. The
+  // coordinates are in path axes: the canvas y-negation happens once at draw
+  // time in strokeTraceSegments.
+  private traceCache = new Map<FootKey, { key: string; segments: Float64Array }>();
 
   invalidateTimeCaches(): void {
     this.timeVersion++;
+  }
+
+  // Trace segment cache, keyed on Path.generation, elementVersion and the
+  // bucketed zoom-dependent draw parameters, so explicit invalidation hooks
+  // are not needed for correctness.
+  invalidateTraceCaches(): void {
+    this.traceCache.clear();
   }
 
   constructor(path: Path) {
@@ -322,11 +334,22 @@ export class Sequence {
     minMarkSize?: number,
     minDrawIncrement?: number,
     viewport?: AxisRect,
+    skipTraceCache?: boolean,
   ) {
     uEnd ??= this.path.length as PathCoordinate;
 
     this.drawPath(ctx, pathWidth, uStart, uEnd, pathColor);
-    this.drawFootTraces(ctx, uStart, uEnd, minTraceWidth, minBladeLength, minMarkSize, minDrawIncrement, viewport);
+    this.drawFootTraces(
+      ctx,
+      uStart,
+      uEnd,
+      minTraceWidth,
+      minBladeLength,
+      minMarkSize,
+      minDrawIncrement,
+      viewport,
+      skipTraceCache,
+    );
   }
 
   drawTraces(
@@ -336,6 +359,7 @@ export class Sequence {
     minMarkSize?: number,
     minDrawIncrement?: number,
     viewport?: AxisRect,
+    skipTraceCache?: boolean,
   ) {
     this.drawFootTraces(
       ctx,
@@ -346,6 +370,7 @@ export class Sequence {
       minMarkSize,
       minDrawIncrement,
       viewport,
+      skipTraceCache,
     );
   }
 
@@ -474,6 +499,7 @@ export class Sequence {
     minMarkSize?: number,
     minDrawIncrement?: number,
     viewport?: AxisRect,
+    skipTraceCache?: boolean,
   ) {
     uEnd ??= this.path.length as PathCoordinate;
 
@@ -487,6 +513,7 @@ export class Sequence {
       minMarkSize,
       minDrawIncrement,
       viewport,
+      skipTraceCache,
     );
     this.drawFootTrace(
       ctx,
@@ -498,6 +525,7 @@ export class Sequence {
       minMarkSize,
       minDrawIncrement,
       viewport,
+      skipTraceCache,
     );
   }
 
@@ -594,6 +622,7 @@ export class Sequence {
     minMarkSize?: number,
     minDrawIncrement?: number,
     viewport?: AxisRect,
+    skipTraceCache?: boolean,
   ) {
     uEnd ??= this.path.length as PathCoordinate;
 
@@ -606,9 +635,6 @@ export class Sequence {
       return;
     }
 
-    let previousContactPosition: Vector<2> | undefined;
-    let previousU: PathCoordinate | undefined;
-    let backwardSegmentCount = 0;
     const drawBladeLength = this.getDrawBladeLength(minBladeLength);
     const drawKeyframes =
       minBladeLength === undefined
@@ -617,120 +643,16 @@ export class Sequence {
 
     const step = Math.max(drawIncrement, minDrawIncrement ?? 0);
     const visibleRanges = this.getVisibleTraceRanges(uStart, uEnd, viewport, minBladeLength);
-
     const drawable = drawKeyframes ?? this.keyframes[footKey];
-    const defaultKeyframes = this.keyframes[footKey];
-    const hasFallback = drawable !== defaultKeyframes;
-    // One filtered list per property per draw; the samples are visited in
-    // ascending order, so the binary search replaces per-sample filtering.
-    const byProperty = (list: FootKeyframe[], property: keyof FootData) =>
-      list.filter((keyframe) => keyframe.data[property] !== undefined);
-    const filteredContact = byProperty(drawable, "contactPoint");
-    const filteredOrientation = byProperty(drawable, "orientation");
-    const filteredPosition = byProperty(drawable, "position");
-    const fallbackContact = hasFallback ? byProperty(defaultKeyframes, "contactPoint") : undefined;
-    const fallbackOrientation = hasFallback ? byProperty(defaultKeyframes, "orientation") : undefined;
-    const fallbackPosition = hasFallback ? byProperty(defaultKeyframes, "position") : undefined;
-    const interpolateProperty = (property: keyof FootData, coordinate: number) => {
-      const filtered =
-        property === "contactPoint"
-          ? filteredContact
-          : property === "orientation"
-            ? filteredOrientation
-            : filteredPosition;
-      const fallback =
-        property === "contactPoint"
-          ? fallbackContact
-          : property === "orientation"
-            ? fallbackOrientation
-            : fallbackPosition;
-      return this.getInterpolatedValueInFilteredList(property, coordinate, filtered, fallback) as number;
-    };
 
-    const maxSquaredSegmentLength = segmentThreshold ** 2 * step * step;
-
-    const computeContactData = (pathCoordinate: PathCoordinate) => {
-      const contactPoint = interpolateProperty("contactPoint", pathCoordinate);
-      const footRelativeOrientation = interpolateProperty("orientation", pathCoordinate) as unknown as Quaternion;
-      const pathOrientation = this.getPathOrientation(pathCoordinate);
-      const pathPosition = this.path.getPosition(pathCoordinate);
-      const footRelativePosition = interpolateProperty("position", pathCoordinate) as unknown as Vector<3>;
-
-      const footRelativeDirection = getRelativeForwardDirection(footRelativeOrientation);
-
-      let contactRelativePosition = footRelativePosition.copy();
-      contactRelativePosition.x += (contactPoint - 0.5) * drawBladeLength;
-      contactRelativePosition = contactRelativePosition.rotate(
-        footRelativeOrientation.times(pathOrientation),
-      ) as Vector<3>;
-
-      const contactPosition = pathPosition.plus(contactRelativePosition as unknown as Vector<2>);
-      const footDirection = footRelativeDirection.rotate(pathOrientation);
-      return { contactPosition, footDirection, onGround: contactRelativePosition.z <= 0 };
-    };
-
-    const drawTraceSegment = (
-      uPrev: PathCoordinate,
-      uCur: PathCoordinate,
-      pPrev: Vector<2>,
-      pCur: Vector<2>,
-      footDirectionCur: Vector<3>,
-      onGroundCur: boolean,
-      depth: number,
-    ) => {
-      const traceIncrement = pCur.minus(pPrev as Vector<2>);
-      if (depth > 0 && traceIncrement.lengthSquared() > maxSquaredSegmentLength) {
-        const uMid = ((uPrev + uCur) / 2) as PathCoordinate;
-        const midData = computeContactData(uMid);
-        drawTraceSegment(
-          uPrev,
-          uMid,
-          pPrev,
-          midData.contactPosition as Vector<2>,
-          midData.footDirection,
-          midData.onGround,
-          depth - 1,
-        );
-        drawTraceSegment(
-          uMid,
-          uCur,
-          midData.contactPosition as Vector<2>,
-          pCur,
-          footDirectionCur,
-          onGroundCur,
-          depth - 1,
-        );
-        return;
-      }
-
-      if (!onGroundCur) return;
-
-      if (footKey == "footL") {
-        ctx.strokeStyle = this.traceColorL;
-      } else {
-        ctx.strokeStyle = this.traceColorR;
-      }
-      const { width: lineWidth, alignment } = getTraceWidth(footDirectionCur, traceIncrement, traceWidth, skidWidth);
-      const backward = alignment < 0;
-      if (backward) {
-        backwardSegmentCount++;
-        if (backwardSegmentCount % 2 === 0) return;
-      } else {
-        backwardSegmentCount = 0;
-      }
-
-      ctx.lineWidth = minTraceWidth === undefined ? lineWidth : Math.max(lineWidth, minTraceWidth);
-
-      const previousAlpha = ctx.globalAlpha;
-      ctx.globalAlpha = backward ? previousAlpha : previousAlpha * traceOpacityForward;
-
-      ctx.beginPath();
-      ctx.moveTo(pPrev.x, -pPrev.y);
-      ctx.lineTo(pCur.x, -pCur.y);
-      ctx.stroke();
-
-      ctx.globalAlpha = previousAlpha;
-    };
+    let segments: Float64Array;
+    if (skipTraceCache) {
+      // An edit frame: rebuild only the visible range, without touching the cache.
+      segments = this.buildTraceSegments(footKey, drawBladeLength, step, visibleRanges, drawable);
+    } else {
+      segments = this.getTraceSegments(footKey, drawBladeLength, step, drawable);
+    }
+    this.strokeTraceSegments(ctx, footKey, uStart, uEnd, minTraceWidth, viewport, minBladeLength, segments);
 
     const toePickSamples = this.getSampledKeyframes(
       drawable.filter(
@@ -753,13 +675,7 @@ export class Sequence {
     const toePickKeyframes = new Set<FootKeyframe>();
     const spinKeyframes = new Set<FootKeyframe>();
 
-    let previousRangeEnd: number | undefined;
     for (const [rangeStart, rangeEnd] of visibleRanges) {
-      if (previousRangeEnd !== undefined && Math.abs(rangeStart - previousRangeEnd) > 1e-9) {
-        previousContactPosition = undefined;
-        previousU = undefined;
-      }
-      previousRangeEnd = rangeEnd;
       for (
         let pathCoordinate = rangeStart;
         pathCoordinate <= rangeEnd;
@@ -773,32 +689,6 @@ export class Sequence {
         if (spinMatches) {
           for (const keyframe of spinMatches) spinKeyframes.add(keyframe);
         }
-        const data = computeContactData(pathCoordinate);
-
-        if (previousContactPosition === undefined) {
-          previousContactPosition = data.contactPosition;
-          previousU = pathCoordinate;
-          continue;
-        }
-
-        if (!data.onGround) {
-          previousContactPosition = data.contactPosition;
-          previousU = pathCoordinate;
-          continue;
-        }
-
-        drawTraceSegment(
-          previousU!,
-          pathCoordinate,
-          previousContactPosition,
-          data.contactPosition,
-          data.footDirection,
-          true,
-          MAX_SEGMENT_DEPTH,
-        );
-
-        previousContactPosition = data.contactPosition;
-        previousU = pathCoordinate;
       }
     }
 
@@ -865,6 +755,234 @@ export class Sequence {
       }
       ctx.setLineDash([]);
     }
+  }
+
+  // Sampled trace geometry for the whole path in path coordinates. The
+  // sampling loop and per-segment stroke attributes are a pure function of
+  // (path LUTs, foot keyframes, step, blade length), so the polyline is built
+  // once and replayed under the current transform.
+  private buildTraceSegments(
+    footKey: FootKey,
+    drawBladeLength: number,
+    step: number,
+    visibleRanges: Array<[PathCoordinate, PathCoordinate]>,
+    drawable: FootKeyframe[],
+  ): Float64Array {
+    const records: number[] = [];
+    let previousContactPosition: Vector<2> | undefined;
+    let previousU: PathCoordinate | undefined;
+    let backwardSegmentCount = 0;
+    const defaultKeyframes = this.keyframes[footKey];
+    const hasFallback = drawable !== defaultKeyframes;
+    const byProperty = (list: FootKeyframe[], property: keyof FootData) =>
+      list.filter((keyframe) => keyframe.data[property] !== undefined);
+    const filteredContact = byProperty(drawable, "contactPoint");
+    const filteredOrientation = byProperty(drawable, "orientation");
+    const filteredPosition = byProperty(drawable, "position");
+    const fallbackContact = hasFallback ? byProperty(defaultKeyframes, "contactPoint") : undefined;
+    const fallbackOrientation = hasFallback ? byProperty(defaultKeyframes, "orientation") : undefined;
+    const fallbackPosition = hasFallback ? byProperty(defaultKeyframes, "position") : undefined;
+    const interpolateProperty = (property: keyof FootData, coordinate: number) => {
+      const filtered =
+        property === "contactPoint"
+          ? filteredContact
+          : property === "orientation"
+            ? filteredOrientation
+            : filteredPosition;
+      const fallback =
+        property === "contactPoint"
+          ? fallbackContact
+          : property === "orientation"
+            ? fallbackOrientation
+            : fallbackPosition;
+      return this.getInterpolatedValueInFilteredList(property, coordinate, filtered, fallback) as number;
+    };
+
+    const maxSquaredSegmentLength = segmentThreshold ** 2 * step * step;
+
+    const computeContactData = (pathCoordinate: PathCoordinate) => {
+      const contactPoint = interpolateProperty("contactPoint", pathCoordinate);
+      const footRelativeOrientation = interpolateProperty("orientation", pathCoordinate) as unknown as Quaternion;
+      const pathOrientation = this.getPathOrientation(pathCoordinate);
+      const pathPosition = this.path.getPosition(pathCoordinate);
+      const footRelativePosition = interpolateProperty("position", pathCoordinate) as unknown as Vector<3>;
+
+      const footRelativeDirection = getRelativeForwardDirection(footRelativeOrientation);
+
+      let contactRelativePosition = footRelativePosition.copy();
+      contactRelativePosition.x += (contactPoint - 0.5) * drawBladeLength;
+      contactRelativePosition = contactRelativePosition.rotate(
+        footRelativeOrientation.times(pathOrientation),
+      ) as Vector<3>;
+
+      const contactPosition = pathPosition.plus(contactRelativePosition as unknown as Vector<2>);
+      const footDirection = footRelativeDirection.rotate(pathOrientation);
+      return { contactPosition, footDirection, onGround: contactRelativePosition.z <= 0 };
+    };
+
+    const emitSegment = (
+      uPrev: PathCoordinate,
+      uCur: PathCoordinate,
+      pPrev: Vector<2>,
+      pCur: Vector<2>,
+      footDirectionCur: Vector<3>,
+      onGroundCur: boolean,
+      depth: number,
+    ) => {
+      const traceIncrement = pCur.minus(pPrev as Vector<2>);
+      if (depth > 0 && traceIncrement.lengthSquared() > maxSquaredSegmentLength) {
+        const uMid = ((uPrev + uCur) / 2) as PathCoordinate;
+        const midData = computeContactData(uMid);
+        emitSegment(
+          uPrev,
+          uMid,
+          pPrev,
+          midData.contactPosition as Vector<2>,
+          midData.footDirection,
+          midData.onGround,
+          depth - 1,
+        );
+        emitSegment(uMid, uCur, midData.contactPosition as Vector<2>, pCur, footDirectionCur, onGroundCur, depth - 1);
+        return;
+      }
+
+      if (!onGroundCur) return;
+
+      const { width: lineWidth, alignment } = getTraceWidth(footDirectionCur, traceIncrement, traceWidth, skidWidth);
+      const backward = alignment < 0;
+      if (backward) {
+        backwardSegmentCount++;
+        if (backwardSegmentCount % 2 === 0) return;
+      } else {
+        backwardSegmentCount = 0;
+      }
+
+      records.push(uCur, pPrev.x, pPrev.y, pCur.x, pCur.y, lineWidth, backward ? 1 : traceOpacityForward, 0);
+    };
+
+    let previousRangeEnd: number | undefined;
+    for (const [rangeStart, rangeEnd] of visibleRanges) {
+      if (previousRangeEnd !== undefined && Math.abs(rangeStart - previousRangeEnd) > 1e-9) {
+        previousContactPosition = undefined;
+        previousU = undefined;
+      }
+      previousRangeEnd = rangeEnd;
+      for (
+        let pathCoordinate = rangeStart;
+        pathCoordinate <= rangeEnd;
+        pathCoordinate = (pathCoordinate + step) as PathCoordinate
+      ) {
+        const data = computeContactData(pathCoordinate);
+
+        if (previousContactPosition === undefined) {
+          previousContactPosition = data.contactPosition;
+          previousU = pathCoordinate;
+          continue;
+        }
+
+        if (!data.onGround) {
+          previousContactPosition = data.contactPosition;
+          previousU = pathCoordinate;
+          continue;
+        }
+
+        emitSegment(
+          previousU!,
+          pathCoordinate,
+          previousContactPosition,
+          data.contactPosition,
+          data.footDirection,
+          true,
+          MAX_SEGMENT_DEPTH,
+        );
+
+        previousContactPosition = data.contactPosition;
+        previousU = pathCoordinate;
+      }
+    }
+    return Float64Array.from(records);
+  }
+
+  private getTraceSegments(
+    footKey: FootKey,
+    drawBladeLength: number,
+    step: number,
+    drawable: FootKeyframe[],
+  ): Float64Array {
+    // Relative ~4% buckets (1/16 octave): the same zoom level maps to the same
+    // bucket, and a nearby level reuses the cached geometry instead of
+    // rebuilding it on every wheel or pinch step.
+    const stepBucket = Math.round(Math.log2(step) * 16) / 16;
+    const bladeBucket = Math.round(Math.log2(drawBladeLength) * 16) / 16;
+    const key = `${this.path.generation}:${this.elementVersion}:${stepBucket}:${bladeBucket}`;
+    const cached = this.traceCache.get(footKey);
+    if (cached && cached.key === key) {
+      return cached.segments;
+    }
+    const segments = this.buildTraceSegments(footKey, drawBladeLength, step, this.fullTraceRanges(), drawable);
+    this.traceCache.set(footKey, { key, segments });
+    return segments;
+  }
+
+  // Per-curve ranges over the whole path: the sample grid restarts at every
+  // curve boundary, so a cached build matches the directly drawn grid.
+  private fullTraceRanges(): Array<[PathCoordinate, PathCoordinate]> {
+    const curves = this.path.curves;
+    if (curves.length === 0) {
+      return [[0 as PathCoordinate, this.path.length as PathCoordinate]];
+    }
+    const ranges: Array<[PathCoordinate, PathCoordinate]> = [];
+    let curveStart = 0;
+    for (const curve of curves) {
+      const curveEnd = curveStart + curve.length;
+      if (curveEnd > curveStart && curveEnd <= this.path.length) {
+        ranges.push([curveStart as PathCoordinate, curveEnd as PathCoordinate]);
+      }
+      curveStart = curveEnd;
+    }
+    if (ranges.length === 0) {
+      ranges.push([0 as PathCoordinate, this.path.length as PathCoordinate]);
+    }
+    return ranges;
+  }
+
+  private strokeTraceSegments(
+    ctx: CanvasRenderingContext2DSized,
+    footKey: FootKey,
+    uStart: PathCoordinate,
+    uEnd: PathCoordinate,
+    minTraceWidth: number | undefined,
+    viewport: AxisRect | undefined,
+    minBladeLength: number | undefined,
+    segments: Float64Array,
+  ) {
+    const curves = this.path.curves;
+    const margin = this.getDrawBladeLength(minBladeLength);
+    const visible = viewport === undefined ? undefined : curves.map((curve) => curve.intersectsRect(viewport, margin));
+    let curveIndex = 0;
+    let curveEnd = curves.length > 0 ? curves[0]!.length : Number.POSITIVE_INFINITY;
+    ctx.strokeStyle = footKey === "footL" ? this.traceColorL : this.traceColorR;
+    const entryAlpha = ctx.globalAlpha;
+    for (let index = 0; index + 7 < segments.length; index += 8) {
+      // The endpoint decides visibility and range: a segment spanning a curve
+      // boundary or a draw-range edge belongs to the destination curve of the
+      // directly drawn sample grid, so it hides with that curve.
+      const segmentEnd = segments[index]!;
+      while (curveIndex < curves.length - 1 && segmentEnd >= curveEnd) {
+        curveIndex++;
+        curveEnd += curves[curveIndex]!.length;
+      }
+      if (segmentEnd < (uStart as number) || segmentEnd > (uEnd as number)) continue;
+      if (visible !== undefined && !visible[curveIndex]) continue;
+      const lineWidth = segments[index + 5]!;
+      ctx.lineWidth = minTraceWidth === undefined ? lineWidth : Math.max(lineWidth, minTraceWidth);
+      ctx.globalAlpha = entryAlpha * segments[index + 6]!;
+      ctx.beginPath();
+      ctx.moveTo(segments[index + 1]!, -segments[index + 2]!);
+      ctx.lineTo(segments[index + 3]!, -segments[index + 4]!);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = entryAlpha;
   }
 
   private getSampledKeyframes(

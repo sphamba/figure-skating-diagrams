@@ -1254,7 +1254,15 @@ export class Editor {
       if (window === null) {
         this.ctx.globalAlpha = hiddenAlpha;
         this.drawMetres(() =>
-          sequence.drawTraces(this.ctx, minTraceWidth, minBladeLength, minMarkSize, minDrawIncrement, viewport),
+          sequence.drawTraces(
+            this.ctx,
+            minTraceWidth,
+            minBladeLength,
+            minMarkSize,
+            minDrawIncrement,
+            viewport,
+            this.sequenceMutated,
+          ),
         );
         this.ctx.globalAlpha = 1;
         continue;
@@ -1264,7 +1272,15 @@ export class Editor {
         // No computable time along the path: keep it fully drawn.
         this.ctx.globalAlpha = hiddenAlpha;
         this.drawMetres(() =>
-          sequence.drawTraces(this.ctx, minTraceWidth, minBladeLength, minMarkSize, minDrawIncrement, viewport),
+          sequence.drawTraces(
+            this.ctx,
+            minTraceWidth,
+            minBladeLength,
+            minMarkSize,
+            minDrawIncrement,
+            viewport,
+            this.sequenceMutated,
+          ),
         );
         this.ctx.globalAlpha = 1;
         continue;
@@ -1273,7 +1289,15 @@ export class Editor {
       if (!timeRange) {
         this.ctx.globalAlpha = hiddenAlpha;
         this.drawMetres(() =>
-          sequence.drawTraces(this.ctx, minTraceWidth, minBladeLength, minMarkSize, minDrawIncrement, viewport),
+          sequence.drawTraces(
+            this.ctx,
+            minTraceWidth,
+            minBladeLength,
+            minMarkSize,
+            minDrawIncrement,
+            viewport,
+            this.sequenceMutated,
+          ),
         );
         this.ctx.globalAlpha = 1;
         continue;
@@ -1302,6 +1326,7 @@ export class Editor {
           minMarkSize,
           minDrawIncrement,
           viewport,
+          this.sequenceMutated,
         ),
       );
       this.ctx.globalAlpha = 1;
@@ -1501,6 +1526,7 @@ export class Editor {
           minMarkSize,
           minDrawIncrement,
           viewport,
+          this.sequenceMutated,
         ),
       );
       this.ctx.globalAlpha = 1;
@@ -1527,6 +1553,7 @@ export class Editor {
           minMarkSize,
           minDrawIncrement,
           viewport,
+          this.sequenceMutated,
         ),
       );
       this.ctx.globalAlpha = 1;
@@ -1544,6 +1571,7 @@ export class Editor {
           minMarkSize,
           minDrawIncrement,
           viewport,
+          this.sequenceMutated,
         ),
       );
     } else {
@@ -1559,6 +1587,7 @@ export class Editor {
           minMarkSize,
           minDrawIncrement,
           viewport,
+          this.sequenceMutated,
         ),
       );
     }
@@ -3576,6 +3605,7 @@ export class Editor {
         if (this.dragElementPointIsStart) this.dragElement.start = u;
         else this.dragElement.end = u;
         this.updateElementKeyframes(this.dragElement);
+        this.getSequenceOfElement(this.dragElement)?.invalidateTraceCaches();
         this.sequenceMutated = true;
         this.setTimeCursorToElementCoordinate(this.dragElement, u);
       }
@@ -3603,6 +3633,7 @@ export class Editor {
           item.element.start = sequence.path.moveAlongByArcLength(item.start0 as PathCoordinate, clamped);
           item.element.end = sequence.path.moveAlongByArcLength(item.end0 as PathCoordinate, clamped);
           this.updateElementKeyframes(item.element);
+          sequence.invalidateTraceCaches();
         }
         this.sequenceMutated = true;
         if (this.dragElement) this.setTimeCursorToElementCenter(this.dragElement);
@@ -3717,6 +3748,7 @@ export class Editor {
     }
 
     sequence.path.updateLength();
+    sequence.invalidateTraceCaches();
   }
 
   private translateSelectedCurves(delta: Vector<2>) {
@@ -3742,6 +3774,7 @@ export class Editor {
       }
 
       sequence.path.updateLength();
+      sequence.invalidateTraceCaches();
     }
     this.remapElementsAfterDragMove();
     this.sequenceMutated = true;
