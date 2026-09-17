@@ -176,9 +176,24 @@ const sections = [
   max-height: 85vh !important;
 }
 
+.p-drawer.diagram-sidebar__drawer .p-drawer-header,
+.p-drawer-bottom .p-drawer.diagram-sidebar__drawer .p-drawer-header {
+  /* The close icon hugs the drawer edge without a theme padding. */
+  padding: 0 !important;
+}
+
+.p-drawer.diagram-sidebar__drawer .p-drawer-close-button,
+.p-drawer-bottom .p-drawer.diagram-sidebar__drawer .p-drawer-close-button {
+  /* A small gap to the drawer edges keeps the touch corner clear */
+  /* without pushing the icon away from the content below. */
+  margin: 0.25rem 0.25rem 0;
+}
+
 .p-drawer.diagram-sidebar__drawer .p-drawer-content,
 .p-drawer-bottom .p-drawer.diagram-sidebar__drawer .p-drawer-content {
   height: auto !important;
+  /* The sections fill the drawer edge to edge without a theme padding. */
+  padding: 0 !important;
   overflow-y: auto;
 }
 </style>
