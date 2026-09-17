@@ -34,6 +34,8 @@ const stubCtx = (): CanvasRenderingContext2DSized => {
     arc: () => {},
     fill: () => {},
     stroke: () => {},
+    save: () => {},
+    restore: () => {},
   } as unknown as CanvasRenderingContext2DSized;
 };
 
@@ -147,9 +149,9 @@ describe("CanvasLabel draw", () => {
     label.draw(tracked as unknown as CanvasRenderingContext2DSized);
     const triangle = captured.filter((entry) => entry.points.length === 3);
     expect(triangle).toHaveLength(2);
-    // The connector draws under the backdrop and the pill.
-    expect(captured.indexOf(triangle[0]!)).toBe(0);
-    expect(captured.indexOf(triangle[1]!)).toBe(1);
+    // The connector draws between the pill background and the pill foreground.
+    expect(captured.indexOf(triangle[0]!)).toBe(2);
+    expect(captured.indexOf(triangle[1]!)).toBe(3);
     // The stroked triangle uses the rink color at a 1px width.
     expect(triangle[0]!.kind).toBe("stroke");
     expect(triangle[0]!.color).toBe(RINK_COLOR);
@@ -171,6 +173,63 @@ describe("CanvasLabel draw", () => {
     expect(corner1[1] + corner2[1]).toBeCloseTo(2 * center[1], 9);
   });
 
+  test("an upright label counter-rotates the pill about its own position", () => {
+    const tracked = stubCtx() as unknown as CanvasRenderingContext2DSized & Record<string, unknown>;
+    const captured: { name: "translate" | "rotate"; args: number[] }[] = [];
+    for (const name of ["translate", "rotate"] as const) {
+      const previous = tracked[name] as unknown as ((...args: number[]) => void) | undefined;
+      const hook = (...args: number[]) => {
+        captured.push({ name, args: [...args] });
+        previous?.(...args);
+      };
+      (tracked as unknown as Record<string, (...args: number[]) => void>)[name] = hook;
+    }
+    const label = new PillLabel("a", new Vector(0, 0), null, ZOOM, { rotation: Math.PI / 2 });
+    label.measure(stubCtx());
+    const position = label as unknown as { x: number; y: number };
+    label.draw(tracked);
+    expect(captured.map((entry) => entry.name)).toEqual(["translate", "rotate", "translate"]);
+    expect(captured[0]!.args).toEqual([position.x, position.y]);
+    expect(captured[1]!.args[0]).toBeCloseTo(Math.PI / 2, 9);
+    expect(captured[2]!.args).toEqual([-position.x, -position.y]);
+  });
+
+  test("a rotated connector emits the inverse rotation around drawConnector", () => {
+    const tracked = stubCtx() as unknown as CanvasRenderingContext2DSized & Record<string, unknown>;
+    const captured: { name: string; args: number[] }[] = [];
+    for (const name of ["translate", "rotate"] as const) {
+      const previous = tracked[name] as unknown as ((...args: number[]) => void) | undefined;
+      const hook = (...args: number[]) => {
+        captured.push({ name, args: [...args] });
+        previous?.(...args);
+      };
+      (tracked as unknown as Record<string, (...args: number[]) => void>)[name] = hook;
+    }
+    const label = new PillLabel("a", new Vector(1, 2), new Vector(0, 1), ZOOM, {
+      connector: true,
+      rotation: Math.PI / 3,
+    });
+    label.measure(stubCtx());
+    const position = label as unknown as { x: number; y: number };
+    label.draw(tracked);
+    // The upright wrap rotates +rotation, and the connector wrap undoes it
+    // inside drawBackground, so the triangle keeps rotating with the canvas.
+    expect(captured.map((entry) => entry.name)).toEqual([
+      "translate",
+      "rotate",
+      "translate",
+      "translate",
+      "rotate",
+      "translate",
+    ]);
+    expect(captured[1]!.args[0]).toBeCloseTo(Math.PI / 3, 9);
+    expect(captured[4]!.args[0]).toBeCloseTo(-Math.PI / 3, 9);
+    for (const index of [0, 3]) {
+      expect(captured[index]!.args[0]).toBeCloseTo(position.x, 9);
+      expect(captured[index]!.args[1]).toBeCloseTo(position.y, 9);
+    }
+  });
+
   test("a connector skips a zero-length axis to the pill center", () => {
     const tracked = stubCtx() as unknown as {
       globalAlpha: number;
@@ -183,21 +242,29 @@ describe("CanvasLabel draw", () => {
       stroke: () => void;
       fill: () => void;
     };
+    let points = 0;
     const captured: number[] = [];
     tracked.beginPath = () => {
-      captured.length = 0;
+      points = 0;
+    };
+    tracked.moveTo = () => {
+      points += 1;
+    };
+    tracked.lineTo = () => {
+      points += 1;
     };
     tracked.stroke = () => {
-      captured.push(1);
+      captured.push(points);
     };
     tracked.fill = () => {
-      captured.push(1);
+      captured.push(points);
     };
     const label = new PillLabel("a", new Vector(2, 3), null, ZOOM, { connector: true });
     label.measure(stubCtx());
     label.draw(tracked as unknown as CanvasRenderingContext2DSized);
-    // The centered label has a zero-length axis, so the connector draws nothing.
-    expect(captured.find((kind) => kind === 1)).toBeDefined();
+    // The centered label has a zero-length axis, so the connector draws
+    // nothing: only the pill background and foreground show up.
+    expect(captured).toEqual([2, 2, 2]);
   });
 });
 

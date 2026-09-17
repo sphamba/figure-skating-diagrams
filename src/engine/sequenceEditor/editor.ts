@@ -1649,6 +1649,7 @@ export class Editor {
         this.labelLayer.add(
           new WhitePillLabel(formatTimingLabel(keyframe.value), geometry.point, geometry.outside, this.view.zoom, {
             fontSizePx: LABEL_FONT_SIZE_SMALL,
+            rotation: this.view.rotation,
           }),
         );
       }
@@ -1669,6 +1670,7 @@ export class Editor {
         this.labelLayer.add(
           new WhiteCircleLabel(String(Math.round(keyframe.value)), geometry.point, geometry.outside, this.view.zoom, {
             fontSizePx: LABEL_FONT_SIZE_SMALL,
+            rotation: this.view.rotation,
           }),
         );
       }
@@ -1985,11 +1987,17 @@ export class Editor {
       if (!geometry) continue;
       if (isJumpType(element.type) && this.mode === "view") {
         this.labelLayer.add(
-          new PillLabel(element.shortName, geometry.point, null, this.view.zoom, { connector: true }),
+          new PillLabel(element.shortName, geometry.point, null, this.view.zoom, {
+            connector: true,
+            rotation: this.view.rotation,
+          }),
         );
       } else {
         this.labelLayer.add(
-          new PillLabel(element.shortName, geometry.point, geometry.outside, this.view.zoom, { connector: true }),
+          new PillLabel(element.shortName, geometry.point, geometry.outside, this.view.zoom, {
+            connector: true,
+            rotation: this.view.rotation,
+          }),
         );
       }
       if (isStrokeElement(element) && element.crossed) {
@@ -2000,6 +2008,7 @@ export class Editor {
             new PillLabel(text, crossedGeometry.point, crossedGeometry.outside, this.view.zoom, {
               fontSizePx: LABEL_FONT_SIZE_SMALL,
               connector: true,
+              rotation: this.view.rotation,
             }),
           );
         }
@@ -2036,6 +2045,7 @@ export class Editor {
           new PillLabel(CHANGE_EDGE_LABEL, geometry.point, geometry.outside, this.view.zoom, {
             fontSizePx: LABEL_FONT_SIZE_SMALL,
             connector: true,
+            rotation: this.view.rotation,
           }),
         );
       }
@@ -2057,6 +2067,7 @@ export class Editor {
       // The pill uses the annotation color; the text is always black.
       this.labelLayer.add(
         new PillLabel(annotation.title, geometry.point, geometry.outside, this.view.zoom, {
+          rotation: this.view.rotation,
           extraOffset: extraOffset,
           alpha: ANNOTATION_LABEL_ALPHA,
           background: annotation.color,
@@ -2072,7 +2083,10 @@ export class Editor {
       const geometry = this.getStartLabelGeometry(sequence);
       if (!geometry) continue;
       this.labelLayer.add(
-        new PillLabel("start", geometry.point, geometry.outside, this.view.zoom, { connector: true }),
+        new PillLabel("start", geometry.point, geometry.outside, this.view.zoom, {
+          connector: true,
+          rotation: this.view.rotation,
+        }),
       );
     }
   }
@@ -3095,7 +3109,9 @@ export class Editor {
   }
 
   private startPinch(touches: TouchList) {
-    this.panDidMove = false;
+    // A fresh pinch resets the pan flag, but a suspended gesture keeps it so
+    // the gesture end still cancels rather than reverting the panned view.
+    if (!this.trackingSuspended) this.panDidMove = false;
     const [a, b] = [touches[0], touches[1]];
     if (!a || !b) return;
     const [ax, ay] = this.touchPosition(a);

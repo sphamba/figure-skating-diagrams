@@ -58,8 +58,12 @@ export type LabelOptions = {
   backgroundAlpha?: number;
   // Text color, defaulting to the label text color.
   textColor?: string;
-  // Line from the anchor to the pill center, drawn under the pill.
+  // Line from the anchor to the pill center, drawn above the pill backdrop
+  // and under the pill foreground.
   connector?: boolean;
+  // Canvas-space counter-rotation about the label position: the pill and text
+  // stay upright while the canvas rotates around the rink.
+  rotation?: number;
 };
 
 // Collision shape: a pill approximated as a capsule, circles degenerate to discs.
@@ -92,8 +96,10 @@ export abstract class CanvasLabel {
   protected halfB = 0;
   protected backgroundColor = PILL_COLOR;
   protected backgroundAlpha = PILL_OPACITY;
-  // Line from the anchor to the pill center, drawn under the pill.
+  // Line from the anchor to the pill center, drawn above the pill backdrop
+  // and under the pill foreground.
   protected readonly connector: boolean;
+  protected readonly rotation: number;
   // Home position (supposed location) and resolved position, canvas units.
   protected homeX = 0;
   protected homeY = 0;
@@ -109,6 +115,7 @@ export abstract class CanvasLabel {
     this.textColor = options.textColor ?? LABEL_TEXT_COLOR;
     this.backgroundColor = options.background ?? PILL_COLOR;
     this.connector = options.connector ?? false;
+    this.rotation = options.rotation ?? 0;
     this.backgroundAlpha = options.backgroundAlpha ?? PILL_OPACITY;
     this.zoom = zoom;
     this.anchorX = point.x * CANVAS_SCALE;
@@ -164,6 +171,14 @@ export abstract class CanvasLabel {
     if (this.empty) return;
     ctx.font = this.font();
     const previousAlpha = ctx.globalAlpha;
+    ctx.save();
+    // The pill and text counter-rotate about the label position, so they stay
+    // upright while the canvas rotates around the rink.
+    if (this.rotation !== 0) {
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.rotation);
+      ctx.translate(-this.x, -this.y);
+    }
     ctx.globalAlpha = previousAlpha * this.alpha;
     this.drawBackground(ctx);
     ctx.fillStyle = this.textColor;
@@ -173,6 +188,7 @@ export abstract class CanvasLabel {
     ctx.textBaseline = "middle";
     ctx.fillText(this.text, this.x, this.y);
     ctx.globalAlpha = previousAlpha;
+    ctx.restore();
   }
 
   isVisible(): boolean {
@@ -324,8 +340,19 @@ export class PillLabel extends CanvasLabel {
   }
 
   protected drawBackground(ctx: CanvasRenderingContext2DSized): void {
-    if (this.connector) {
-      this.drawConnector(ctx);
+    const backdrop = backgroundPadding(this.zoom, PILL_BACKDROP_PADDING);
+    if (!this.connector) {
+      drawPillBackground(
+        ctx,
+        this.x,
+        this.y,
+        this.halfA,
+        this.halfB,
+        this.backgroundColor,
+        this.backgroundAlpha,
+        backdrop,
+      );
+      return;
     }
     drawPillBackground(
       ctx,
@@ -335,8 +362,21 @@ export class PillLabel extends CanvasLabel {
       this.halfB,
       this.backgroundColor,
       this.backgroundAlpha,
-      backgroundPadding(this.zoom, PILL_BACKDROP_PADDING),
+      backdrop,
     );
+    // The triangle stays glued to the anchor: drawn without the upright
+    // counter-rotation, its endpoints rotate with the canvas together.
+    if (this.rotation !== 0) {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(-this.rotation);
+      ctx.translate(-this.x, -this.y);
+    }
+    this.drawConnector(ctx);
+    if (this.rotation !== 0) ctx.restore();
+    // The pill foreground renders above the triangle stroke, so the rink
+    // outline never crosses the pill surface.
+    drawPillBackground(ctx, this.x, this.y, this.halfA, this.halfB, this.backgroundColor, this.backgroundAlpha, 0);
   }
 }
 

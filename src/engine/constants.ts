@@ -2,7 +2,7 @@ export const bladeLength = 0.25;
 export const maxBladeLength = 1.0;
 
 // Canvas units per metre, editor drawing only.
-export const CANVAS_SCALE = 20;
+export const CANVAS_SCALE = 50;
 // Rink board fill and stroke color, reused for pill backgrounds.
 export const RINK_COLOR = "#e8e8ec";
 

@@ -676,6 +676,15 @@ const {
   extent: () => fullTimeExtentSeconds(store.getDiagram().sequences, getBpm()),
 });
 
+// A freshly loaded or created diagram snaps the timestamp back to the earliest
+// timestamp in it. Regular detail edits trigger the store reactivity with the
+// same diagram object, so the watch only fires on the identity change.
+const seenDiagram = computed(() => store.getDiagram());
+watch(seenDiagram, (diagram) => {
+  const earliest = earliestTimeKeyframeSeconds(diagram);
+  if (earliest !== null) setTimestamp(earliest);
+});
+
 watch(
   videoUrl,
   (value) => {

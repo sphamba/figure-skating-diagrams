@@ -445,3 +445,27 @@ test("the tracking button shows the cursor icon while following a cursor", async
   wrapper.unmount();
   vi.unstubAllGlobals();
 });
+
+test("a freshly loaded diagram snaps the timestamp to the earliest timestamp", async () => {
+  const wrapper = await mountHomeView(null, true, videoFile);
+  const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
+  const store = useSequenceEditorStore();
+  store.loadFromJSON(videoFile);
+  await nextTick();
+  const video = wrapper.find("video");
+  expect(video.exists()).toBe(true);
+  await nextTick();
+  // An out-of-range current time before the load proves the load snaps back.
+  video.element.currentTime = 8;
+  await nextTick();
+  store.loadFromJSON(timedVideoFile);
+  await nextTick();
+  expect(video.element.currentTime).toBe(3.75);
+  // Regular detail edits keep the same diagram object, so they do not snap.
+  store.setDiagramVideoUrl("https://example.com/video.mp4");
+  video.element.currentTime = 9;
+  await nextTick();
+  expect(video.element.currentTime).toBe(9);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
