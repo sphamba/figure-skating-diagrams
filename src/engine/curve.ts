@@ -74,8 +74,18 @@ export class Curve {
   getCurvilinearCoordFromUniform(u: number): Curvilinear {
     if (u >= this.length) return 1 as Curvilinear;
 
-    const upper = this.uniformCoordinates.findIndex((x: number) => x > u);
-    if (upper <= 0) return 0 as Curvilinear;
+    // Binary search for the first integrated arc length above u; the lookup
+    // runs for every trace sample and label anchor, so a scan is too slow.
+    const coordinates = this.uniformCoordinates;
+    let lo = 1;
+    let hi = coordinates.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if ((coordinates[mid] ?? 0) > u) hi = mid;
+      else lo = mid + 1;
+    }
+    const upper = lo;
+    if (upper <= 0 || upper >= coordinates.length) return 0 as Curvilinear;
 
     const lower = upper - 1;
     const uUpper = this.uniformCoordinates[upper]!;

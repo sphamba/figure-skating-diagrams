@@ -688,6 +688,9 @@ const videoSet = computed(() => videoUrl.value.trim() !== "");
 const videoStatus = ref<"empty" | "pending" | "valid" | "invalid">("empty");
 const videoValid = computed(() => videoStatus.value === "valid");
 const { speed: playbackSpeed, options: playbackSpeedOptions, apply: applyPlaybackSpeed } = usePlaybackSpeed(videoRef);
+// The extent is a computed: the playback loop reads it once per frame, so the
+// cached value avoids a full timing resolution at the frame rate.
+const timeExtent = computed(() => fullTimeExtentSeconds(store.getDiagram().sequences, getBpm()));
 const {
   seconds: videoTime,
   setTimestamp,
@@ -696,7 +699,7 @@ const {
   pause: pauseAnimation,
 } = useVideoTimestamp(videoRef, {
   speed: playbackSpeed,
-  extent: () => fullTimeExtentSeconds(store.getDiagram().sequences, getBpm()),
+  extent: () => timeExtent.value,
 });
 
 // A freshly loaded or created diagram snaps the timestamp back to the earliest
@@ -748,7 +751,7 @@ function onPaneScrubEnd() {
 }
 
 function jumpToStart() {
-  const bounds = fullTimeExtentSeconds(store.getDiagram().sequences, getBpm());
+  const bounds = timeExtent.value;
   if (bounds) {
     setTimestamp(bounds[0]);
     return;
@@ -1085,6 +1088,7 @@ function commitTimingKeyframe() {
     target.value = value;
     target.transitionIn = transitionIn;
     target.transitionOut = transitionOut;
+    editor?.invalidateTimeCachesFor(target);
     store.saveToStorage();
   }
   editor?.draw();
@@ -1199,8 +1203,15 @@ watch(hiddenSequenceSet, (next) => {
 watch([videoTime, activeSequence] as const, () => {
   if (!editor) return;
   editor.videoTimeSeconds = videoTime.value;
+  editor.requestDraw();
+});
+
+// The active sequence changes rarely, so it follows the editor in a separate
+// watch: the bpm has its own watch above, and the per-frame videoTime watch
+// stays free of these writes.
+watch(activeSequence, () => {
+  if (!editor) return;
   editor.activeSequence = activeSequence.value;
-  editor.bpm = getBpm();
   editor.requestDraw();
 });
 

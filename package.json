@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:unit": "vitest run",
+    "bench": "vitest run --config vitest.bench.config.ts",
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
     "lint": "uvx lefthook run pre-commit --command frontend-lint --all-files",

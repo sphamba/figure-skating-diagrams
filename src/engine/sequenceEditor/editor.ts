@@ -405,10 +405,23 @@ export class Editor {
   }
 
   setHiddenSequences(next: Set<Sequence>) {
+    // The visible-set semantics decide the redraw; the computed upstream may
+    // pass a new Set with the same membership on every store trigger.
+    const previous = this.hiddenSequences;
+    if (previous.size === next.size && [...next].every((sequence) => previous.has(sequence))) {
+      this.hiddenSequences = next;
+      return;
+    }
     const hasNewlyHidden = this.sequences.some((sequence) => next.has(sequence) && !this.hiddenSequences.has(sequence));
     this.hiddenSequences = next;
     if (hasNewlyHidden) this.clearEditingState();
     this.draw();
+  }
+
+  // In-place timing keyframe edits bypass Sequence.addKeyframe, so they must
+  // invalidate the sequence timing caches explicitly.
+  invalidateTimeCachesFor(keyframe: TimingKeyframe) {
+    this.getSequenceOfTimingKeyframe(keyframe)?.invalidateTimeCaches();
   }
 
   private editSequences(): Sequence[] {
@@ -1758,6 +1771,7 @@ export class Editor {
     const sequence = this.getSequenceOfTimingKeyframe(keyframe);
     if (!sequence) return;
     sequence.keyframes.time = sequence.keyframes.time.filter((candidate) => candidate !== keyframe);
+    sequence.invalidateTimeCaches();
     this.selectedTimingKeyframes.delete(keyframe);
     this.notifySequenceChange();
     this.draw();
@@ -3610,6 +3624,7 @@ export class Editor {
         for (const item of this.dragTimingItems) {
           const moved = item.sequence.path.moveAlongByArcLength(item.u0 as PathCoordinate, clamped);
           item.keyframe.pathCoordinate = Math.min(Math.max(moved as number, item.left), item.right) as PathCoordinate;
+          item.sequence.invalidateTimeCaches();
         }
         this.sequenceMutated = true;
       }
@@ -3972,6 +3987,7 @@ export class Editor {
         newCurveLengths,
       ) as PathCoordinate;
     }
+    for (const sequence of this.sequences) sequence.invalidateTimeCaches();
 
     for (const item of snapshot.annotations) {
       item.annotation.start = remapUniformAtJoint(
@@ -4048,6 +4064,7 @@ export class Editor {
         2,
       ) as PathCoordinate;
     }
+    for (const sequence of this.sequences) sequence.invalidateTimeCaches();
 
     for (const item of snapshot.annotations) {
       item.annotation.start = remapUniformAtRemoval(

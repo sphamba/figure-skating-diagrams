@@ -52,6 +52,8 @@ class EditorStub {
     return {};
   }
 
+  invalidateTimeCachesFor(_keyframe: unknown) {}
+
   clearSelection() {}
   requestDraw() {}
   draw() {}

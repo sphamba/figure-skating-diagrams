@@ -35,6 +35,15 @@ const videoSet = computed(() => videoUrl.value.trim() !== "");
 const videoStatus = ref<"empty" | "pending" | "valid" | "invalid">("empty");
 const videoValid = computed(() => videoStatus.value === "valid");
 const videoRef = ref<HTMLVideoElement | null>(null);
+
+function getBpm(): number {
+  return store.getDiagram().bpm || 120;
+}
+
+// The extent is a computed: the playback loop reads it once per frame, so the
+// cached value avoids a full timing resolution at the frame rate.
+const timeExtent = computed(() => fullTimeExtentSeconds(store.getDiagram().sequences, getBpm()));
+
 const {
   speed: playbackSpeed,
   options: playbackSpeedOptions,
@@ -49,7 +58,7 @@ const {
   pause: pauseAnimation,
 } = useVideoTimestamp(videoRef, {
   speed: playbackSpeed,
-  extent: () => fullTimeExtentSeconds(store.getDiagram().sequences, getBpm()),
+  extent: () => timeExtent.value,
 });
 
 // A freshly loaded or created diagram snaps the timestamp back to the earliest
@@ -112,7 +121,7 @@ function onPaneScrubEnd() {
 }
 
 function jumpToStart() {
-  const bounds = fullTimeExtentSeconds(store.getDiagram().sequences, getBpm());
+  const bounds = timeExtent.value;
   if (bounds) {
     setTimestamp(bounds[0]);
     return;
@@ -183,10 +192,6 @@ watch(
   },
   { immediate: true },
 );
-
-function getBpm(): number {
-  return store.getDiagram().bpm || 120;
-}
 
 watch(
   videoValid,
@@ -350,15 +355,24 @@ watch(hiddenSequenceSet, (next) => {
   editor?.setHiddenSequences(next);
 });
 
-watch([videoTime, activeSequence] as const, () => {
+watch(videoTime, (value) => {
   if (!editor) return;
-  editor.videoTimeSeconds = videoTime.value;
-  editor.activeSequence = activeSequence.value;
-  editor.bpm = getBpm();
+  editor.videoTimeSeconds = value;
   editor.requestDraw();
 });
 
+function updateEditorSequenceAndBpm() {
+  if (!editor) return;
+  editor.activeSequence = activeSequence.value;
+  editor.bpm = bpm.value;
+  editor.requestDraw();
+}
+
 const bpm = computed(() => getBpm());
+
+// The active sequence and the bpm change rarely, so they follow the editor in
+// a separate watch: the per-frame videoTime watch stays free of these writes.
+watch([activeSequence, bpm] as const, updateEditorSequenceAndBpm);
 
 const visibleSequences = computed(() => sequences.value.filter((sequence) => store.isVisible(sequence)));
 

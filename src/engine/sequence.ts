@@ -3,7 +3,7 @@ import { bladeLength, maxBladeLength } from "./constants.js";
 import type { PathCoordinate, Time } from "./coordinates.js";
 import type { AxisRect } from "./curve.js";
 import type { Element } from "./element/element.js";
-import { interpolate, type Interpolable as Interpolatable } from "./interpolate.js";
+import { interpolate, type Interpolable, type Interpolable as Interpolatable } from "./interpolate.js";
 import { FootKeyframe, HipsKeyframe, TimingKeyframe, type FootData } from "./keyframe.js";
 import type { FootKeyframeJSON, HipsKeyframeJSON, TimeKeyframeJSON, TimingKeyframeJSON } from "./keyframe.js";
 import type { Transition } from "./keyframe.js";
@@ -91,6 +91,30 @@ export class Sequence {
 
   private elementKeyframes = new WeakMap<Element, ElementKeyframes>();
 
+  // Version counters invalidate the pure-function caches below. Any edit that
+  // mutates time keyframes bumps timeVersion; any edit that touches the
+  // element set or their generated keyframes bumps elementVersion.
+  private timeVersion = 1;
+  private elementVersion = 1;
+  private timeCache: {
+    bpm: number;
+    version: number;
+    keys: TimingKeyframe[];
+    resolved: Array<{ keyframe: TimingKeyframe; time: number }>;
+  } | null = null;
+  private spanScalesCache: { scale: number; pathLength: number; version: number; scales: Map<Element, number> } | null =
+    null;
+  // Single slot per foot: the scale changes with every zoom step, so a
+  // per-scale key map would accumulate an entry per zoom level.
+  private drawnKeyframesCache = new Map<
+    FootKey,
+    { scale: number; pathLength: number; version: number; keyframes: FootKeyframe[] }
+  >();
+
+  invalidateTimeCaches(): void {
+    this.timeVersion++;
+  }
+
   constructor(path: Path) {
     this.path = path;
     this.keyframes = {
@@ -114,6 +138,9 @@ export class Sequence {
     partKey: Key,
     keyframe: KeyframeType,
   ) {
+    if (partKey === "time") {
+      this.timeVersion++;
+    }
     const keyframes = this.keyframes[partKey] as KeyframeType[];
     keyframes.push(keyframe);
     keyframes.sort((a, b) => a.coordinate - b.coordinate);
@@ -142,6 +169,7 @@ export class Sequence {
       this.removeElementKeyframes("hips", previous.hips);
     }
     this.elementKeyframes.delete(element);
+    this.elementVersion++;
   }
 
   replaceElement(oldElement: Element, newElement: Element) {
@@ -176,6 +204,7 @@ export class Sequence {
     for (const keyframe of footR) this.addKeyframe("footR", keyframe);
     for (const keyframe of hips) this.addKeyframe("hips", keyframe);
     this.elementKeyframes.set(element, { footL, footR, hips });
+    this.elementVersion++;
     this.constrainElementKeyframes();
   }
 
@@ -226,6 +255,7 @@ export class Sequence {
     for (const keyframe of fresh.footR) this.addKeyframe("footR", keyframe);
     for (const keyframe of fresh.hips) this.addKeyframe("hips", keyframe);
     this.elementKeyframes.set(element, fresh);
+    this.elementVersion++;
     this.constrainElementKeyframes();
   }
 
@@ -320,6 +350,26 @@ export class Sequence {
   }
 
   resolveTimes(bpm: number = DEFAULT_BPM): Array<{ keyframe: TimingKeyframe; time: number }> {
+    // resolveTimes is a pure function of the time keyframes and bpm. The cache
+    // keeps the draw loop free of repeated copies and sorts; in-place edits of
+    // a member keyframe bump timeVersion through invalidateTimeCaches.
+    const time = this.keyframes.time;
+    const cached = this.timeCache;
+    if (
+      cached &&
+      cached.bpm === bpm &&
+      cached.version === this.timeVersion &&
+      cached.keys.length === time.length &&
+      cached.keys.every((keyframe, index) => keyframe === time[index])
+    ) {
+      return cached.resolved;
+    }
+    const resolved = this.computeResolvedTimes(bpm);
+    this.timeCache = { bpm, version: this.timeVersion, keys: [...time], resolved };
+    return resolved;
+  }
+
+  private computeResolvedTimes(bpm: number): Array<{ keyframe: TimingKeyframe; time: number }> {
     const keyframes = [...this.keyframes.time].sort((a, b) => a.pathCoordinate - b.pathCoordinate);
     const resolved: Array<{ keyframe: TimingKeyframe; time: number }> = [];
     let previousTime = 0;
@@ -470,13 +520,32 @@ export class Sequence {
 
   getSpanScales(minBladeLength?: number): Map<Element, number> {
     const target = this.getBladeLengthScale(minBladeLength);
-    if (target === 1) return new Map();
-    return computeSpanScales(this.elements, target, this.path.length);
+    const cached = this.spanScalesCache;
+    if (
+      cached &&
+      cached.scale === target &&
+      cached.pathLength === this.path.length &&
+      cached.version === this.elementVersion
+    ) {
+      return cached.scales;
+    }
+    const scales = target === 1 ? new Map() : computeSpanScales(this.elements, target, this.path.length);
+    this.spanScalesCache = { scale: target, pathLength: this.path.length, version: this.elementVersion, scales };
+    return scales;
   }
 
   getDrawFootKeyframes(footKey: FootKey, scale: number): FootKeyframe[] {
     if (scale === 1) {
       return this.keyframes[footKey];
+    }
+    const cached = this.drawnKeyframesCache.get(footKey);
+    if (
+      cached &&
+      cached.scale === scale &&
+      cached.pathLength === this.path.length &&
+      cached.version === this.elementVersion
+    ) {
+      return cached.keyframes;
     }
     const elements = [...this.elements].sort((a, b) => (a.start as number) - (b.start as number));
     const keyframes: FootKeyframe[] = [];
@@ -506,6 +575,12 @@ export class Sequence {
       endKeyframes = startKeyframes;
     }
     keyframes.sort((a, b) => a.coordinate - b.coordinate);
+    this.drawnKeyframesCache.set(footKey, {
+      scale,
+      pathLength: this.path.length,
+      version: this.elementVersion,
+      keyframes,
+    });
     return keyframes;
   }
 
@@ -544,45 +619,42 @@ export class Sequence {
     const visibleRanges = this.getVisibleTraceRanges(uStart, uEnd, viewport, minBladeLength);
 
     const drawable = drawKeyframes ?? this.keyframes[footKey];
-    const toePickSamples = this.getSampledKeyframes(
-      drawable.filter(
-        (keyframe) => keyframe.data.toePick === true && keyframe.coordinate >= uStart && keyframe.coordinate <= uEnd,
-      ),
-      visibleRanges,
-      step,
-    );
-    const spinSamples = this.getSampledKeyframes(
-      drawable.filter(
-        (keyframe) =>
-          keyframe.data.spins !== undefined &&
-          keyframe.data.spins !== 0 &&
-          keyframe.coordinate >= uStart &&
-          keyframe.coordinate <= uEnd,
-      ),
-      visibleRanges,
-      step,
-    );
-    const toePickKeyframes = new Set<FootKeyframe>();
-    const spinKeyframes = new Set<FootKeyframe>();
+    const defaultKeyframes = this.keyframes[footKey];
+    const hasFallback = drawable !== defaultKeyframes;
+    // One filtered list per property per draw; the samples are visited in
+    // ascending order, so the binary search replaces per-sample filtering.
+    const byProperty = (list: FootKeyframe[], property: keyof FootData) =>
+      list.filter((keyframe) => keyframe.data[property] !== undefined);
+    const filteredContact = byProperty(drawable, "contactPoint");
+    const filteredOrientation = byProperty(drawable, "orientation");
+    const filteredPosition = byProperty(drawable, "position");
+    const fallbackContact = hasFallback ? byProperty(defaultKeyframes, "contactPoint") : undefined;
+    const fallbackOrientation = hasFallback ? byProperty(defaultKeyframes, "orientation") : undefined;
+    const fallbackPosition = hasFallback ? byProperty(defaultKeyframes, "position") : undefined;
+    const interpolateProperty = (property: keyof FootData, coordinate: number) => {
+      const filtered =
+        property === "contactPoint"
+          ? filteredContact
+          : property === "orientation"
+            ? filteredOrientation
+            : filteredPosition;
+      const fallback =
+        property === "contactPoint"
+          ? fallbackContact
+          : property === "orientation"
+            ? fallbackOrientation
+            : fallbackPosition;
+      return this.getInterpolatedValueInFilteredList(property, coordinate, filtered, fallback) as number;
+    };
 
     const maxSquaredSegmentLength = segmentThreshold ** 2 * step * step;
 
     const computeContactData = (pathCoordinate: PathCoordinate) => {
-      const contactPoint = this.getInterpolatedValue(footKey, "contactPoint", pathCoordinate, drawKeyframes) as number;
-      const footRelativeOrientation = this.getInterpolatedValue(
-        footKey,
-        "orientation",
-        pathCoordinate,
-        drawKeyframes,
-      ) as Quaternion;
+      const contactPoint = interpolateProperty("contactPoint", pathCoordinate);
+      const footRelativeOrientation = interpolateProperty("orientation", pathCoordinate) as unknown as Quaternion;
       const pathOrientation = this.getPathOrientation(pathCoordinate);
       const pathPosition = this.path.getPosition(pathCoordinate);
-      const footRelativePosition = this.getInterpolatedValue(
-        footKey,
-        "position",
-        pathCoordinate,
-        drawKeyframes,
-      ) as Vector<3>;
+      const footRelativePosition = interpolateProperty("position", pathCoordinate) as unknown as Vector<3>;
 
       const footRelativeDirection = getRelativeForwardDirection(footRelativeOrientation);
 
@@ -659,6 +731,27 @@ export class Sequence {
 
       ctx.globalAlpha = previousAlpha;
     };
+
+    const toePickSamples = this.getSampledKeyframes(
+      drawable.filter(
+        (keyframe) => keyframe.data.toePick === true && keyframe.coordinate >= uStart && keyframe.coordinate <= uEnd,
+      ),
+      visibleRanges,
+      step,
+    );
+    const spinSamples = this.getSampledKeyframes(
+      drawable.filter(
+        (keyframe) =>
+          keyframe.data.spins !== undefined &&
+          keyframe.data.spins !== 0 &&
+          keyframe.coordinate >= uStart &&
+          keyframe.coordinate <= uEnd,
+      ),
+      visibleRanges,
+      step,
+    );
+    const toePickKeyframes = new Set<FootKeyframe>();
+    const spinKeyframes = new Set<FootKeyframe>();
 
     let previousRangeEnd: number | undefined;
     for (const [rangeStart, rangeEnd] of visibleRanges) {
@@ -890,6 +983,30 @@ export class Sequence {
     return [keyframeBefore, keyframeAfter, relative];
   }
 
+  // Interpolation from a list already filtered by property presence, for the
+  // ascending sampling loop. Keeps the getInterpolatedValue semantics without
+  // re-filtering the full keyframe array per sample.
+  private getInterpolatedValueInFilteredList<FootKeyframeType extends FootKeyframe>(
+    property: keyof FootData,
+    coordinate: number,
+    filtered: FootKeyframeType[],
+    fallback?: FootKeyframeType[],
+  ): Interpolable | undefined {
+    const list = filtered.length > 0 || fallback === undefined ? filtered : fallback;
+    if (list.length === 0) return undefined;
+    const cut = Math.min(upperBoundCoordinate(list, coordinate), list.length - 1);
+    const keyframeAfter = list[cut]!;
+    const keyframeBefore = list[Math.max(0, cut - 1)]!;
+    const coordinateDelta = keyframeAfter.coordinate - keyframeBefore.coordinate;
+    const relative =
+      coordinateDelta === 0 ? 0 : Math.max(0, Math.min(1, (coordinate - keyframeBefore.coordinate) / coordinateDelta));
+    return interpolate(
+      keyframeBefore.data[property] as Interpolable,
+      keyframeAfter.data[property] as Interpolable,
+      relative,
+    );
+  }
+
   getInterpolatedValue<
     Key extends FootOrHipsKey,
     KeyframeType extends SequenceKeyframes[Key][number],
@@ -940,6 +1057,17 @@ function getEasedTime(
 
 function getFloorAngleFromDirection(direction: Vector<3>): number {
   return Math.atan2(direction.y, direction.x);
+}
+
+function upperBoundCoordinate(list: Array<{ coordinate: number }>, u: number): number {
+  let lo = 0;
+  let hi = list.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (list[mid]!.coordinate <= u) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
 }
 
 function getRelativeForwardDirection(orientation: Quaternion): Vector<3> {
