@@ -79,8 +79,9 @@ function togglePlayback() {
 
 function toggleTracking() {
   if (!editor) return;
-  if (editor.tracking) editor.disableTracking();
-  else editor.followTimeCursor();
+  // The editor advances its own cycle: it starts tracking at the barycenter,
+  // then each visible cursor, then back to the barycenter.
+  editor.followTimeCursor();
 }
 
 usePlaybackKeyToggle(togglePlayback);
@@ -112,6 +113,7 @@ function jumpToStart() {
 
 let editor: Editor | null = null;
 const isTracking = ref(false);
+const trackingStage = ref<"barycenter" | "cursor">("barycenter");
 
 const drawRange = computed({
   get: () => store.getDrawRange(),
@@ -268,8 +270,10 @@ function createEditor() {
   editor = editorInstance;
   editorInstance.onTrackingChange = () => {
     isTracking.value = editorInstance.tracking;
+    trackingStage.value = editorInstance.trackingStage === "cursor" ? "cursor" : "barycenter";
   };
   isTracking.value = editorInstance.tracking;
+  trackingStage.value = editorInstance.trackingStage === "cursor" ? "cursor" : "barycenter";
   editorInstance.mode = "view";
   editorInstance.scaleElements = scaleElements.value;
   editorInstance.showLabels = showLabels.value;
@@ -380,7 +384,7 @@ onBeforeUnmount(() => {
           <SplitterPanel class="home-view__canvas-pane" :size="canvasPaneSize" :min-size="20">
             <div class="home-view__canvas-area">
               <canvas ref="canvasRef" class="home-view__canvas-element"></canvas>
-              <TrackingButton :active="isTracking" @toggle="toggleTracking" />
+              <TrackingButton :active="isTracking" :mode="trackingStage" @toggle="toggleTracking" />
               <TimeSyncPane
                 class="home-view__elements"
                 :sequences="visibleSequences"

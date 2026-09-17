@@ -29,7 +29,10 @@ class EditorStub {
     recorder.instances.push(this);
   }
 
+  trackingStage: "off" | "barycenter" | "cursor" = "off";
+
   followTimeCursor() {
+    this.trackingStage = this.trackingStage === "barycenter" ? "cursor" : "barycenter";
     this.tracking = true;
     this.onTrackingChange?.();
   }
@@ -376,7 +379,7 @@ test("the space key toggles the playback and skips text targets", async () => {
   vi.unstubAllGlobals();
 });
 
-test("the tracking button toggles editor tracking", async () => {
+test("the tracking button advances the tracking cycle through clicks", async () => {
   const wrapper = await mountHomeView(null, true, videoFile);
   const button = wrapper.find(".tracking-button");
   expect(button.exists()).toBe(true);
@@ -386,8 +389,14 @@ test("the tracking button toggles editor tracking", async () => {
   await button.trigger("click");
   expect(instance!.tracking).toBe(true);
   expect(button.attributes("aria-pressed")).toBe("true");
+  // Further clicks advance the cycle instead of breaking the tracking, so
+  // the button stays pressed and only pan/pinch can break it.
   await button.trigger("click");
-  expect(instance!.tracking).toBe(false);
+  expect(instance!.tracking).toBe(true);
+  expect(button.attributes("aria-pressed")).toBe("true");
+  instance!.tracking = false;
+  instance!.onTrackingChange?.();
+  await nextTick();
   expect(button.attributes("aria-pressed")).toBe("false");
   wrapper.unmount();
   vi.unstubAllGlobals();
@@ -411,6 +420,28 @@ test("the tracking button resets after the canvas remounts", async () => {
   expect(next).not.toBe(instance);
   expect(next!.tracking).toBe(false);
   expect(wrapper.find(".tracking-button").attributes("aria-pressed")).toBe("false");
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("the tracking button shows the cursor icon while following a cursor", async () => {
+  const wrapper = await mountHomeView(null, true, videoFile);
+  const button = wrapper.find(".tracking-button");
+  const instance = recorder.instances.at(-1) as {
+    tracking: boolean;
+    trackingStage: "barycenter" | "cursor";
+    onTrackingChange?: () => void;
+  } | undefined;
+  expect(instance, "the editor should mount with the canvas").not.toBeUndefined();
+  expect(button.find("polygon").exists()).toBe(false);
+  await button.trigger("click");
+  expect(button.find(".tracking-button__icon circle").exists()).toBe(true);
+  expect(button.find("polygon").exists()).toBe(false);
+  instance!.trackingStage = "cursor";
+  instance!.onTrackingChange?.();
+  await nextTick();
+  expect(button.find("polygon").exists()).toBe(true);
+  expect(button.find(".tracking-button__icon circle").exists()).toBe(false);
   wrapper.unmount();
   vi.unstubAllGlobals();
 });

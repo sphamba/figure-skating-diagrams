@@ -111,10 +111,11 @@ const ANNOTATION_SELECTED_COLOR = "#d33";
 const MIN_ZOOM = 2;
 const MAX_ZOOM = 5000;
 const INITIAL_EDGE_MARGIN = 5; // px between the canvas edge and the rink edge at load
-const TRACKING_ANIMATION_MS = 300; // duration of the rapid but smooth center move
+const TRACKING_ANIMATION_MS = 300; // duration of the rapid but smooth center move and rotation
 type ViewState = {
   center: Vector<2>;
   zoom: number; // pixel per meter
+  rotation: number; // radians, rotates the world counterclockwise on screen
 };
 
 export type EditMode = "view" | "path" | "elements" | "timing" | "annotations";
@@ -181,12 +182,32 @@ export class Editor {
   private selectedCurves = new Map<Sequence, Set<number>>();
   private selectedElements = new Set<Element>();
   private isPanning = false;
-  // Tracking keeps the view center on the time cursor barycenter until the
-  // user pans the canvas manually.
+  private panDidMove = false;
+  // Tracking keeps the view on the time cursors until the user pans the
+  // canvas manually. While tracking, each button click advances a cycle:
+  // barycenter, then each visible cursor with its trace direction upright,
+  // then back to the barycenter.
   tracking = false;
   onTrackingChange?: () => void;
   private trackedCursorCount = 0;
-  private trackingAnimation: { from: Vector<2>; to: Vector<2>; startedAt: number; duration: number } | null = null;
+  private trackingTarget: "barycenter" | number = "barycenter";
+
+  // The stage the crosshair button shows: off, the barycenter, or one
+  // specific time cursor with its orientation upright.
+  get trackingStage(): "off" | "barycenter" | "cursor" {
+    if (!this.tracking) return "off";
+    return this.trackingTarget === "barycenter" ? "barycenter" : "cursor";
+  }
+  private trackingAnimation: {
+    fromCenter: Vector<2>;
+    toCenter: Vector<2>;
+    fromRotation: number;
+    toRotation: number;
+    startedAt: number;
+    duration: number;
+  } | null = null;
+  // True while a time cursor or rink drag holds the tracked view frozen.
+  private trackingSuspended = false;
   private trackingFrameHandle: number | null = null;
   private isDraggingPoint = false;
   private isDraggingCurve = false;
@@ -289,6 +310,7 @@ export class Editor {
     this.view = {
       center: new Vector<2>(0, 0),
       zoom: 100,
+      rotation: 0,
     };
 
     this.resize();
@@ -486,6 +508,7 @@ export class Editor {
   }
 
   draw() {
+    this.advanceTrackingAnimation();
     this.updateTracking();
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.width, this.height);
@@ -617,35 +640,60 @@ export class Editor {
     return { point: sequence.path.getPosition(u), angle };
   }
 
-  private visibleTimeCursorPositions(): Vector<2>[] {
-    const positions: Vector<2>[] = [];
-    if (this.videoTimeSeconds === null) return positions;
+  private visibleTimeCursors(): { sequence: Sequence; point: Vector<2>; angle: number }[] {
+    const cursors: { sequence: Sequence; point: Vector<2>; angle: number }[] = [];
+    if (this.videoTimeSeconds === null) return cursors;
     for (const sequence of this.editSequences()) {
-      const u = this.getVideoCursorPosition(sequence);
-      if (u === null) continue;
-      positions.push(sequence.path.getPosition(u));
+      const geometry = this.getVideoCursorGeometry(sequence);
+      if (!geometry) continue;
+      cursors.push({ sequence, point: geometry.point, angle: geometry.angle });
     }
-    return positions;
-  }
-
-  private timeCursorBarycenter(): Vector<2> | null {
-    const positions = this.visibleTimeCursorPositions();
-    if (positions.length === 0) return null;
-    let sum = new Vector<2>(0, 0);
-    for (const position of positions) sum = sum.plus(position);
-    return sum.times(1 / positions.length);
+    return cursors;
   }
 
   followTimeCursor() {
-    const target = this.timeCursorBarycenter();
-    if (!target) return;
+    if (this.trackingSuspended) return;
+    const count = this.visibleTimeCursors().length;
+    if (count === 0) return;
+    if (!this.tracking) {
+      this.trackingTarget = "barycenter";
+    } else if (this.trackingTarget === "barycenter") {
+      this.trackingTarget = 0;
+    } else {
+      const next = this.trackingTarget + 1;
+      this.trackingTarget = next >= count ? "barycenter" : next;
+    }
     this.setTracking(true);
-    this.trackedCursorCount = this.visibleTimeCursorPositions().length;
-    this.startTrackingAnimation(target);
+    this.trackedCursorCount = count;
+    this.startTrackingAnimation(this.trackingGoal());
+    // The stage may change while tracking stays on, so the button state
+    // updates through this callback too.
+    this.onTrackingChange?.();
+  }
+
+  // Freezes the tracked view: the center and orientation stay where they
+  // were while the user drags a time cursor or the rink.
+  private suspendTracking() {
+    if (!this.tracking || this.trackingSuspended) return;
+    this.trackingSuspended = true;
+    this.cancelTrackingAnimation();
+  }
+
+  // Re-engages the frozen tracking after a time cursor drag ends.
+  private resumeTracking() {
+    if (!this.tracking || !this.trackingSuspended) return;
+    this.trackingSuspended = false;
+    this.trackedCursorCount = this.visibleTimeCursors().length;
+    this.startTrackingAnimation(this.trackingGoal());
   }
 
   disableTracking() {
+    this.trackingSuspended = false;
     this.setTracking(false);
+    // Panning breaks tracking: rotate the rink back upright smoothly.
+    if (Math.abs(this.view.rotation) > 1e-6) {
+      this.startTrackingAnimation({ point: this.view.center, rotation: 0 });
+    }
   }
 
   private setTracking(value: boolean) {
@@ -658,15 +706,42 @@ export class Editor {
     this.onTrackingChange?.();
   }
 
-  private startTrackingAnimation(target: Vector<2>) {
+  // The center and rotation the tracked view should ease toward: the
+  // barycenter keeps the default rotation, a tracked cursor rotates the
+  // whole rink so its trace direction points up on screen.
+  private trackingGoal(): { point: Vector<2>; rotation: number } | null {
+    const cursors = this.visibleTimeCursors();
+    if (this.trackingTarget === "barycenter") {
+      if (cursors.length === 0) return null;
+      let sum = new Vector<2>(0, 0);
+      for (const cursor of cursors) sum = sum.plus(cursor.point);
+      return { point: sum.times(1 / cursors.length), rotation: 0 };
+    }
+    // A hidden sibling shifts the indices, so the target falls back to the
+    // last remaining cursor.
+    const cursor = cursors[Math.min(this.trackingTarget, cursors.length - 1)];
+    if (!cursor) return null;
+    return { point: cursor.point, rotation: Math.PI / 2 - cursor.angle };
+  }
+
+  private startTrackingAnimation(goal: { point: Vector<2>; rotation: number } | null) {
     this.cancelTrackingAnimation();
+    if (!goal) return;
     if (typeof requestAnimationFrame !== "function") {
-      this.view.center = target;
+      this.view.center = goal.point;
+      this.view.rotation = goal.rotation;
       return;
     }
+    // Take the short way around, so the rotation never spins the long arc.
+    const rotationDelta = Math.atan2(
+      Math.sin(goal.rotation - this.view.rotation),
+      Math.cos(goal.rotation - this.view.rotation),
+    );
     this.trackingAnimation = {
-      from: this.view.center,
-      to: target,
+      fromCenter: this.view.center,
+      toCenter: goal.point,
+      fromRotation: this.view.rotation,
+      toRotation: this.view.rotation + rotationDelta,
       startedAt: performance.now(),
       duration: TRACKING_ANIMATION_MS,
     };
@@ -692,29 +767,34 @@ export class Editor {
     this.trackingAnimation = null;
   }
 
+  // Runs at the top of draw, also while tracking is off after a pan broke
+  // it: the tracked center move and rotation ease toward their goals.
+  private advanceTrackingAnimation() {
+    const animation = this.trackingAnimation;
+    if (!animation) return;
+    const t = Math.min(1, (performance.now() - animation.startedAt) / animation.duration);
+    const eased = 1 - Math.pow(1 - t, 3);
+    this.view.center = animation.fromCenter.plus(animation.toCenter.minus(animation.fromCenter).times(eased));
+    this.view.rotation = animation.fromRotation + (animation.toRotation - animation.fromRotation) * eased;
+    if (t >= 1) this.trackingAnimation = null;
+  }
+
   // Runs at the top of draw: a jump in the tracked cursor count eases toward
-  // the new barycenter, and without an animation the view follows the
-  // barycenter with no lag. When no cursor is visible, the view stays still
-  // and a running move stops.
+  // the new goal, and without an animation the view follows the goal with no
+  // lag. When no cursor is visible, the view stays still and a running move
+  // stops.
   private updateTracking() {
-    if (!this.tracking) return;
-    const count = this.visibleTimeCursorPositions().length;
+    if (!this.tracking || this.trackingSuspended) return;
+    const count = this.visibleTimeCursors().length;
     if (count === 0) this.cancelTrackingAnimation();
     const jumped = count !== this.trackedCursorCount && count > 0;
     this.trackedCursorCount = count;
-    if (jumped) {
-      const target = this.timeCursorBarycenter();
-      if (target) this.startTrackingAnimation(target);
-    }
-    const animation = this.trackingAnimation;
-    if (animation) {
-      const t = Math.min(1, (performance.now() - animation.startedAt) / animation.duration);
-      const eased = 1 - Math.pow(1 - t, 3);
-      this.view.center = animation.from.plus(animation.to.minus(animation.from).times(eased));
-      if (t >= 1) this.trackingAnimation = null;
-    } else {
-      const target = this.timeCursorBarycenter();
-      if (target) this.view.center = target;
+    if (jumped) this.startTrackingAnimation(this.trackingGoal());
+    if (this.trackingAnimation) return;
+    const goal = this.trackingGoal();
+    if (goal) {
+      this.view.center = goal.point;
+      this.view.rotation = goal.rotation;
     }
   }
 
@@ -1256,24 +1336,49 @@ export class Editor {
 
   private getTraceViewport(minBladeLength?: number): AxisRect {
     const margin = minBladeLength === undefined ? bladeLength : Math.max(bladeLength, minBladeLength);
-    const halfWidth = this.width / 2 / this.view.zoom;
-    const halfHeight = this.height / 2 / this.view.zoom;
+    // With a rotated view the visible world region is a rotated rectangle, so
+    // the culling box spans its four corners.
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const corner of [
+      this.screenToWorld(0, 0),
+      this.screenToWorld(this.width, 0),
+      this.screenToWorld(this.width, this.height),
+      this.screenToWorld(0, this.height),
+    ]) {
+      minX = Math.min(minX, corner.x);
+      maxX = Math.max(maxX, corner.x);
+      minY = Math.min(minY, corner.y);
+      maxY = Math.max(maxY, corner.y);
+    }
     return {
-      minX: this.view.center.x - halfWidth - margin,
-      maxX: this.view.center.x + halfWidth + margin,
-      minY: this.view.center.y - halfHeight - margin,
-      maxY: this.view.center.y + halfHeight + margin,
+      minX: minX - margin,
+      maxX: maxX + margin,
+      minY: minY - margin,
+      maxY: maxY + margin,
     };
   }
 
   private transformContext() {
     const ctx = this.ctx;
+    const rotation = this.view.rotation;
+    const cos = Math.cos(rotation);
+    const sin = Math.sin(rotation);
+    // The canvas draws world points as (x, -y), so a counterclockwise world
+    // rotation appears as a negative canvas rotation.
+    const rotatedCenter = new Vector<2>(
+      this.view.center.x * cos - this.view.center.y * sin,
+      this.view.center.x * sin + this.view.center.y * cos,
+    );
     let translation = new Vector<2>(ctx.width / 2, -ctx.height / 2);
-    translation = translation.times(1 / this.view.zoom).minus(this.view.center);
+    translation = translation.times(1 / this.view.zoom).minus(rotatedCenter);
 
     ctx.save();
     ctx.scale(this.view.zoom / CANVAS_SCALE, this.view.zoom / CANVAS_SCALE);
     ctx.translate(translation.x * CANVAS_SCALE, -translation.y * CANVAS_SCALE);
+    ctx.rotate(-rotation);
   }
 
   private drawMetres(draw: () => void) {
@@ -2859,17 +2964,32 @@ export class Editor {
   }
 
   private screenToWorld(screenX: number, screenY: number): Vector<2> {
-    return new Vector<2>(
-      this.view.center.x + (screenX - this.width / 2) / this.view.zoom,
-      this.view.center.y - (screenY - this.height / 2) / this.view.zoom,
-    );
+    const cos = Math.cos(this.view.rotation);
+    const sin = Math.sin(this.view.rotation);
+    const dx = (screenX - this.width / 2) / this.view.zoom;
+    const dy = -(screenY - this.height / 2) / this.view.zoom;
+    return new Vector<2>(this.view.center.x + dx * cos + dy * sin, this.view.center.y - dx * sin + dy * cos);
   }
 
   private worldToScreen(world: Vector<2>): [number, number] {
+    const cos = Math.cos(this.view.rotation);
+    const sin = Math.sin(this.view.rotation);
+    const dx = world.x - this.view.center.x;
+    const dy = world.y - this.view.center.y;
     return [
-      this.width / 2 + (world.x - this.view.center.x) * this.view.zoom,
-      this.height / 2 - (world.y - this.view.center.y) * this.view.zoom,
+      this.width / 2 + (dx * cos - dy * sin) * this.view.zoom,
+      this.height / 2 - (dx * sin + dy * cos) * this.view.zoom,
     ];
+  }
+
+  // The world-space screen offset, rotated back into world coordinates, that
+  // a point at the given screen position is away from the view center.
+  private rotatedScreenOffset(screenX: number, screenY: number): Vector<2> {
+    const cos = Math.cos(this.view.rotation);
+    const sin = Math.sin(this.view.rotation);
+    const dx = (screenX - this.width / 2) / this.view.zoom;
+    const dy = -(screenY - this.height / 2) / this.view.zoom;
+    return new Vector<2>(dx * cos + dy * sin, -dx * sin + dy * cos);
   }
 
   private screenPosition(event: MouseEvent): [number, number] {
@@ -2899,10 +3019,7 @@ export class Editor {
       Math.max(MIN_ZOOM, this.view.zoom * Math.pow(ZOOM_FACTOR, -event.deltaY * WHEEL_SENSITIVITY)),
     );
 
-    this.view.center = new Vector<2>(
-      worldBefore.x - (screenX - this.width / 2) / this.view.zoom,
-      worldBefore.y + (screenY - this.height / 2) / this.view.zoom,
-    );
+    this.view.center = worldBefore.minus(this.rotatedScreenOffset(screenX, screenY));
 
     this.requestDraw();
   }
@@ -2978,6 +3095,7 @@ export class Editor {
   }
 
   private startPinch(touches: TouchList) {
+    this.panDidMove = false;
     const [a, b] = [touches[0], touches[1]];
     if (!a || !b) return;
     const [ax, ay] = this.touchPosition(a);
@@ -3004,13 +3122,13 @@ export class Editor {
 
     const worldUnderMid = this.screenToWorld(this.lastPinchMidX, this.lastPinchMidY);
     this.autoFitRink = false;
-    this.disableTracking();
     this.view.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, this.view.zoom * (dist / this.lastPinchDist)));
     // The world point under the previous midpoint stays under the current midpoint.
-    this.view.center = new Vector<2>(
-      worldUnderMid.x - (midX - this.width / 2) / this.view.zoom,
-      worldUnderMid.y + (midY - this.height / 2) / this.view.zoom,
-    );
+    this.view.center = worldUnderMid.minus(this.rotatedScreenOffset(midX, midY));
+    // Freezing the tracking after the center update keeps the frozen state
+    // from reverting the panned center; the gesture end cancels it.
+    this.panDidMove = true;
+    this.suspendTracking();
 
     this.lastPinchDist = dist;
     this.lastPinchMidX = midX;
@@ -3020,8 +3138,10 @@ export class Editor {
 
   private handleSecondaryDown(screenX: number, screenY: number) {
     this.isPanning = true;
+    this.panDidMove = false;
     this.lastPanX = screenX;
     this.lastPanY = screenY;
+    this.suspendTracking();
   }
 
   private handlePrimaryDown(screenX: number, screenY: number, ctrlKey: boolean) {
@@ -3033,6 +3153,7 @@ export class Editor {
         this.isDraggingVideoCursor = true;
         this.dragVideoSequence = grabbed;
         this.onTimeScrubStart?.();
+        this.suspendTracking();
         return;
       }
       const nearPath = this.hitNearPath(screenX, screenY);
@@ -3041,6 +3162,7 @@ export class Editor {
         this.isDraggingVideoCursor = true;
         this.dragVideoSequence = nearPath;
         this.onTimeScrubStart?.();
+        this.suspendTracking();
         this.dragVideoCursor(screenX, screenY);
         return;
       }
@@ -3331,8 +3453,14 @@ export class Editor {
       this.lastPanX = screenX;
       this.lastPanY = screenY;
 
-      this.view.center = this.view.center.plus(new Vector<2>(-deltaX, deltaY).times(1 / this.view.zoom));
-      this.disableTracking();
+      // The screen delta rotates back into world axes, so the dragged world
+      // point follows the cursor during a rotation restore.
+      const cos = Math.cos(this.view.rotation);
+      const sin = Math.sin(this.view.rotation);
+      this.view.center = this.view.center.plus(
+        new Vector<2>((-deltaX * cos + deltaY * sin) / this.view.zoom, (deltaX * sin + deltaY * cos) / this.view.zoom),
+      );
+      this.panDidMove = true;
       this.requestDraw();
       return;
     }
@@ -3991,6 +4119,11 @@ export class Editor {
     this.dragSequence = null;
     this.dragOrigin = null;
     this.lastDragDelta = new Vector<2>(0, 0);
+    if (this.trackingSuspended) {
+      if (wasScrubbing || !this.panDidMove) this.resumeTracking();
+      else this.disableTracking();
+    }
+    this.panDidMove = false;
     if (wasScrubbing) this.onTimeScrubEnd?.();
     if (this.sequenceMutated) {
       this.sequenceMutated = false;

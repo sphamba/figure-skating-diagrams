@@ -1,5 +1,5 @@
 <script setup lang="ts">
-defineProps<{ active: boolean }>();
+defineProps<{ active: boolean; mode?: "barycenter" | "cursor" }>();
 defineEmits<{ toggle: [] }>();
 </script>
 
@@ -13,6 +13,19 @@ defineEmits<{ toggle: [] }>();
     @click="$emit('toggle')"
   >
     <svg
+      v-if="active && mode === 'cursor'"
+      class="tracking-button__icon"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      stroke="currentColor"
+      stroke-width="1.2"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <polygon points="12,4.9 16.3,17.2 12,15.2 7.7,17.2" />
+    </svg>
+    <svg
+      v-else
       class="tracking-button__icon"
       viewBox="0 0 24 24"
       fill="none"

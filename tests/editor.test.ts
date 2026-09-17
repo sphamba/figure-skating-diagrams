@@ -91,6 +91,7 @@ const CTX_METHODS = [
   "fillRect",
   "strokeRect",
   "translate",
+  "rotate",
   "setTransform",
   "closePath",
   "rect",
