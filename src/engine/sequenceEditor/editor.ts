@@ -111,6 +111,7 @@ const ANNOTATION_SELECTED_COLOR = "#d33";
 const MIN_ZOOM = 2;
 const MAX_ZOOM = 5000;
 const INITIAL_EDGE_MARGIN = 5; // px between the canvas edge and the rink edge at load
+const TRACKING_ANIMATION_MS = 300; // duration of the rapid but smooth center move
 type ViewState = {
   center: Vector<2>;
   zoom: number; // pixel per meter
@@ -180,6 +181,13 @@ export class Editor {
   private selectedCurves = new Map<Sequence, Set<number>>();
   private selectedElements = new Set<Element>();
   private isPanning = false;
+  // Tracking keeps the view center on the time cursor barycenter until the
+  // user pans the canvas manually.
+  tracking = false;
+  onTrackingChange?: () => void;
+  private trackedCursorCount = 0;
+  private trackingAnimation: { from: Vector<2>; to: Vector<2>; startedAt: number; duration: number } | null = null;
+  private trackingFrameHandle: number | null = null;
   private isDraggingPoint = false;
   private isDraggingCurve = false;
   private isSelectingRect = false;
@@ -305,6 +313,7 @@ export class Editor {
   }
 
   destroy() {
+    this.cancelTrackingAnimation();
     if (this.drawFrameHandle !== null) {
       if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(this.drawFrameHandle);
       this.drawFrameHandle = null;
@@ -477,6 +486,7 @@ export class Editor {
   }
 
   draw() {
+    this.updateTracking();
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.width, this.height);
     // A mid-frame error must not leave ctx.save() on the stack.
@@ -605,6 +615,107 @@ export class Editor {
       ? sequence.getFloorAngle("hips", u)
       : sequence.getFloorAngleFromPath(u);
     return { point: sequence.path.getPosition(u), angle };
+  }
+
+  private visibleTimeCursorPositions(): Vector<2>[] {
+    const positions: Vector<2>[] = [];
+    if (this.videoTimeSeconds === null) return positions;
+    for (const sequence of this.editSequences()) {
+      const u = this.getVideoCursorPosition(sequence);
+      if (u === null) continue;
+      positions.push(sequence.path.getPosition(u));
+    }
+    return positions;
+  }
+
+  private timeCursorBarycenter(): Vector<2> | null {
+    const positions = this.visibleTimeCursorPositions();
+    if (positions.length === 0) return null;
+    let sum = new Vector<2>(0, 0);
+    for (const position of positions) sum = sum.plus(position);
+    return sum.times(1 / positions.length);
+  }
+
+  followTimeCursor() {
+    const target = this.timeCursorBarycenter();
+    if (!target) return;
+    this.setTracking(true);
+    this.trackedCursorCount = this.visibleTimeCursorPositions().length;
+    this.startTrackingAnimation(target);
+  }
+
+  disableTracking() {
+    this.setTracking(false);
+  }
+
+  private setTracking(value: boolean) {
+    if (value === this.tracking) return;
+    this.tracking = value;
+    if (!value) {
+      this.cancelTrackingAnimation();
+      this.trackedCursorCount = 0;
+    }
+    this.onTrackingChange?.();
+  }
+
+  private startTrackingAnimation(target: Vector<2>) {
+    this.cancelTrackingAnimation();
+    if (typeof requestAnimationFrame !== "function") {
+      this.view.center = target;
+      return;
+    }
+    this.trackingAnimation = {
+      from: this.view.center,
+      to: target,
+      startedAt: performance.now(),
+      duration: TRACKING_ANIMATION_MS,
+    };
+    const step = () => {
+      this.trackingFrameHandle = null;
+      if (!this.trackingAnimation) return;
+      this.requestDraw();
+      if (performance.now() - this.trackingAnimation.startedAt >= this.trackingAnimation.duration) {
+        this.trackingAnimation = null;
+        return;
+      }
+      this.trackingFrameHandle = requestAnimationFrame(step);
+    };
+    this.trackingFrameHandle = requestAnimationFrame(step);
+    this.requestDraw();
+  }
+
+  private cancelTrackingAnimation() {
+    if (this.trackingFrameHandle !== null && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(this.trackingFrameHandle);
+    }
+    this.trackingFrameHandle = null;
+    this.trackingAnimation = null;
+  }
+
+  // Runs at the top of draw: a jump in the tracked cursor count eases toward
+  // the new barycenter, and without an animation the view follows the
+  // barycenter with no lag. When no cursor is visible, the view stays still
+  // and a running move stops.
+  private updateTracking() {
+    if (!this.tracking) return;
+    const count = this.visibleTimeCursorPositions().length;
+    if (count === 0) this.cancelTrackingAnimation();
+    const jumped = count !== this.trackedCursorCount && count > 0;
+    this.trackedCursorCount = count;
+    if (jumped) {
+      const target = this.timeCursorBarycenter();
+      if (target) this.startTrackingAnimation(target);
+    }
+    const animation = this.trackingAnimation;
+    if (animation) {
+      const t = Math.min(1, (performance.now() - animation.startedAt) / animation.duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      this.view.center = animation.from.plus(animation.to.minus(animation.from).times(eased));
+      if (t >= 1) this.trackingAnimation = null;
+    } else {
+      const target = this.timeCursorBarycenter();
+      if (target) this.view.center = target;
+    }
   }
 
   private hitVideoCursor(screenX: number, screenY: number): Sequence | null {
@@ -2893,6 +3004,7 @@ export class Editor {
 
     const worldUnderMid = this.screenToWorld(this.lastPinchMidX, this.lastPinchMidY);
     this.autoFitRink = false;
+    this.disableTracking();
     this.view.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, this.view.zoom * (dist / this.lastPinchDist)));
     // The world point under the previous midpoint stays under the current midpoint.
     this.view.center = new Vector<2>(
@@ -3220,6 +3332,7 @@ export class Editor {
       this.lastPanY = screenY;
 
       this.view.center = this.view.center.plus(new Vector<2>(-deltaX, deltaY).times(1 / this.view.zoom));
+      this.disableTracking();
       this.requestDraw();
       return;
     }

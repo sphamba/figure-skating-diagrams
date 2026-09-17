@@ -16,13 +16,27 @@ const recorder = vi.hoisted(() => ({
   hiddenSets: [] as unknown,
   sequences: [] as unknown[],
   destroyed: 0,
+  instances: [] as unknown[],
 }));
 
 class EditorStub {
   hiddenSequences: Set<unknown> = new Set();
+  tracking = false;
+  onTrackingChange?: () => void;
 
   constructor(_canvas: unknown, sequences: unknown[]) {
     recorder.constructorArgs.push({ sequences });
+    recorder.instances.push(this);
+  }
+
+  followTimeCursor() {
+    this.tracking = true;
+    this.onTrackingChange?.();
+  }
+
+  disableTracking() {
+    this.tracking = false;
+    this.onTrackingChange?.();
   }
 
   setHiddenSequences(next: unknown) {
@@ -144,6 +158,7 @@ beforeEach(() => {
   recorder.hiddenSets.length = 0;
   recorder.sequences = [];
   recorder.destroyed = 0;
+  recorder.instances.length = 0;
 });
 
 test("the tree loader mounts the player and fills the url", async () => {
@@ -357,6 +372,45 @@ test("the space key toggles the playback and skips text targets", async () => {
   expect(play!.getAttribute("aria-label"), "space should still toggle after a button mouse click").toBe(
     "Pause the animation",
   );
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("the tracking button toggles editor tracking", async () => {
+  const wrapper = await mountHomeView(null, true, videoFile);
+  const button = wrapper.find(".tracking-button");
+  expect(button.exists()).toBe(true);
+  const instance = recorder.instances.at(-1) as { tracking: boolean } | undefined;
+  expect(instance, "the editor should mount with the canvas").not.toBeUndefined();
+  expect(instance!.tracking).toBe(false);
+  await button.trigger("click");
+  expect(instance!.tracking).toBe(true);
+  expect(button.attributes("aria-pressed")).toBe("true");
+  await button.trigger("click");
+  expect(instance!.tracking).toBe(false);
+  expect(button.attributes("aria-pressed")).toBe("false");
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("the tracking button resets after the canvas remounts", async () => {
+  const wrapper = await mountHomeView(null, true, videoFile);
+  const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
+  const store = useSequenceEditorStore();
+  store.loadFromJSON(videoFile);
+  await nextTick();
+  const button = wrapper.find(".tracking-button");
+  const instance = recorder.instances.at(-1) as { tracking: boolean } | undefined;
+  await button.trigger("click");
+  expect(button.attributes("aria-pressed")).toBe("true");
+  // Unsetting the video re-keys the splitter, so the canvas remounts.
+  store.setDiagramVideoUrl("");
+  await nextTick();
+  expect(recorder.destroyed).toBeGreaterThan(0);
+  const next = recorder.instances.at(-1) as { tracking: boolean } | undefined;
+  expect(next).not.toBe(instance);
+  expect(next!.tracking).toBe(false);
+  expect(wrapper.find(".tracking-button").attributes("aria-pressed")).toBe("false");
   wrapper.unmount();
   vi.unstubAllGlobals();
 });

@@ -5,6 +5,7 @@ import SelectButton from "openvue/selectbutton";
 import Splitter from "openvue/splitter";
 import SplitterPanel from "openvue/splitterpanel";
 import TimeSyncPane from "@/components/TimeSyncPane.vue";
+import TrackingButton from "@/components/TrackingButton.vue";
 import DiagramSidebar, { type HelpItem } from "@/components/DiagramSidebar.vue";
 import { Editor } from "@/engine/sequenceEditor/editor";
 import { earliestTimeKeyframeSeconds, fullTimeExtentSeconds } from "@/engine/diagram";
@@ -76,6 +77,12 @@ function togglePlayback() {
   else playAnimation();
 }
 
+function toggleTracking() {
+  if (!editor) return;
+  if (editor.tracking) editor.disableTracking();
+  else editor.followTimeCursor();
+}
+
 usePlaybackKeyToggle(togglePlayback);
 
 let resumeAfterScrub = false;
@@ -104,6 +111,7 @@ function jumpToStart() {
 }
 
 let editor: Editor | null = null;
+const isTracking = ref(false);
 
 const drawRange = computed({
   get: () => store.getDrawRange(),
@@ -258,6 +266,10 @@ function createEditor() {
   if (!canvasRef.value) return;
   const editorInstance = new Editor(canvasRef.value, sequences.value);
   editor = editorInstance;
+  editorInstance.onTrackingChange = () => {
+    isTracking.value = editorInstance.tracking;
+  };
+  isTracking.value = editorInstance.tracking;
   editorInstance.mode = "view";
   editorInstance.scaleElements = scaleElements.value;
   editorInstance.showLabels = showLabels.value;
@@ -368,6 +380,7 @@ onBeforeUnmount(() => {
           <SplitterPanel class="home-view__canvas-pane" :size="canvasPaneSize" :min-size="20">
             <div class="home-view__canvas-area">
               <canvas ref="canvasRef" class="home-view__canvas-element"></canvas>
+              <TrackingButton :active="isTracking" @toggle="toggleTracking" />
               <TimeSyncPane
                 class="home-view__elements"
                 :sequences="visibleSequences"
@@ -514,7 +527,7 @@ onBeforeUnmount(() => {
    resizing the canvas or the playback bar below. */
 .home-view__elements {
   position: absolute;
-  bottom: 0;
+  top: 0;
   left: 0;
   right: 0;
   width: auto;

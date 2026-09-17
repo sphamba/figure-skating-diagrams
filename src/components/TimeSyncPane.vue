@@ -654,7 +654,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   flex-shrink: 0;
   gap: 0.25rem;
-  padding: 0.25rem;
+  padding: 0.5rem 0.25rem 0;
   max-height: 40vh;
   overflow-y: auto;
   font-size: 0.875rem;

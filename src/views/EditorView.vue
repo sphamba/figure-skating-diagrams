@@ -18,6 +18,7 @@ import Checkbox from "openvue/checkbox";
 import Splitter from "openvue/splitter";
 import SplitterPanel from "openvue/splitterpanel";
 import TimeSyncPane from "@/components/TimeSyncPane.vue";
+import TrackingButton from "@/components/TrackingButton.vue";
 import DiagramSidebar, { type HelpItem } from "@/components/DiagramSidebar.vue";
 import { Editor, formatTimingLabel, type EditMode } from "@/engine/sequenceEditor/editor";
 import { TimingKeyframe, type TimingKind } from "@/engine/keyframe";
@@ -622,6 +623,7 @@ const helpItems = computed<HelpItem[]>(() =>
 );
 
 let editor: Editor | null = null;
+const isTracking = ref(false);
 
 const store = useSequenceEditorStore();
 
@@ -685,6 +687,12 @@ watch(
 function togglePlayback() {
   if (playing.value) pauseAnimation();
   else playAnimation();
+}
+
+function toggleTracking() {
+  if (!editor) return;
+  if (editor.tracking) editor.disableTracking();
+  else editor.followTimeCursor();
 }
 
 usePlaybackKeyToggle(togglePlayback);
@@ -1087,6 +1095,9 @@ onMounted(() => {
   if (!canvasRef.value) return;
   const editorInstance = new Editor(canvasRef.value, sequences.value);
   editor = editorInstance;
+  editorInstance.onTrackingChange = () => {
+    isTracking.value = editorInstance.tracking;
+  };
   editorInstance.setHiddenSequences(hiddenSequenceSet.value);
   editorInstance.scaleElements = scaleElements.value;
   editorInstance.showLabels = showLabels.value;
@@ -1589,6 +1600,7 @@ function closeElementChange() {
           <SplitterPanel class="editor-view__canvas-pane" :size="canvasPaneSize" :min-size="20">
             <div class="editor-view__canvas-area">
               <canvas ref="canvasRef" class="editor-view__canvas-element"></canvas>
+              <TrackingButton :active="isTracking" @toggle="toggleTracking" />
               <TimeSyncPane
                 v-if="editMode === 'view'"
                 class="editor-view__elements"
