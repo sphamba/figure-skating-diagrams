@@ -43,13 +43,26 @@ type ElementStrip = {
   current: number;
 };
 
+// A token per sequence object. Index-based keys shift when a sibling sequence
+// is hidden or shown, so the fold state keys use this stable identity instead.
+const sequenceTokens = new WeakMap<Sequence, string>();
+let lastSequenceToken = "";
+
+function sequenceToken(sequence: Sequence): string {
+  let token = sequenceTokens.get(sequence);
+  if (token === undefined) {
+    lastSequenceToken += "x";
+    token = lastSequenceToken;
+    sequenceTokens.set(sequence, token);
+  }
+  return token;
+}
+
 const annotationRows = computed<AnnotationRow[]>(() => {
   const time = props.timeSeconds;
   if (time === null) return [];
   const rows: AnnotationRow[] = [];
-  let sequenceIndex = -1;
   for (const sequence of props.sequences) {
-    sequenceIndex++;
     if (!cursorInSequence(sequence)) continue;
     const u = sequence.getPathCoordinateFromTime(time as Time, props.bpm);
     for (const annotation of [...sequence.annotations].sort((a, b) => (a.start as number) - (b.start as number))) {
@@ -58,7 +71,7 @@ const annotationRows = computed<AnnotationRow[]>(() => {
       if (lo <= u && u <= hi) {
         rows.push({
           kind: "annotation",
-          key: `${sequenceIndex}-${annotation.start}-${annotation.end}-${annotation.title}`,
+          key: `${sequenceToken(sequence)}-${annotation.start}-${annotation.end}-${annotation.title}`,
           annotation,
           sequence,
           color: annotation.color,
@@ -79,9 +92,7 @@ const elementStrips = computed<ElementStrip[]>(() => {
   const time = props.timeSeconds;
   if (time === null) return [];
   const strips: ElementStrip[] = [];
-  let sequenceIndex = -1;
   for (const sequence of props.sequences) {
-    sequenceIndex++;
     if (!cursorInSequence(sequence)) continue;
     const shown = [...sequence.elements]
       .sort((a, b) => (a.start as number) - (b.start as number))
@@ -111,7 +122,7 @@ const elementStrips = computed<ElementStrip[]>(() => {
     }
     if (current === -1) continue;
     strips.push({
-      key: `${sequenceIndex}-${sequence.name}`,
+      key: `${sequenceToken(sequence)}-${sequence.name}`,
       sequence,
       current,
       items: shown.map((element, index) => ({
@@ -127,44 +138,34 @@ const elementStrips = computed<ElementStrip[]>(() => {
 
 const hasRows = computed(() => annotationRows.value.length > 0 || elementStrips.value.length > 0);
 
-// Element panels currently unfolded; the current element's full name shows
-// below, because the content only mounts when the panel lazily opens.
-const openStripKeys = ref<string[]>([]);
+// Folded state, kept as closed sets, so panels start unfolded.
+const closedStripKeys = ref<string[]>([]);
+const closedAnnotationKeys = ref<string[]>([]);
 
-function isStripOpen(key: string): boolean {
-  return openStripKeys.value.includes(key);
-}
+// A strip is open unless the user folded its key.
+const openStripKeys = computed<string[]>(() =>
+  elementStrips.value.filter((strip) => !closedStripKeys.value.includes(strip.key)).map((strip) => strip.key),
+);
+
+// A row is open unless the user folded its key.
+const openAnnotationRows = computed<number[]>(() => {
+  const rows: number[] = [];
+  annotationRows.value.forEach((row, index) => {
+    if (!closedAnnotationKeys.value.includes(row.key)) rows.push(index);
+  });
+  return rows;
+});
 
 function toggleStripOpen(key: string) {
-  openStripKeys.value = isStripOpen(key)
-    ? openStripKeys.value.filter((item) => item !== key)
-    : [...openStripKeys.value, key];
+  closedStripKeys.value = closedStripKeys.value.includes(key)
+    ? closedStripKeys.value.filter((item) => item !== key)
+    : [...closedStripKeys.value, key];
 }
 
-// Accordion emits panel values as strings in multiple mode, so normalize them.
-function toOpenStripKeys(value: string | string[] | null | undefined): string[] {
-  return Array.isArray(value) ? value : value == null ? [] : [value];
-}
-
-// Annotation rows with unfolded panels; the inline description hides there,
-// because the full text shows in the unfolded content below.
-const openAnnotationRows = ref<number[]>([]);
-
-// Accordion emits panel values as strings in multiple mode, so normalize them to numbers.
-function toOpenRows(value: string | string[] | null | undefined): number[] {
-  const list = Array.isArray(value) ? value : value == null ? [] : [value];
-  const rows: number[] = [];
-  for (const item of list) {
-    const index = Number(item);
-    if (!Number.isNaN(index)) rows.push(index);
-  }
-  return rows;
-}
-
-function toggleAnnotationOpen(index: number) {
-  openAnnotationRows.value = openAnnotationRows.value.includes(index)
-    ? openAnnotationRows.value.filter((item) => item !== index)
-    : [...openAnnotationRows.value, index];
+function toggleAnnotationOpen(key: string) {
+  closedAnnotationKeys.value = closedAnnotationKeys.value.includes(key)
+    ? closedAnnotationKeys.value.filter((item) => item !== key)
+    : [...closedAnnotationKeys.value, key];
 }
 
 // A cursor beyond a sequence's time range would clamp to its boundary coordinate,
@@ -547,52 +548,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="time-sync-pane">
-    <Accordion
-      :multiple="true"
-      :lazy="true"
-      :value="openAnnotationRows"
-      @update:value="(v) => (openAnnotationRows = toOpenRows(v))"
-    >
-      <TransitionGroup
-        tag="div"
-        :css="false"
-        @before-enter="rowBeforeEnter"
-        @enter="rowEnter"
-        @before-leave="rowBeforeLeave"
-        @leave="rowLeave"
-      >
-        <AccordionPanel v-for="(row, index) in annotationRows" :key="row.key" :value="index">
-          <AccordionHeader asChild v-slot="{ active }">
-            <div class="time-sync-pane__annotation-header">
-              <span
-                class="time-sync-pane__chip time-sync-pane__chip--annotation"
-                :style="{ background: row.color, color: textColorFor(row.color) }"
-                >{{ row.title }}</span
-              >
-              <button
-                type="button"
-                class="time-sync-pane__toggle"
-                :aria-label="active ? 'Hide description' : 'Show description'"
-                :aria-expanded="active"
-                @click.stop="toggleAnnotationOpen(index)"
-              >
-                <span :class="active ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"></span>
-              </button>
-            </div>
-          </AccordionHeader>
-          <AccordionContent>
-            <p class="time-sync-pane__detail">{{ row.description || "No description" }}</p>
-          </AccordionContent>
-        </AccordionPanel>
-      </TransitionGroup>
-    </Accordion>
-
-    <Accordion
-      :multiple="true"
-      :lazy="true"
-      :value="openStripKeys"
-      @update:value="(v) => (openStripKeys = toOpenStripKeys(v))"
-    >
+    <Accordion :multiple="true" :lazy="true" :value="openStripKeys">
       <TransitionGroup
         tag="div"
         :css="false"
@@ -649,6 +605,41 @@ onBeforeUnmount(() => {
       </TransitionGroup>
     </Accordion>
 
+    <Accordion :multiple="true" :lazy="true" :value="openAnnotationRows">
+      <TransitionGroup
+        tag="div"
+        :css="false"
+        @before-enter="rowBeforeEnter"
+        @enter="rowEnter"
+        @before-leave="rowBeforeLeave"
+        @leave="rowLeave"
+      >
+        <AccordionPanel v-for="(row, index) in annotationRows" :key="row.key" :value="index">
+          <AccordionHeader asChild v-slot="{ active }">
+            <div class="time-sync-pane__annotation-header">
+              <span
+                class="time-sync-pane__chip time-sync-pane__chip--annotation"
+                :style="{ background: row.color, color: textColorFor(row.color) }"
+                >{{ row.title }}</span
+              >
+              <button
+                type="button"
+                class="time-sync-pane__toggle"
+                :aria-label="active ? 'Hide description' : 'Show description'"
+                :aria-expanded="active"
+                @click.stop="toggleAnnotationOpen(row.key)"
+              >
+                <span :class="active ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"></span>
+              </button>
+            </div>
+          </AccordionHeader>
+          <AccordionContent>
+            <p class="time-sync-pane__detail">{{ row.description || "No description" }}</p>
+          </AccordionContent>
+        </AccordionPanel>
+      </TransitionGroup>
+    </Accordion>
+
     <span v-if="!hasRows" class="time-sync-pane__empty">No element yet</span>
   </div>
 </template>
@@ -669,7 +660,7 @@ onBeforeUnmount(() => {
   font-size: 0.875rem;
   /* The pane floats above the canvas: an opaque background keeps the text readable. */
   background: var(--p-content-background, #ffffff);
-  border-top: 1px solid var(--p-content-border-color);
+  border-bottom: 1px solid var(--p-content-border-color);
 }
 
 .time-sync-pane :deep(.p-accordionpanel) {

@@ -30,13 +30,13 @@ async function openPane(sequences: Sequence[], time: number | null): Promise<HTM
   return content;
 }
 
-test("shows the annotation title when folded while the cursor is within the sequence", async () => {
+test("shows the annotation title while the cursor is within the sequence", async () => {
   const content = await openPane([buildSequence()], 3.9);
   expect(content).not.toBeNull();
   const text = content?.textContent ?? "";
   expect(text).toContain("Annotation");
-  // The description shows only after unfolding, so the folded row has none.
-  expect(text).not.toContain("No description");
+  // The row starts unfolded, so the description shows with the title.
+  expect(text).toContain("No description");
   expect(text).not.toContain("(");
   expect(text).not.toContain("Nothing at the time cursor");
 });
@@ -67,24 +67,28 @@ function buildFallbackSequence(): Sequence {
   return sequence;
 }
 
-test("shows the description below the annotation only after unfolding", async () => {
+test("hides the annotation description after the arrow folds the row", async () => {
   const wrapper = mount(TimeSyncPane, {
     attachTo: document.body,
     props: { sequences: [buildSequence()], timeSeconds: 3.9, bpm: 120 },
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
-  // The folded row shows only the title, so no description exists yet.
-  expect(document.body.querySelector(".time-sync-pane__detail")).toBeNull();
-  const toggle = document.body.querySelector(".time-sync-pane__toggle");
-  toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  // The row starts unfolded, so the description shows below the title.
   const detail = document.body.querySelector(".time-sync-pane__detail");
   expect(detail).not.toBeNull();
   expect(detail?.textContent).toContain("No description");
+  // The annotations accordion sits below the elements accordion.
+  const toggle = document.body.querySelector(
+    ".time-sync-pane__annotation-header .time-sync-pane__toggle",
+  );
+  toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const detailHidden = document.body.querySelector(".time-sync-pane__detail");
+  expect(detailHidden === null || detailHidden.style.display === "none").toBe(true);
   wrapper.unmount();
 });
 
-test("shows the current element full name below only after the arrow unfolds the strip", async () => {
+test("hides the current element full name after the arrow folds the strip", async () => {
   const wrapper = mount(TimeSyncPane, {
     attachTo: document.body,
     props: { sequences: [buildFallbackSequence()], timeSeconds: 4.5, bpm: 120 },
@@ -93,17 +97,17 @@ test("shows the current element full name below only after the arrow unfolds the
   const chips = document.body.querySelectorAll("button.time-sync-pane__chip--element");
   const first = chips[0];
   expect(first?.textContent).toContain("B");
-  expect(document.body.querySelector(".time-sync-pane__strip-fullname")).toBeNull();
+  // The strip starts unfolded, so the current element full name shows below.
+  const fullname = document.body.querySelector(".time-sync-pane__strip-fullname");
+  expect(fullname).not.toBeNull();
+  expect(fullname?.textContent).toContain("Two-feet forward glide");
+  // The elements accordion is first, so the first toggle folds its strip.
   const arrow = document.body.querySelector(".time-sync-pane__toggle");
   expect(arrow).not.toBeNull();
   arrow?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 0));
   const chipsAfter = document.body.querySelectorAll("button.time-sync-pane__chip--element");
   expect(chipsAfter[0]?.textContent).toContain("B");
-  const detail = document.body.querySelector(".time-sync-pane__strip-fullname");
-  expect(detail?.textContent).toContain("Two-feet forward glide");
-  arrow?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-  await new Promise((resolve) => setTimeout(resolve, 0));
   const detailHidden = document.body.querySelector(".time-sync-pane__strip-fullname");
   expect(detailHidden === null || detailHidden.style.display === "none").toBe(true);
   wrapper.unmount();
