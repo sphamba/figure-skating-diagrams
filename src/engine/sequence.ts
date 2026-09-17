@@ -1118,10 +1118,11 @@ export class Sequence {
     const coordinateDelta = keyframeAfter.coordinate - keyframeBefore.coordinate;
     const relative =
       coordinateDelta === 0 ? 0 : Math.max(0, Math.min(1, (coordinate - keyframeBefore.coordinate) / coordinateDelta));
+    const eased = getEasedTime(keyframeBefore, keyframeAfter, relative);
     return interpolate(
       keyframeBefore.data[property] as Interpolable,
       keyframeAfter.data[property] as Interpolable,
-      relative,
+      eased,
     );
   }
 
@@ -1136,14 +1137,10 @@ export class Sequence {
     coordinate: KeyframeType["coordinate"],
     keyframes?: KeyframeType[],
   ): Interpolable {
-    const [keyframeBefore, keyframeAfter, easedCoordinate] = this.getKeyframesAround(
-      partKey,
-      property,
-      coordinate,
-      keyframes,
-    );
+    const [keyframeBefore, keyframeAfter, relative] = this.getKeyframesAround(partKey, property, coordinate, keyframes);
     const beforeValue = keyframeBefore.data[property as keyof typeof keyframeBefore.data];
     const afterValue = keyframeAfter.data[property as keyof typeof keyframeAfter.data];
+    const easedCoordinate = getEasedTime(keyframeBefore, keyframeAfter, relative);
     return interpolate(beforeValue as Interpolatable, afterValue as Interpolatable, easedCoordinate) as Interpolable;
   }
 }
