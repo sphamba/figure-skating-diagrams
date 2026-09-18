@@ -5,6 +5,7 @@ import { createApp } from "vue";
 import { createPinia } from "pinia";
 import OpenVue from "openvue/config";
 import ConfirmationService from "openvue/confirmationservice";
+import Tooltip from "openvue/tooltip";
 import Ripple from "openvue/ripple";
 import Aura from "@openvue/themes/aura";
 import { definePreset } from "@openuxkit/themes";
@@ -36,6 +37,7 @@ app.use(createPinia());
 app.use(router);
 app.use(ConfirmationService);
 app.directive("ripple", Ripple);
+app.directive("tooltip", Tooltip);
 app.use(OpenVue, {
   theme: {
     preset: appPreset,

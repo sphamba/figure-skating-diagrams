@@ -3,6 +3,7 @@ import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { nextTick } from "vue";
 import type { Component } from "vue";
+import Tooltip from "openvue/tooltip";
 import type { Sequence } from "@/engine/sequence";
 
 vi.mock("virtual:diagram-tree", () => ({
@@ -54,6 +55,7 @@ class EditorStub {
 
   invalidateTimeCachesFor(_keyframe: unknown) {}
 
+  refit() {}
   clearSelection() {}
   requestDraw() {}
   draw() {}
@@ -119,6 +121,7 @@ async function mountEditorView() {
         ],
         [ConfirmationService],
       ],
+      directives: { tooltip: Tooltip },
       stubs: { SelectButton: true, ColorPicker: true },
     },
   });
@@ -583,6 +586,109 @@ test("the editor receives the pane height getter as the occluded top", async () 
   const wrapper = await mountEditorView();
   const stub = recorder.editor as unknown as { occludedTop: (() => number) | null };
   expect(typeof stub.occludedTop).toBe("function");
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+const activeModeText = (wrapper: Awaited<ReturnType<typeof mountEditorView>>) =>
+  wrapper.find('[role="tab"][aria-selected="true"]').text().trim();
+
+// The tooltip shows over a macrotask, so the test waits one timer tick.
+const flushTask = () => new Promise((resolve) => setTimeout(resolve));
+
+test("V and P switch to the View and the Path modes", async () => {
+  const wrapper = await mountEditorView();
+  await nextTick();
+
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "P" }));
+  await nextTick();
+  expect(activeModeText(wrapper)).toContain("Path");
+
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "V" }));
+  await nextTick();
+  expect(activeModeText(wrapper)).toContain("View");
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("E, T and A switch to the Elements, the Timing and the Annotations modes", async () => {
+  const wrapper = await mountEditorView();
+  await nextTick();
+
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "T" }));
+  await nextTick();
+  expect(activeModeText(wrapper)).toContain("Timing");
+
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "E" }));
+  await nextTick();
+  expect(activeModeText(wrapper)).toContain("Elements");
+
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "A" }));
+  await nextTick();
+  expect(activeModeText(wrapper)).toContain("Annotations");
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("a ctrl-modified mode letter does not switch modes", async () => {
+  const wrapper = await mountEditorView();
+  await nextTick();
+
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "E", ctrlKey: true }));
+  await nextTick();
+  expect(activeModeText(wrapper)).toContain("View");
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("a mode letter inside a focused input does not switch modes", async () => {
+  const wrapper = await mountEditorView();
+  await nextTick();
+  const input = document.createElement("input");
+  document.body.appendChild(input);
+  input.focus();
+
+  input.dispatchEvent(new KeyboardEvent("keydown", { key: "E", bubbles: true }));
+  await nextTick();
+  expect(activeModeText(wrapper)).toContain("View");
+  input.remove();
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("a mode letter inside an open dialog does not switch modes", async () => {
+  const wrapper = await mountEditorView();
+  await nextTick();
+  recorder.editor.onElementChangeRequest({
+    type: "LeftForwardInsideThreeTurn",
+    shortName: "LFI-3T",
+    start: 0,
+    end: 1,
+  });
+  await nextTick();
+  await nextTick();
+  expect(document.getElementById("element-short-name"), "the element dialog should be open").not.toBeNull();
+
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "E" }));
+  await nextTick();
+  expect(activeModeText(wrapper)).toContain("View");
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("hovering a mode tab shows its key letter in a tooltip", async () => {
+  const wrapper = await mountEditorView();
+  await nextTick();
+  const tab = document.querySelector('.editor-view__mode-tabs [role="tab"]');
+  expect(tab, "the first mode tab should mount").not.toBeNull();
+
+  tab!.dispatchEvent(new MouseEvent("mouseenter"));
+  await flushTask();
+  expect(document.querySelector(".p-tooltip")?.textContent?.trim()).toBe("V");
+
+  tab!.dispatchEvent(new MouseEvent("mouseleave"));
+  await flushTask();
+  expect(document.querySelector(".p-tooltip")).toBeNull();
   wrapper.unmount();
   vi.unstubAllGlobals();
 });

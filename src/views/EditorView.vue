@@ -50,16 +50,17 @@ import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import { useMediaQuery } from "@/composables/useMediaQuery";
 import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
 import { usePlaybackKeyToggle } from "@/composables/usePlaybackKeyToggle";
+import { useEditorModeKeys } from "@/composables/useEditorModeKeys";
 import { usePlaybackSpeed } from "@/composables/usePlaybackSpeed";
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 
 const editModeOptions = [
-  { label: "View", value: "view", icon: "pi pi-eye" },
-  { label: "Path", value: "path", icon: "pi pi-signature" },
-  { label: "Elements", value: "elements", icon: "pi pi-objects-column" },
-  { label: "Timing", value: "timing", icon: "pi pi-clock" },
-  { label: "Annotations", value: "annotations", icon: "pi pi-tag" },
+  { label: "View", value: "view", icon: "pi pi-eye", key: "V" },
+  { label: "Path", value: "path", icon: "pi pi-signature", key: "P" },
+  { label: "Elements", value: "elements", icon: "pi pi-objects-column", key: "E" },
+  { label: "Timing", value: "timing", icon: "pi pi-clock", key: "T" },
+  { label: "Annotations", value: "annotations", icon: "pi pi-tag", key: "A" },
 ];
 const editMode = ref<EditMode>("view");
 const scaleElements = ref(true);
@@ -518,6 +519,11 @@ const chosenLabels = computed<string[]>(() => {
 });
 
 const sharedHelpItems: HelpItem[] = [
+  { keys: ["V"], descriptions: ["switch to the View mode"] },
+  { keys: ["P"], descriptions: ["switch to the Path mode"] },
+  { keys: ["E"], descriptions: ["switch to the Elements mode"] },
+  { keys: ["T"], descriptions: ["switch to the Timing mode"] },
+  { keys: ["A"], descriptions: ["switch to the Annotations mode"] },
   { keys: ["one finger"], descriptions: ["same as a left click"] },
   { keys: ["two fingers"], descriptions: ["pinch to zoom and drag to move the view"] },
   { keys: ["space"], descriptions: ["toggle the playback"] },
@@ -1107,6 +1113,9 @@ watch(editMode, (mode) => {
     editor.draw();
   }
 });
+
+// The mode letters stay off while a modal dialog is open.
+useEditorModeKeys(editMode, () => !(elementChangeOpen.value || timingKeyframeOpen.value || annotationOpen.value));
 watch(
   scaleElements,
   (value) => {
@@ -1618,7 +1627,7 @@ function closeElementChange() {
       <div class="editor-view__modebar">
         <Tabs v-model:value="editMode" class="editor-view__mode-tabs">
           <TabList>
-            <Tab v-for="mode in editModeOptions" :key="mode.value" :value="mode.value">
+            <Tab v-for="mode in editModeOptions" :key="mode.value" :value="mode.value" v-tooltip.bottom="mode.key">
               <i :class="mode.icon" aria-hidden="true" />
               <small class="editor-view__mode-name">{{ mode.label }}</small>
             </Tab>

@@ -1,17 +1,11 @@
 import { onBeforeUnmount, onMounted } from "vue";
+import { isInteractiveKeyTarget } from "@/utils/keyboard";
 
 // Toggle the playback with the space key, shared by the home and editor views.
-// Buttons, option rows and text-like targets keep their own space behavior.
 export function usePlaybackKeyToggle(toggle: () => void) {
   function onKeyDown(event: KeyboardEvent) {
     if (event.code !== "Space" || event.repeat) return;
-    const target = event.target;
-    const interactive =
-      target instanceof HTMLElement &&
-      (target.isContentEditable ||
-        ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName) ||
-        target.closest('[role="option"]') !== null);
-    if (interactive) return;
+    if (isInteractiveKeyTarget(event.target)) return;
     event.preventDefault();
     toggle();
   }
