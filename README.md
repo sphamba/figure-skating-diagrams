@@ -4,6 +4,8 @@ A web application to create and view figure skating diagrams.
 
 Live demo: [https://sphamba.github.io/figure-skating-diagrams/](https://sphamba.github.io/figure-skating-diagrams/)
 
+<p align="center"><img src="screenshot.webp?raw=true" width="400"></p>
+
 
 ## Requirements
 
