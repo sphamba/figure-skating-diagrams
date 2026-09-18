@@ -81,6 +81,17 @@ if (typeof window !== "undefined") {
   });
 }
 
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+// The mobile drawer tabs bind one, so the drawer test needs the stub.
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
+}
+
 function emitSelectStub(path: string) {
   return {
     template: `<div><button data-test="tree-open" @click="$emit('select', { source: 'bundled', path: '${path}' })">o</button></div>`,
@@ -378,6 +389,106 @@ test("the space key toggles the playback and skips text targets", async () => {
     "Pause the animation",
   );
   wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+const videoTimeOfEditor = () =>
+  (recorder.instances.at(-1) as { videoTimeSeconds?: number } | undefined)?.videoTimeSeconds ?? -1;
+
+const mountWithVideo = async () => {
+  const wrapper = await mountHomeView(null, true, videoFile);
+  const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
+  useSequenceEditorStore().loadFromJSON(videoFile);
+  await nextTick();
+  await nextTick();
+  return wrapper;
+};
+
+test("the right arrow steps the time cursor forward on the home page", async () => {
+  const wrapper = await mountWithVideo();
+
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+  await nextTick();
+  await nextTick();
+
+  expect(videoTimeOfEditor()).toBeCloseTo(1 / 30);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("the left arrow stays at zero on the home page", async () => {
+  const wrapper = await mountWithVideo();
+
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" }));
+  await nextTick();
+  await nextTick();
+
+  expect(videoTimeOfEditor(), "the lower clamp keeps the cursor at zero").toBe(0);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("the arrows ignore a focused input on the home page", async () => {
+  const wrapper = await mountWithVideo();
+  const input = document.createElement("input");
+  document.body.appendChild(input);
+  input.focus();
+
+  input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+  await nextTick();
+  await nextTick();
+
+  expect(videoTimeOfEditor(), "a text field keeps its own arrow behavior").toBe(0);
+  input.remove();
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("the arrows stay off while the mobile drawer is open on the home page", async () => {
+  // The file level matchMedia stub is writable but not configurable, so the swaps use plain assignment.
+  const previous = window.matchMedia;
+  try {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(max-width: 767.98px)",
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+    const wrapper = await mountWithVideo();
+
+    const menu = Array.from(document.querySelectorAll("button")).find(
+      (button) => button.getAttribute("aria-label") === "Open settings",
+    );
+    expect(menu, "the mobile hamburger should mount").not.toBeUndefined();
+    menu!.click();
+    await nextTick();
+    await nextTick();
+    expect(document.querySelector(".p-drawer"), "the mobile settings drawer should open").not.toBeNull();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+    await nextTick();
+    await nextTick();
+    expect(videoTimeOfEditor(), "the arrows stay off while the drawer is open").toBe(0);
+
+    const close = document.querySelector<HTMLButtonElement>(".p-drawer-close-button");
+    expect(close, "the drawer close button should mount").not.toBeNull();
+    close!.click();
+    await nextTick();
+    await nextTick();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+    await nextTick();
+    await nextTick();
+    expect(videoTimeOfEditor(), "the arrows return once the drawer is closed").toBeCloseTo(1 / 30);
+
+    wrapper.unmount();
+  } finally {
+    window.matchMedia = previous;
+  }
   vi.unstubAllGlobals();
 });
 

@@ -15,6 +15,8 @@ import { useMediaQuery } from "@/composables/useMediaQuery";
 import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
 import { usePlaybackKeyToggle } from "@/composables/usePlaybackKeyToggle";
 import { usePlaybackSpeed } from "@/composables/usePlaybackSpeed";
+import { useTimeCursorStepping } from "@/composables/useTimeCursorStepping";
+import { useTimeCursorKeys } from "@/composables/useTimeCursorKeys";
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 
@@ -60,6 +62,12 @@ const {
   speed: playbackSpeed,
   extent: () => timeExtent.value,
 });
+const { step: stepTimeCursor } = useTimeCursorStepping(videoRef, {
+  seconds: videoTime,
+  setTimestamp,
+  extent: () => timeExtent.value,
+  hasVideo: () => videoSet.value,
+});
 
 // A freshly loaded or created diagram snaps the timestamp back to the earliest
 // timestamp in it. Regular detail edits trigger the store reactivity with the
@@ -103,6 +111,7 @@ function toggleTracking() {
 }
 
 usePlaybackKeyToggle(togglePlayback);
+useTimeCursorKeys(stepTimeCursor, () => !drawerOpen.value);
 
 let resumeAfterScrub = false;
 
@@ -210,6 +219,8 @@ const helpItems: HelpItem[] = [
   { keys: ["one finger"], descriptions: ["same as a left click"] },
   { keys: ["two fingers"], descriptions: ["pinch to zoom and drag to move the view"] },
   { keys: ["space"], descriptions: ["toggle the playback"] },
+  { keys: ["left arrow"], descriptions: ["move the time cursor back one video frame or 1/30 second"] },
+  { keys: ["right arrow"], descriptions: ["move the time cursor forward one video frame or 1/30 second"] },
 ];
 
 const viewportWidth = ref(0);

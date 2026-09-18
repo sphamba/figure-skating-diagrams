@@ -676,6 +676,67 @@ test("a mode letter inside an open dialog does not switch modes", async () => {
   vi.unstubAllGlobals();
 });
 
+const videoTimeSecondsOfEditor = () =>
+  (recorder.editor as unknown as { videoTimeSeconds?: number }).videoTimeSeconds ?? -1;
+
+test("the right arrow steps the time cursor forward by the default step", async () => {
+  const wrapper = await mountEditorView();
+  await nextTick();
+
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+  await nextTick();
+  await nextTick();
+
+  expect(videoTimeSecondsOfEditor()).toBeCloseTo(1 / 30);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("the arrows step back and clamp the time cursor at zero", async () => {
+  const wrapper = await mountEditorView();
+  await nextTick();
+
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+  await nextTick();
+  await nextTick();
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+  await nextTick();
+  await nextTick();
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" }));
+  await nextTick();
+  await nextTick();
+  expect(videoTimeSecondsOfEditor()).toBeCloseTo(1 / 30);
+
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" }));
+  await nextTick();
+  await nextTick();
+  expect(videoTimeSecondsOfEditor()).toBeCloseTo(0);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("the arrows do not step the time cursor inside an open dialog", async () => {
+  const wrapper = await mountEditorView();
+  await nextTick();
+  recorder.editor.onElementChangeRequest({
+    type: "LeftForwardInsideThreeTurn",
+    shortName: "LFI-3T",
+    start: 0,
+    end: 1,
+  });
+  await nextTick();
+  await nextTick();
+  expect(document.getElementById("element-short-name"), "the element dialog should be open").not.toBeNull();
+
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+  await nextTick();
+  await nextTick();
+
+  expect(videoTimeSecondsOfEditor()).toBe(0);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
 test("hovering a mode tab shows its key letter in a tooltip", async () => {
   const wrapper = await mountEditorView();
   await nextTick();

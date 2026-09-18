@@ -51,6 +51,8 @@ import { useMediaQuery } from "@/composables/useMediaQuery";
 import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
 import { usePlaybackKeyToggle } from "@/composables/usePlaybackKeyToggle";
 import { useEditorModeKeys } from "@/composables/useEditorModeKeys";
+import { useTimeCursorStepping } from "@/composables/useTimeCursorStepping";
+import { useTimeCursorKeys } from "@/composables/useTimeCursorKeys";
 import { usePlaybackSpeed } from "@/composables/usePlaybackSpeed";
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
@@ -527,6 +529,8 @@ const sharedHelpItems: HelpItem[] = [
   { keys: ["one finger"], descriptions: ["same as a left click"] },
   { keys: ["two fingers"], descriptions: ["pinch to zoom and drag to move the view"] },
   { keys: ["space"], descriptions: ["toggle the playback"] },
+  { keys: ["left arrow"], descriptions: ["move the time cursor back one video frame or 1/30 second"] },
+  { keys: ["right arrow"], descriptions: ["move the time cursor forward one video frame or 1/30 second"] },
 ];
 
 const helpItems = computed<HelpItem[]>(() =>
@@ -706,6 +710,12 @@ const {
 } = useVideoTimestamp(videoRef, {
   speed: playbackSpeed,
   extent: () => timeExtent.value,
+});
+const { step: stepTimeCursor } = useTimeCursorStepping(videoRef, {
+  seconds: videoTime,
+  setTimestamp,
+  extent: () => timeExtent.value,
+  hasVideo: () => videoSet.value,
 });
 
 // A freshly loaded or created diagram snaps the timestamp back to the earliest
@@ -1116,6 +1126,7 @@ watch(editMode, (mode) => {
 
 // The mode letters stay off while a modal dialog is open.
 useEditorModeKeys(editMode, () => !(elementChangeOpen.value || timingKeyframeOpen.value || annotationOpen.value));
+useTimeCursorKeys(stepTimeCursor, () => !(elementChangeOpen.value || timingKeyframeOpen.value || annotationOpen.value));
 watch(
   scaleElements,
   (value) => {
