@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { expect, test } from "vitest";
 import { Annotation } from "../../src/engine/annotation";
 import { annotationNeighbourBounds, clampAnnotationSpan } from "../../src/engine/sequenceEditor/editor";

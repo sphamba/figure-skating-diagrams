@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { expect, test } from "vitest";
 import { Curve } from "../src/engine/curve";
 import type { PathCoordinate, Time } from "../src/engine/coordinates";
@@ -7,19 +8,9 @@ import { Path } from "../src/engine/path";
 import { Quaternion } from "../src/engine/quaternion";
 import { LeftForwardOutsideThreeTurn } from "../src/engine/element/threeTurn";
 import { LeftForwardOutsideLoop } from "../src/engine/element/loop";
-import { Sequence } from "../src/engine/sequence";
+import { Sequence, defaultTraceColorL, defaultTraceColorR } from "../src/engine/sequence";
 import { Vector } from "../src/engine/vector";
-
-function makeStraightLengthOnePath(): Path {
-  const p0 = new Vector(0, 0);
-  const p1 = new Vector(1 / 3, 0);
-  const p2 = new Vector(2 / 3, 0);
-  const p3 = new Vector(1, 0);
-
-  const path = new Path();
-  path.addCurveEnd(new Curve(p0, p1, p2, p3));
-  return path;
-}
+import { makeStraightLengthOnePath } from "./helpers";
 
 test("Clock maps path coordinate to time and back", () => {
   const sequence = new Sequence(makeStraightLengthOnePath());
@@ -57,8 +48,8 @@ test("Beats resolve from the previous timing keyframe", () => {
   expect(sequence.getPathCoordinateFromTime(0.5 as Time)).toBeCloseTo(0.5);
 });
 
-const TRACE_COLOR_L = "#3030d2";
-const TRACE_COLOR_R = "#9c0000";
+const TRACE_COLOR_L = defaultTraceColorL;
+const TRACE_COLOR_R = defaultTraceColorR;
 
 function makeMockContext() {
   const strokes: unknown[] = [];

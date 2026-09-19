@@ -1,13 +1,14 @@
+// @vitest-environment node
 import { expect, test } from "vitest";
 import type { PathCoordinate } from "../src/engine/coordinates.js";
 import { Curve } from "../src/engine/curve.js";
-import { Path } from "../src/engine/path.js";
 import { Sequence } from "../src/engine/sequence.js";
 import { LeftForwardInsideGlide } from "../src/engine/element/glide.js";
 import { LeftForwardInsideThreeTurn } from "../src/engine/element/threeTurn.js";
 import { FootKeyframe } from "../src/engine/keyframe.js";
 import { Quaternion } from "../src/engine/quaternion.js";
 import { Vector } from "../src/engine/vector.js";
+import { makeStraightLengthOnePath as makePath } from "./helpers";
 
 function makeMockContext() {
   const strokes: unknown[] = [];
@@ -19,12 +20,6 @@ function makeMockContext() {
     setLineDash: () => {},
   };
   return { ctx, strokes };
-}
-
-function makePath(): Path {
-  const path = new Path();
-  path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
-  return path;
 }
 
 function makeStraightCurve(): Curve {

@@ -5,29 +5,9 @@ import { Curve, type Curvilinear } from "../../src/engine/curve";
 import { Vector } from "../../src/engine/vector";
 import { Sequence } from "../../src/engine/sequence";
 import { createDefaultFootTurn } from "../../src/engine/element/turnTypes";
+import { axisTables, makeStraightsJointedPath } from "../helpers";
 
-function makePath(): Path {
-  const straight = (x0: number): Curve =>
-    new Curve(new Vector(x0, 0), new Vector(x0 + 1, 0), new Vector(x0 + 2, 0), new Vector(x0 + 3, 0));
-  const path = new Path();
-  path.curves = [straight(0), straight(3), straight(6)];
-  path.curves[1]!.p0 = path.curves[0]!.p3;
-  path.curves[2]!.p0 = path.curves[1]!.p3;
-  path.updateLength();
-  return path;
-}
-
-function axisTables(path: Path): { starts: number[]; lengths: number[] } {
-  const starts: number[] = [];
-  const lengths: number[] = [];
-  let cumulated = 0;
-  for (const curve of path.curves) {
-    starts.push(cumulated);
-    lengths.push(curve.length);
-    cumulated += curve.length;
-  }
-  return { starts, lengths };
-}
+const makePath = () => makeStraightsJointedPath(true);
 
 describe("remapUniformAtRemoval", () => {
   const oldStarts = [0, 3, 6, 9];

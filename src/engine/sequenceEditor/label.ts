@@ -8,19 +8,19 @@ export const LABEL_OFFSET = 12; // px, screen distance from the anchor along the
 
 // Default pill background, #fafafb at 80% opacity, so foot traces stay readable
 // underneath.
-const PILL_COLOR = "#fafafb";
-const PILL_OPACITY = 0.8;
+export const PILL_COLOR = "#fafafb";
+export const PILL_OPACITY = 0.8;
 
 // Text color of every label.
 const LABEL_TEXT_COLOR = "#444";
 // Screen padding between the text and a pill background.
-const PILL_PADDING = 5; // px
+export const PILL_PADDING = 5; // px
 // Pill backdrops grow the pill by this on each side, in the rink color.
-const PILL_BACKDROP_PADDING = 1; // px
+export const PILL_BACKDROP_PADDING = 1; // px
 // Base length of the triangle connector between the anchor and the pill.
-const PILL_CONNECTOR_BASE = 8; // px
+export const PILL_CONNECTOR_BASE = 8; // px
 // Pill backgrounds are 20% larger than the text.
-const PILL_SIZE_FACTOR = 1.2;
+export const PILL_SIZE_FACTOR = 1.2;
 // Screen padding between the text and a circle background.
 const CIRCLE_LABEL_PADDING = 2; // px
 // Minimum background radius of a circle label.

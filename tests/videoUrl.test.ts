@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { Diagram, type DiagramJSON } from "../src/engine/diagram";
 import { Sequence } from "../src/engine/sequence";

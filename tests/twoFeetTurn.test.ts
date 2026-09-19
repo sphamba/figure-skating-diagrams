@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { expect, test } from "vitest";
 import type { PathCoordinate } from "../src/engine/coordinates.js";
 import { Path } from "../src/engine/path.js";
@@ -17,7 +18,7 @@ import {
   choctawKindChoices,
 } from "../src/engine/element/choctaw.js";
 import { changeElementType } from "../src/engine/element/turnTypes.js";
-import { halfFeetSpacing } from "../src/engine/element/glide.js";
+import { halfFeetSpacing, offIceFootHeight } from "../src/engine/element/glide.js";
 import { isTurnElement, checkSequenceCurvatures } from "../src/engine/sequenceEditor/curvatureWarning.js";
 import { getQuaternionFromAngleAxis, Quaternion } from "../src/engine/quaternion.js";
 import { Vector } from "../src/engine/vector.js";
@@ -80,7 +81,7 @@ test("A left forward open mohawk places both feet on the path line at the midpoi
   expect(onIce.y).toBe(0);
   expect(onIce.z).toBe(0);
   const freeFoot = footB[0]!.data.position!;
-  expect(freeFoot.z).toBeCloseTo(0.2, 5);
+  expect(freeFoot.z).toBeCloseTo(offIceFootHeight, 5);
   expect(footB[0]!.data.orientation!.angle).toBeCloseTo(0, 10);
 
   // Midpoint: foot A ahead on the path line, foot B behind, 90 degrees apart
@@ -96,7 +97,7 @@ test("A left forward open mohawk places both feet on the path line at the midpoi
   expect(footB[1]!.data.position!.z).toBe(0);
 
   // End: foot A off ice, foot B on ice pointing backward
-  expect(footA[2]!.data.position!.z).toBeCloseTo(0.2, 5);
+  expect(footA[2]!.data.position!.z).toBeCloseTo(offIceFootHeight, 5);
   const footBEnd = footB[2]!.data.position!;
   expect(footBEnd.x).toBe(0);
   expect(footBEnd.y).toBe(0);

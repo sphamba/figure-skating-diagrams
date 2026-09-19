@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, test } from "vitest";
 import { BothForwardGlide } from "../src/engine/element/glide.js";
 import { LeftNormalForwardInsideGlide } from "../src/engine/element/stroke.js";

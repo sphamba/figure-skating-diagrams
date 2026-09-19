@@ -1,7 +1,8 @@
+// @vitest-environment node
 import { expect, test } from "vitest";
 import { Curve } from "../src/engine/curve";
 import { Path } from "../src/engine/path";
-import { Sequence, traceWidth } from "../src/engine/sequence";
+import { Sequence, traceWidth, markSize } from "../src/engine/sequence";
 import type { PathCoordinate } from "../src/engine/coordinates";
 import type { CanvasRenderingContext2DSized } from "../src/engine/rinkCanvas";
 import { Vector } from "../src/engine/vector";
@@ -32,8 +33,6 @@ function segmentLength(points: Array<{ x: number; y: number }>): number {
   const [a, b] = points as [{ x: number; y: number }, { x: number; y: number }];
   return Math.hypot(b.x - a.x, b.y - a.y);
 }
-
-const markSize = 0.03;
 
 test("toe-pick marks are drawn as little crosses in the foot trace color", () => {
   const sequence = toeLoopSequence();

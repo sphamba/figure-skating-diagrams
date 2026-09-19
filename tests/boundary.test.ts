@@ -1,29 +1,14 @@
+// @vitest-environment node
 import { expect, test } from "vitest";
-import { Curve } from "../src/engine/curve";
 import type { PathCoordinate } from "../src/engine/coordinates";
-import { Path } from "../src/engine/path";
 import { LeftForwardInsideGlide } from "../src/engine/element/glide";
 import { LeftForwardInsideThreeTurn } from "../src/engine/element/threeTurn";
 import { Sequence } from "../src/engine/sequence";
 import { MIN_SCALE_GAP } from "../src/engine/element/spanScaling";
-import { Vector } from "../src/engine/vector";
-
-function makePath(): Path {
-  const p0 = new Vector(0, 0);
-  const p1 = new Vector(1 / 3, 0);
-  const p2 = new Vector(2 / 3, 0);
-  const p3 = new Vector(1, 0);
-  const path = new Path();
-  path.addCurveEnd(new Curve(p0, p1, p2, p3));
-  return path;
-}
+import { footLCoordinates, makeStraightLengthOnePath as makePath } from "./helpers";
 
 function glide(start: number, end: number): LeftForwardInsideGlide {
   return new LeftForwardInsideGlide(start as PathCoordinate, end as PathCoordinate);
-}
-
-function footLCoordinates(sequence: Sequence): number[] {
-  return sequence.keyframes.footL.map((keyframe) => keyframe.coordinate);
 }
 
 test("adjacent element boundaries get the 0.001 m delta in the stored keyframes", () => {

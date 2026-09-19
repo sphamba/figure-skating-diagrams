@@ -1,35 +1,11 @@
 import { expect, test } from "vitest";
-import { Curve } from "../src/engine/curve";
-import { Path } from "../src/engine/path";
 import { Sequence } from "../src/engine/sequence";
 import { TimingKeyframe } from "../src/engine/keyframe";
-import { Vector } from "../src/engine/vector";
 import type { PathCoordinate } from "../src/engine/coordinates";
 import { Editor } from "../src/engine/sequenceEditor/editor";
 import { Diagram, type DiagramJSON } from "../src/engine/diagram";
 import { sequenceTimeRange } from "../src/engine/sequence";
-
-const CTX_METHODS = [
-  "scale",
-  "clearRect",
-  "save",
-  "restore",
-  "beginPath",
-  "moveTo",
-  "lineTo",
-  "bezierCurveTo",
-  "stroke",
-  "fill",
-  "arc",
-  "fillRect",
-  "strokeRect",
-  "translate",
-  "rotate",
-  "setTransform",
-  "closePath",
-  "rect",
-  "fillText",
-];
+import { CTX_METHODS, makeStraightLengthOnePath } from "./helpers";
 
 function makeEditor(withTime: boolean) {
   const calls: string[] = [];
@@ -47,8 +23,7 @@ function makeEditor(withTime: boolean) {
     configurable: true,
   });
 
-  const path = new Path();
-  path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
+  const path = makeStraightLengthOnePath();
   const sequence = new Sequence(path);
   if (withTime) {
     sequence.addKeyframe("time", new TimingKeyframe(0 as PathCoordinate, "time", 0));

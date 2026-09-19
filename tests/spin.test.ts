@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { expect, test } from "vitest";
 import { bladeLength } from "../src/engine/constants.js";
 import {

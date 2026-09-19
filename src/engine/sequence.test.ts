@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { Path } from "./path";
 import { Vector } from "./vector";

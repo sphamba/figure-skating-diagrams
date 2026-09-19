@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { expect, test } from "vitest";
 import { interpolate } from "../src/engine/interpolate";
 import { Vector } from "../src/engine/vector";

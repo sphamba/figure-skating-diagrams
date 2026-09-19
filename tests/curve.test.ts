@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { expect, test } from "vitest";
 import { Curve, Curvilinear } from "../src/engine/curve";
 import { Vector } from "../src/engine/vector";

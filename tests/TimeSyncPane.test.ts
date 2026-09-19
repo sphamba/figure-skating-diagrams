@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import TimeSyncPane from "@/components/TimeSyncPane.vue";
 import { BothForwardGlide } from "@/engine/element/glide";
@@ -130,26 +130,31 @@ test("shows only named elements, with only the current one at full opacity", asy
 });
 
 test("seeks for the element at the center of the strip only when the scroll has settled", async () => {
-  const wrapper = mount(TimeSyncPane, {
-    attachTo: document.body,
-    props: { sequences: [buildFallbackSequence()], timeSeconds: 4.5, bpm: 120 },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  const strip = document.body.querySelector<HTMLElement>(".time-sync-pane__strip");
-  expect(strip).not.toBeNull();
-  // Real input starts the gesture; the events of programmatic scrolls cannot.
-  strip!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-  strip!.dispatchEvent(new Event("scroll"));
-  // No seek during the gesture: the time cursor updates only on settle.
-  expect(wrapper.emitted("seek")).toBeUndefined();
-  expect(wrapper.emitted("scrubStart")).toHaveLength(1);
-  expect(wrapper.emitted("scrubEnd")).toBeUndefined();
-  await new Promise((resolve) => setTimeout(resolve, 250));
-  // The center element of the strip is the first named element, B, at one third of the path.
-  expect(wrapper.emitted("seek")?.at(-1)?.at(0)).toBeCloseTo(3);
-  expect(wrapper.emitted("scrubStart")).toHaveLength(1);
-  expect(wrapper.emitted("scrubEnd")).toHaveLength(1);
-  wrapper.unmount();
+  vi.useFakeTimers();
+  try {
+    const wrapper = mount(TimeSyncPane, {
+      attachTo: document.body,
+      props: { sequences: [buildFallbackSequence()], timeSeconds: 4.5, bpm: 120 },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    const strip = document.body.querySelector<HTMLElement>(".time-sync-pane__strip");
+    expect(strip).not.toBeNull();
+    // Real input starts the gesture; the events of programmatic scrolls cannot.
+    strip!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    strip!.dispatchEvent(new Event("scroll"));
+    // No seek during the gesture: the time cursor updates only on settle.
+    expect(wrapper.emitted("seek")).toBeUndefined();
+    expect(wrapper.emitted("scrubStart")).toHaveLength(1);
+    expect(wrapper.emitted("scrubEnd")).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(250);
+    // The center element of the strip is the first named element, B, at one third of the path.
+    expect(wrapper.emitted("seek")?.at(-1)?.at(0)).toBeCloseTo(3);
+    expect(wrapper.emitted("scrubStart")).toHaveLength(1);
+    expect(wrapper.emitted("scrubEnd")).toHaveLength(1);
+    wrapper.unmount();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("emits exactly one seek when a pill is clicked with multiple sequences present", async () => {

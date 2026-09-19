@@ -1,24 +1,13 @@
+// @vitest-environment node
 import { expect, test } from "vitest";
 import type { PathCoordinate } from "../src/engine/coordinates.js";
-import { Curve } from "../src/engine/curve.js";
-import { Path } from "../src/engine/path.js";
 import { Sequence } from "../src/engine/sequence.js";
 import { MIN_SCALE_GAP } from "../src/engine/element/spanScaling.js";
 import { LeftForwardInsideGlide } from "../src/engine/element/glide.js";
 import { LeftNormalForwardInsideGlide } from "../src/engine/element/stroke.js";
 import { LeftForwardInsideThreeTurn } from "../src/engine/element/threeTurn.js";
 import { LeftForwardInsideLoop } from "../src/engine/element/loop.js";
-import { Vector } from "../src/engine/vector.js";
-
-function makePath(): Path {
-  const path = new Path();
-  path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
-  return path;
-}
-
-function footLCoordinates(sequence: Sequence): number[] {
-  return sequence.keyframes.footL.map((keyframe) => keyframe.coordinate);
-}
+import { footLCoordinates, makeStraightLengthOnePath } from "./helpers";
 
 function scaledSpan(start: number, end: number, factor: number): number[] {
   const middle = (start + end) / 2;
@@ -38,7 +27,7 @@ test("glides are not scalable, turns are", () => {
 });
 
 test("a glide keeps the real span under a span scale", () => {
-  const sequence = new Sequence(makePath());
+  const sequence = new Sequence(makeStraightLengthOnePath());
   sequence.addElement(new LeftForwardInsideGlide(0.3 as PathCoordinate, 0.7 as PathCoordinate));
 
   const glide = sequence.elements[0];
@@ -49,14 +38,14 @@ test("a glide keeps the real span under a span scale", () => {
 });
 
 test("a dynamic glide (stroke) keeps the real span under a span scale", () => {
-  const sequence = new Sequence(makePath());
+  const sequence = new Sequence(makeStraightLengthOnePath());
   sequence.addElement(new LeftNormalForwardInsideGlide(0.2 as PathCoordinate, 0.8 as PathCoordinate));
 
   expect(sequence.getDrawFootKeyframes("footL", 2).map((keyframe) => keyframe.coordinate)).toEqual([0.2, 0.77, 0.8]);
 });
 
 test("a turn re-bases its keyframes onto the scaled span", () => {
-  const sequence = new Sequence(makePath());
+  const sequence = new Sequence(makeStraightLengthOnePath());
   const start = 0.3;
   const end = 0.7;
   sequence.addElement(new LeftForwardInsideThreeTurn("footL", start as PathCoordinate, end as PathCoordinate));
@@ -74,7 +63,7 @@ test("a turn re-bases its keyframes onto the scaled span", () => {
 });
 
 test("draw keyframes mix a real-span glide with a scaled turn inside the path", () => {
-  const sequence = new Sequence(makePath());
+  const sequence = new Sequence(makeStraightLengthOnePath());
   sequence.addElement(new LeftForwardInsideGlide(0.05 as PathCoordinate, 0.25 as PathCoordinate));
   sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0.6 as PathCoordinate, 0.9 as PathCoordinate));
 
@@ -90,7 +79,7 @@ test("draw keyframes mix a real-span glide with a scaled turn inside the path", 
 });
 
 test("the boundary delta still applies between unscaled glides", () => {
-  const sequence = new Sequence(makePath());
+  const sequence = new Sequence(makeStraightLengthOnePath());
   sequence.addElement(new LeftForwardInsideGlide(0, 0.5 as PathCoordinate));
   sequence.addElement(new LeftForwardInsideGlide(0.5, 1 as PathCoordinate));
 
@@ -103,7 +92,7 @@ function scaledEdges(start: number, end: number, scale: number): [number, number
 }
 
 test("a scaled turn stops before neighbouring glides", () => {
-  const sequence = new Sequence(makePath());
+  const sequence = new Sequence(makeStraightLengthOnePath());
   sequence.addElement(new LeftForwardInsideGlide(0.2 as PathCoordinate, 0.35 as PathCoordinate));
   sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0.4 as PathCoordinate, 0.6 as PathCoordinate));
   sequence.addElement(new LeftForwardInsideGlide(0.65 as PathCoordinate, 0.8 as PathCoordinate));
@@ -122,7 +111,7 @@ test("a scaled turn stops before neighbouring glides", () => {
 });
 
 test("an isolated turn stops scaling at the 1 m blade length cap", () => {
-  const sequence = new Sequence(makePath());
+  const sequence = new Sequence(makeStraightLengthOnePath());
   sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0.4 as PathCoordinate, 0.6 as PathCoordinate));
 
   expect(sequence.getBladeLengthScale(100)).toBe(4);
@@ -138,7 +127,7 @@ test("an isolated turn stops scaling at the 1 m blade length cap", () => {
 });
 
 test("a tiny isolated turn still grows up to the path bounds before the cap", () => {
-  const sequence = new Sequence(makePath());
+  const sequence = new Sequence(makeStraightLengthOnePath());
   sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0.45 as PathCoordinate, 0.55 as PathCoordinate));
 
   // The cap allows 4, and the path bounds (middle / half span = 10) do not
@@ -147,7 +136,7 @@ test("a tiny isolated turn still grows up to the path bounds before the cap", ()
 });
 
 test("a turn touching the path start can grow past the cap partway", () => {
-  const sequence = new Sequence(makePath());
+  const sequence = new Sequence(makeStraightLengthOnePath());
   sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0.02 as PathCoordinate, 0.08 as PathCoordinate));
 
   // The path bound would allow 1.6670, so the cap of 4 does not bind inside.
@@ -155,7 +144,7 @@ test("a turn touching the path start can grow past the cap partway", () => {
 });
 
 test("adjacent scalable turns stop growing when they collide and split the space", () => {
-  const sequence = new Sequence(makePath());
+  const sequence = new Sequence(makeStraightLengthOnePath());
   sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0.3 as PathCoordinate, 0.5 as PathCoordinate));
   sequence.addElement(new LeftForwardInsideThreeTurn("footR", 0.55 as PathCoordinate, 0.75 as PathCoordinate));
 
@@ -171,7 +160,7 @@ test("adjacent scalable turns stop growing when they collide and split the space
 });
 
 test("a scaled turn does not reach past its direct neighbour", () => {
-  const sequence = new Sequence(makePath());
+  const sequence = new Sequence(makeStraightLengthOnePath());
   sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0.1 as PathCoordinate, 0.2 as PathCoordinate));
   sequence.addElement(new LeftForwardInsideGlide(0.21 as PathCoordinate, 0.3 as PathCoordinate));
   sequence.addElement(new LeftForwardInsideThreeTurn("footR", 0.31 as PathCoordinate, 0.5 as PathCoordinate));
@@ -188,7 +177,7 @@ test("a scaled turn does not reach past its direct neighbour", () => {
 });
 
 test("scaled turns never shrink below their real span", () => {
-  const sequence = new Sequence(makePath());
+  const sequence = new Sequence(makeStraightLengthOnePath());
   sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0 as PathCoordinate, 0.5 as PathCoordinate));
   sequence.addElement(new LeftForwardInsideThreeTurn("footR", 0.5 as PathCoordinate, 1 as PathCoordinate));
 
@@ -199,7 +188,7 @@ test("scaled turns never shrink below their real span", () => {
 });
 
 test("a scaled turn next to the path start stops at the path bounds", () => {
-  const sequence = new Sequence(makePath());
+  const sequence = new Sequence(makeStraightLengthOnePath());
   sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0.02 as PathCoordinate, 0.08 as PathCoordinate));
 
   const scales = sequence.getSpanScales(50 * 0.25);
@@ -210,7 +199,7 @@ test("a scaled turn next to the path start stops at the path bounds", () => {
 });
 
 test("scaled draw keyframes stay ordered with gaps between elements", () => {
-  const sequence = new Sequence(makePath());
+  const sequence = new Sequence(makeStraightLengthOnePath());
   sequence.addElement(new LeftForwardInsideGlide(0.05 as PathCoordinate, 0.25 as PathCoordinate));
   sequence.addElement(new LeftForwardInsideThreeTurn("footL", 0.55 as PathCoordinate, 0.65 as PathCoordinate));
   sequence.addElement(new LeftForwardInsideGlide(0.75 as PathCoordinate, 0.95 as PathCoordinate));

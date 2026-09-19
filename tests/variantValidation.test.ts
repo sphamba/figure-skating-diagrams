@@ -1,10 +1,11 @@
+// @vitest-environment node
 import { expect, test } from "vitest";
-import { Curve } from "../src/engine/curve";
 import type { PathCoordinate } from "../src/engine/coordinates";
 import { Path } from "../src/engine/path";
 import { Sequence } from "../src/engine/sequence";
-import { Vector, getUnitVectorFromAngle } from "../src/engine/vector";
+import { Vector } from "../src/engine/vector";
 import { getQuaternionFromAngleAxis } from "../src/engine/quaternion";
+import { getArcCurve } from "./helpers";
 import { FootKeyframe } from "../src/engine/keyframe";
 import { LeftForwardInsideThreeTurn, LeftForwardOutsideThreeTurn, LeftBackwardInsideThreeTurn } from "../src/engine/element/threeTurn";
 import { LeftForwardOpenMohawk } from "../src/engine/element/mohawk";
@@ -13,22 +14,6 @@ import {
   checkOneFootVariantValidity,
   checkTurnVariantValidity,
 } from "../src/engine/sequenceEditor/variantValidation";
-
-function getArcCurve(center: Vector<2>, radius: number, startAngle: number, endAngle: number): Curve {
-  const angle = endAngle - startAngle;
-  const startNormal = getUnitVectorFromAngle(startAngle);
-  const endNormal = getUnitVectorFromAngle(endAngle);
-  const startTangent = startNormal.getOrthogonal().times(Math.sign(angle));
-  const endTangent = endNormal.getOrthogonal().times(-Math.sign(angle));
-  const controlPointDistance = (4 / 3) * Math.tan(Math.abs(angle) / 4) * radius;
-
-  const p0 = center.plus(startNormal.times(radius));
-  const p1 = p0.plus(startTangent.times(controlPointDistance));
-  const p3 = center.plus(endNormal.times(radius));
-  const p2 = p3.plus(endTangent.times(controlPointDistance));
-
-  return new Curve(p0, p1, p2, p3);
-}
 
 function clockwisePath(): Path {
   const path = new Path();

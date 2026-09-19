@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { expect, test } from "vitest";
 import type { PathCoordinate } from "../src/engine/coordinates";
 import { Curve } from "../src/engine/curve";

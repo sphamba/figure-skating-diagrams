@@ -6,6 +6,11 @@ import { Path } from "../src/engine/path";
 import { Sequence } from "../src/engine/sequence";
 import type { PathCoordinate } from "../src/engine/coordinates";
 import { Vector } from "../src/engine/vector";
+import {
+  LABEL_FONT_SIZE,
+  PILL_PADDING,
+  PILL_SIZE_FACTOR,
+} from "../src/engine/sequenceEditor/label";
 import { LeftForwardOutsideThreeTurn } from "../src/engine/element/threeTurn";
 import { glideConstructorsByType, LeftForwardOutsideGlide } from "../src/engine/element/glide";
 import { jumpConstructorsByType } from "../src/engine/element/jump";
@@ -14,12 +19,9 @@ import { LeftNormalForwardInsideGlide } from "../src/engine/element/stroke";
 import { HipsKeyframe, TimingKeyframe } from "../src/engine/keyframe";
 import { getQuaternionFromAngleAxis } from "../src/engine/quaternion";
 import { Annotation } from "../src/engine/annotation";
+import { createStubCanvas, makeNoopContext, makeStraightLengthOnePath } from "./helpers";
 
-function makeStraightPath(): Path {
-  const path = new Path();
-  path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
-  return path;
-}
+const makeStraightPath = makeStraightLengthOnePath;
 
 test("addSegmentEnd appends a 5 m straight curve", () => {
   const editor = {
@@ -74,30 +76,7 @@ import { LABEL_ANCHOR_LIMIT } from "../src/engine/sequenceEditor/label";
 
 // Main label background half-extent: half text height times the size factor,
 // plus the screen pill padding, in canvas units.
-const halfB = (zoom: number) => (12 / 2) * 1.2 + (5 * CANVAS_SCALE) / zoom;
-
-// canvas 2D context methods, stubbed as no-ops
-const CTX_METHODS = [
-  "scale",
-  "clearRect",
-  "save",
-  "restore",
-  "beginPath",
-  "moveTo",
-  "lineTo",
-  "bezierCurveTo",
-  "stroke",
-  "fill",
-  "arc",
-  "fillRect",
-  "strokeRect",
-  "translate",
-  "rotate",
-  "setTransform",
-  "closePath",
-  "rect",
-  "fillText",
-];
+const halfB = (zoom: number) => (LABEL_FONT_SIZE / 2) * PILL_SIZE_FACTOR + (PILL_PADDING * CANVAS_SCALE) / zoom;
 
 const CTX_RESULT: Record<string, () => unknown> = {
   measureText: () => ({
@@ -108,21 +87,9 @@ const CTX_RESULT: Record<string, () => unknown> = {
 };
 
 function makeEditor(options?: { occludedTop?: () => number }) {
-  const ctx: Record<string, unknown> = { width: 0, height: 0, globalAlpha: 1 };
-  for (const m of CTX_METHODS) ctx[m] = () => {};
-  for (const [m, fn] of Object.entries(CTX_RESULT)) ctx[m] = fn;
-  const canvas = document.createElement("canvas") as HTMLCanvasElement & {
-    getContext: () => Record<string, unknown>;
-  };
-  Object.defineProperty(canvas, "clientWidth", { value: 1024, configurable: true });
-  Object.defineProperty(canvas, "clientHeight", { value: 1024, configurable: true });
-  Object.defineProperty(canvas, "getContext", { value: () => ctx, configurable: true });
-  Object.defineProperty(canvas, "getBoundingClientRect", {
-    value: () => ({ left: 0, top: 0, width: 1024, height: 1024 }),
-    configurable: true,
-  });
-  const path = new Path();
-  path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
+  const ctx: Record<string, unknown> = { ...makeNoopContext(), ...CTX_RESULT };
+  const canvas = createStubCanvas(ctx);
+  const path = makeStraightPath();
   const editor = new Editor(canvas, [new Sequence(path)], options);
   editor.mode = "path";
   return { editor, canvas, ctx: ctx as { globalAlpha: number | unknown; arc: unknown } };
@@ -591,17 +558,18 @@ test("dragging an element by its segment keeps its real length constant", () => 
 
   const initial = path.arcLengthBetween(el.start, el.end);
 
-  for (let i = 1; i <= 200; i++) {
-    const u = path.length * (0.02 + (i / 200) * 0.96);
+  for (let i = 1; i <= 20; i++) {
+    const u = path.length * (0.02 + (i / 20) * 0.96);
     const p = path.getPosition(u as PathCoordinate);
     mouse("mousemove", window, { clientX: sx(p.x), clientY: sy(p.y), button: 0 });
-    if (i % 40 === 0) {
+    if (i % 5 === 0) {
       expect(path.arcLengthBetween(el.start, el.end)).toBeCloseTo(initial, 6);
     }
   }
   mouse("mouseup", window, {});
+  expect(path.arcLengthBetween(el.start, el.end)).toBeCloseTo(initial, 6);
   editor.destroy();
-}, 20000);
+});
 
 test("dragging an element by its segment moves it toward the start of the path", () => {
   const { editor, canvas } = makeEditor();

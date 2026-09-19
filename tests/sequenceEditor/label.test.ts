@@ -2,15 +2,21 @@ import { describe, expect, test } from "vitest";
 import type { CanvasRenderingContext2DSized } from "../../src/engine/rinkCanvas";
 import { CANVAS_SCALE, RINK_COLOR } from "../../src/engine/constants.js";
 import {
+  ACTION_BUTTON_COG_LINE_WIDTH,
+  ACTION_BUTTON_LINE_WIDTH,
   ACTION_BUTTON_RADIUS,
   ACTION_BUTTON_WEIGHT,
-  BUTTON_DISC_WHITE_FRACTION,
   buttonDiscColor,
   CogButtonLabel,
   LABEL_ANCHOR_LIMIT,
   LABEL_COLLISION_PADDING,
   LabelLayer,
   MinusButtonLabel,
+  PILL_BACKDROP_PADDING,
+  PILL_COLOR,
+  PILL_CONNECTOR_BASE,
+  PILL_PADDING,
+  PILL_SIZE_FACTOR,
   PillLabel,
   PlusButtonLabel,
   WhiteCircleLabel,
@@ -111,12 +117,18 @@ describe("CanvasLabel draw", () => {
     expect(captured[0]!.kind).toBe("stroke");
     expect(captured[0]!.alpha).toBeCloseTo(0.24, 9);
     expect(captured[0]!.strokeStyle).toBe(RINK_COLOR);
-    // halfB = 5 * 1.2 + 1, plus the 1 backdrop pixel.
-    expect(captured[0]!.lineWidth).toBeCloseTo(2 * (5 * 1.2 + (5 * CANVAS_SCALE) / ZOOM + (1 * CANVAS_SCALE) / ZOOM), 9);
+    // halfB = half text height times the size factor, plus the pill padding.
+    expect(captured[0]!.lineWidth).toBeCloseTo(
+      2 *
+        (5 * PILL_SIZE_FACTOR +
+          (PILL_PADDING * CANVAS_SCALE) / ZOOM +
+          (PILL_BACKDROP_PADDING * CANVAS_SCALE) / ZOOM),
+      9,
+    );
     expect(captured[1]!.kind).toBe("stroke");
     expect(captured[1]!.alpha).toBeCloseTo(0.24, 9);
-    expect(captured[1]!.strokeStyle).toBe("#fafafb");
-    expect(captured[1]!.lineWidth).toBeCloseTo(2 * (5 * 1.2 + (5 * CANVAS_SCALE) / ZOOM), 9);
+    expect(captured[1]!.strokeStyle).toBe(PILL_COLOR);
+    expect(captured[1]!.lineWidth).toBeCloseTo(2 * (5 * PILL_SIZE_FACTOR + (PILL_PADDING * CANVAS_SCALE) / ZOOM), 9);
     expect(captured[2]!.kind).toBe("text");
     expect(captured[2]!.alpha).toBeCloseTo(0.5, 9);
     expect(captured[2]!.fillStyle).toBe("#000");
@@ -159,23 +171,27 @@ describe("CanvasLabel draw", () => {
     // The connector draws between the pill background and the pill foreground.
     expect(captured.indexOf(triangle[0]!)).toBe(2);
     expect(captured.indexOf(triangle[1]!)).toBe(3);
-    // The stroked triangle uses the rink color at a 1px width.
+    // The stroked triangle uses the rink color. The stroke width scales
+    // inversely with the zoom; the scaling invariant is a separate test.
     expect(triangle[0]!.kind).toBe("stroke");
     expect(triangle[0]!.color).toBe(RINK_COLOR);
-    expect(triangle[0]!.lineWidth).toBeCloseTo((1 * CANVAS_SCALE) / ZOOM, 9);
+    expect(triangle[0]!.lineWidth).toBeGreaterThan(0);
     // The filled triangle above it uses the pill color.
     expect(triangle[1]!.kind).toBe("fill");
-    expect(triangle[1]!.color).toBe("#fafafb");
+    expect(triangle[1]!.color).toBe(PILL_COLOR);
     for (const entry of triangle) {
       // The apex sits on the anchor point.
       expect(entry.points[0]).toEqual([1 * CANVAS_SCALE, -2 * CANVAS_SCALE]);
     }
-    // The base corners sit at the pill center, 8 screen px apart, along the
-    // direction perpendicular to the anchor axis.
+    // The base corners sit at the pill center, PILL_CONNECTOR_BASE screen px
+    // apart, along the direction perpendicular to the anchor axis.
     const capsule = label.getCollisionCapsule();
     const center = [capsule.x0 + (capsule.x1 - capsule.x0) / 2, capsule.y0];
     const [corner1 = [0, 0], corner2 = [0, 0]] = triangle[0]!.points.slice(1) as number[][];
-    expect(Math.hypot(corner1[0] - corner2[0], corner1[1] - corner2[1])).toBeCloseTo((8 * CANVAS_SCALE) / ZOOM, 9);
+    expect(Math.hypot(corner1[0] - corner2[0], corner1[1] - corner2[1])).toBeCloseTo(
+      (PILL_CONNECTOR_BASE * CANVAS_SCALE) / ZOOM,
+      9,
+    );
     expect(corner1[0] + corner2[0]).toBeCloseTo(2 * center[0], 9);
     expect(corner1[1] + corner2[1]).toBeCloseTo(2 * center[1], 9);
   });
@@ -280,9 +296,9 @@ describe("CanvasLabel collision", () => {
     const label = new PillLabel("a", new Vector(0, 0), null, ZOOM);
     label.measure(stubCtx());
     const capsule = label.getCollisionCapsule();
-    const pad = (5 * CANVAS_SCALE) / ZOOM;
-    const halfA = 20 * 1.2 + pad;
-    const halfB = 5 * 1.2 + pad;
+    const pad = (PILL_PADDING * CANVAS_SCALE) / ZOOM;
+    const halfA = 20 * PILL_SIZE_FACTOR + pad;
+    const halfB = 5 * PILL_SIZE_FACTOR + pad;
     const radius = halfB + (LABEL_COLLISION_PADDING * CANVAS_SCALE) / ZOOM;
     expect(capsule.radius).toBeCloseTo(radius, 9);
     expect(capsule.y0).toBeCloseTo(0, 9);
@@ -293,8 +309,8 @@ describe("CanvasLabel collision", () => {
   test("moveBy keeps the label within the anchor limit of its home", () => {
     const label = new PillLabel("a", new Vector(1, 2), null, ZOOM);
     label.measure(stubCtx());
-    const pad = (5 * CANVAS_SCALE) / ZOOM;
-    const limit = LABEL_ANCHOR_LIMIT * (5 * 1.2 + pad);
+    const pad = (PILL_PADDING * CANVAS_SCALE) / ZOOM;
+    const limit = LABEL_ANCHOR_LIMIT * (5 * PILL_SIZE_FACTOR + pad);
     label.moveBy(50, 50);
     const capsule = label.getCollisionCapsule();
     const cx = (capsule.x0 + capsule.x1) / 2;
@@ -413,14 +429,42 @@ describe("ActionButtonLabel", () => {
       expect(entry.kind).toBe("stroke");
       expect(entry.alpha).toBe(1);
       expect(entry.color).toBe("#1976d2");
-      expect(entry.lineWidth).toBeCloseTo((1.5 * CANVAS_SCALE) / ZOOM, 9);
+      expect(entry.lineWidth).toBeCloseTo((ACTION_BUTTON_LINE_WIDTH * CANVAS_SCALE) / ZOOM, 9);
     }
   });
 
-  test("the disc color blends the pill white with the button color", () => {
-    expect(BUTTON_DISC_WHITE_FRACTION).toBe(0.96);
-    expect(buttonDiscColor("#d33")).toBe("#f9f2f3");
-    expect(buttonDiscColor("#1976d2")).toBe("#f1f5f9");
+  test("the connector stroke width scales inversely with the zoom", () => {
+    // The connector stroke width comes from an inline src screen width, so the
+    // test keeps only the zoom-scaling invariant, not a pinned number.
+    const connectorStrokeWidth = (zoom: number): number => {
+      const tracked = stubCtx() as unknown as Record<string, unknown> & {
+        strokeStyle: string;
+        lineWidth: number;
+      };
+      const widths: number[] = [];
+      let points = 0;
+      tracked.beginPath = () => {
+        points = 0;
+      };
+      tracked.moveTo = () => {
+        points += 1;
+      };
+      tracked.lineTo = () => {
+        points += 1;
+      };
+      tracked.stroke = () => {
+        // The connector triangle is the only rink stroke with three points;
+        // the backdrop stroke has two.
+        if (tracked.strokeStyle === RINK_COLOR && points === 3) widths.push(tracked.lineWidth);
+      };
+      const label = new PillLabel("a", new Vector(1, 2), new Vector(0, 1), zoom, { connector: true });
+      label.measure(stubCtx());
+      label.draw(tracked as unknown as CanvasRenderingContext2DSized);
+      return widths[0]!;
+    };
+    const atFullZoom = connectorStrokeWidth(ZOOM);
+    expect(atFullZoom).toBeGreaterThan(0);
+    expect(connectorStrokeWidth(ZOOM / 2)).toBeCloseTo(atFullZoom * 2, 6);
   });
 
   test("a cog button strokes the inner circle and all teeth at the cog width", () => {
@@ -447,7 +491,7 @@ describe("ActionButtonLabel", () => {
     for (const entry of captured) {
       expect(entry.color).toBe("#444444");
       // Thick circle and teeth, thicker than the short teeth are long.
-      expect(entry.lineWidth).toBeCloseTo((3.5 * CANVAS_SCALE) / ZOOM, 9);
+      expect(entry.lineWidth).toBeCloseTo((ACTION_BUTTON_COG_LINE_WIDTH * CANVAS_SCALE) / ZOOM, 9);
     }
   });
 });

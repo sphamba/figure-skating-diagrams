@@ -52,10 +52,10 @@ type Relative = number & { readonly __tag: unique symbol };
 const drawIncrement = 0.02; // path coordinate increment for drawing traces, in meters
 export const traceWidth = 0.004;
 const skidWidth = 0.03;
-const markSize = 0.03; // m cross diameter of toe-pick marks
+export const markSize = 0.03; // m cross diameter of toe-pick marks
 const defaultPathColor = "black";
-const defaultTraceColorL = "#3030d2";
-const defaultTraceColorR = "#9c0000";
+export const defaultTraceColorL = "#3030d2";
+export const defaultTraceColorR = "#9c0000";
 const traceOpacityForward = 0.7;
 
 export const DEFAULT_BPM = 120;

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { expect, test } from "vitest";
 import type { PathCoordinate } from "../src/engine/coordinates.js";
 import { HipsKeyframe, type Transition } from "../src/engine/keyframe.js";
