@@ -628,6 +628,37 @@ export class Editor {
     this.onVideoTimeChange?.(seconds);
   }
 
+  private setTimeCursorToAnnotationCenter(annotation: Annotation) {
+    const sequence = this.getSequenceOfAnnotation(annotation);
+    if (!sequence) return;
+    const lo = Math.min(annotation.start as number, annotation.end as number);
+    const hi = Math.max(annotation.start as number, annotation.end as number);
+    const seconds = sequence.getTimeFromPathCoordinate(((lo + hi) / 2) as PathCoordinate, this.bpm);
+    this.videoTimeSeconds = seconds;
+    this.onVideoTimeChange?.(seconds);
+  }
+
+  private setTimeCursorToAnnotationCoordinate(annotation: Annotation, u: PathCoordinate) {
+    const sequence = this.getSequenceOfAnnotation(annotation);
+    if (!sequence) return;
+    const seconds = sequence.getTimeFromPathCoordinate(u, this.bpm);
+    this.videoTimeSeconds = seconds;
+    this.onVideoTimeChange?.(seconds);
+  }
+
+  private moveVideoCursorToPathCoordinate(sequence: Sequence, u: number) {
+    if (!hasTimeEvolution(sequence)) return;
+    const seconds = sequence.getTimeFromPathCoordinate(u as PathCoordinate, this.bpm);
+    this.videoTimeSeconds = seconds;
+    this.onVideoTimeChange?.(seconds);
+  }
+
+  private setTimeCursorToTimingKeyframe(sequence: Sequence, keyframe: TimingKeyframe) {
+    const seconds = sequence.getTimeFromPathCoordinate(keyframe.pathCoordinate, this.bpm);
+    this.videoTimeSeconds = seconds;
+    this.onVideoTimeChange?.(seconds);
+  }
+
   private getVideoCursorPosition(sequence: Sequence): PathCoordinate | null {
     if (this.videoTimeSeconds === null) return null;
     if (!hasTimeEvolution(sequence)) return null;
@@ -1116,6 +1147,7 @@ export class Editor {
 
   private startProvisionalAnnotationCreation(sequence: Sequence, u: number) {
     this.placeProvisionalAnnotation(sequence, u);
+    this.moveVideoCursorToProvisionalAnnotation(sequence);
     this.isCreatingProvisionalAnnotation = true;
     this.annotationCreatingSequence = sequence;
     this.provisionalAnnotationOriginU = u;
@@ -1136,9 +1168,23 @@ export class Editor {
     const origin = this.provisionalAnnotationOriginU;
     if (Math.abs(u - origin) < 1e-9) {
       this.placeProvisionalAnnotation(sequence, origin);
-    } else {
-      this.setProvisionalAnnotationSpan(sequence, Math.min(origin, u), Math.max(origin, u), origin);
+      this.moveVideoCursorToProvisionalAnnotation(sequence);
+      return;
     }
+    this.setProvisionalAnnotationSpan(sequence, Math.min(origin, u), Math.max(origin, u), origin);
+    this.moveVideoCursorToProvisionalAnnotationEdge(sequence, u);
+  }
+
+  private moveVideoCursorToProvisionalAnnotation(sequence: Sequence) {
+    const annotation = this.provisionalAnnotations.get(sequence);
+    if (annotation) this.setTimeCursorToAnnotationCenter(annotation);
+  }
+
+  private moveVideoCursorToProvisionalAnnotationEdge(sequence: Sequence, u: number) {
+    const provisional = this.provisionalAnnotations.get(sequence);
+    if (!provisional) return;
+    const edge = u > this.provisionalAnnotationOriginU ? provisional.end : provisional.start;
+    this.setTimeCursorToAnnotationCoordinate(provisional, edge);
   }
 
   private setProvisionalAnnotationSpan(sequence: Sequence, start: number, end: number, anchor?: number) {
@@ -2695,6 +2741,15 @@ export class Editor {
     if (element) this.setTimeCursorToElementCenter(element);
   }
 
+  // While a drag grows the provisional span, the cursor follows the dragged
+  // end under the mouse instead of the span center.
+  private moveVideoCursorToProvisionalElementEdge(sequence: Sequence, u: number) {
+    const provisional = this.provisionalElements.get(sequence);
+    if (!provisional) return;
+    const edge = u > this.provisionalOriginU ? provisional.end : provisional.start;
+    this.setTimeCursorToElementCoordinate(provisional, edge);
+  }
+
   private updateProvisionalCreation(cursor: Vector<2>) {
     const sequence = this.creatingSequence;
     if (!sequence || sequence.path.curves.length === 0) return;
@@ -2703,10 +2758,11 @@ export class Editor {
     const origin = this.provisionalOriginU;
     if (Math.abs(u - origin) < 1e-9) {
       this.placeProvisionalElement(sequence, origin);
-    } else {
-      this.setProvisionalSpan(sequence, Math.min(origin, u), Math.max(origin, u), origin);
+      this.moveVideoCursorToProvisionalElement(sequence);
+      return;
     }
-    this.moveVideoCursorToProvisionalElement(sequence);
+    this.setProvisionalSpan(sequence, Math.min(origin, u), Math.max(origin, u), origin);
+    this.moveVideoCursorToProvisionalElementEdge(sequence, u);
   }
 
   private placeProvisionalElement(sequence: Sequence, u: number) {
@@ -2997,19 +3053,25 @@ export class Editor {
     return best;
   }
 
-  private pickCurve(screenX: number, screenY: number): { sequence: Sequence; curveIndex: number } | null {
+  private pickCurve(screenX: number, screenY: number): { sequence: Sequence; curveIndex: number; u: number } | null {
     const cursor = this.screenToWorld(screenX, screenY);
     const tolerance = PICK_RADIUS / this.view.zoom;
 
-    let best: { sequence: Sequence; curveIndex: number; distance: number } | null = null;
+    let best: { sequence: Sequence; curveIndex: number; distance: number; u: number } | null = null;
     for (const sequence of this.editSequences()) {
       const result = sequence.path.pickCurve(cursor, tolerance);
       if (!result) continue;
       if (!best || result.distance < best.distance) {
-        best = { sequence, curveIndex: result.curveIndex, distance: result.distance };
+        const { t } = result.curve.getClosestPoint(cursor);
+        best = {
+          sequence,
+          curveIndex: result.curveIndex,
+          distance: result.distance,
+          u: this.uniformCoordinateAt(sequence.path.curves, result.curveIndex, t),
+        };
       }
     }
-    return best ? { sequence: best.sequence, curveIndex: best.curveIndex } : null;
+    return best ? { sequence: best.sequence, curveIndex: best.curveIndex, u: best.u } : null;
   }
 
   private handleCurveSelection(sequence: Sequence, curveIndex: number, ctrlKey: boolean) {
@@ -3255,6 +3317,7 @@ export class Editor {
           const owner = this.getSequenceOfTimingKeyframe(dot);
           if (owner) this.provisionalTimingKeyframes.delete(owner);
           this.selectTimingKeyframe(dot, ctrlKey);
+          if (owner) this.setTimeCursorToTimingKeyframe(owner, dot);
         }
         this.startTimingDrag(dot, screenX, screenY);
         this.draw();
@@ -3309,11 +3372,19 @@ export class Editor {
           if (owner) this.provisionalAnnotations.delete(owner);
           this.selectAnnotation(annotation, ctrlKey);
         }
+        this.setTimeCursorToAnnotationCenter(annotation);
         const pointHit = this.pickAnnotationControlPoint(screenX, screenY);
         if (pointHit?.annotation === annotation) {
           this.isDraggingAnnotationPoint = true;
           this.dragAnnotation = annotation;
           this.dragAnnotationPointIsStart = pointHit.isStart;
+          // The handles sit on the clamped span, so a reversed annotation from a
+          // loaded file still moves the cursor to the grabbed end.
+          const sequence = this.getSequenceOfAnnotation(annotation);
+          const { lo, hi } = sequence
+            ? this.clampedAnnotationSpan(sequence, annotation)
+            : { lo: annotation.start as number, hi: annotation.end as number };
+          this.setTimeCursorToAnnotationCoordinate(annotation, (pointHit.isStart ? lo : hi) as PathCoordinate);
         } else {
           this.startAnnotationSegmentDrag(annotation, screenX, screenY);
         }
@@ -3462,6 +3533,16 @@ export class Editor {
         this.selectedPoints = new Map([[sequence, new Set([key])]]);
       }
       if ((this.selectedPoints.get(sequence)?.size ?? 0) > 0) this.selectedCurves.delete(sequence);
+
+      // The p1 and p2 handles sit off the curve, so their clicks keep the time cursor at a fixed time.
+      if (picked.pointKey === "p0" || picked.pointKey === "p3") {
+        const curve = sequence.path.curves[picked.curveIndex];
+        if (curve) {
+          const u = this.uniformCoordinateAt(sequence.path.curves, picked.curveIndex, picked.pointKey === "p0" ? 0 : 1);
+          this.moveVideoCursorToPathCoordinate(sequence, u);
+        }
+      }
+
       // Deselecting with ctrl does not start a drag. A plain click on a point ends
       // with that point selected (fresh or kept), so the drag starts at once.
       if (this.selectedPoints.get(sequence)?.has(key) ?? false) {
@@ -3476,6 +3557,7 @@ export class Editor {
       if (curveHit) {
         const sequence = curveHit.sequence;
         this.handleCurveSelection(sequence, curveHit.curveIndex, ctrlKey);
+        this.moveVideoCursorToPathCoordinate(sequence, curveHit.u);
         if (this.selectedCurves.get(sequence)?.has(curveHit.curveIndex)) {
           this.isDraggingCurve = true;
           this.dragSequence = sequence;
@@ -3563,6 +3645,7 @@ export class Editor {
         if (this.dragAnnotationPointIsStart) this.dragAnnotation.start = u;
         else this.dragAnnotation.end = u;
         this.sequenceMutated = true;
+        this.setTimeCursorToAnnotationCoordinate(this.dragAnnotation, u);
       }
       this.requestDraw();
       return;
@@ -3592,6 +3675,7 @@ export class Editor {
           item.annotation.end = sequence.path.moveAlongByArcLength(item.end0 as PathCoordinate, clamped);
         }
         this.sequenceMutated = true;
+        if (this.dragAnnotation) this.setTimeCursorToAnnotationCenter(this.dragAnnotation);
       }
       this.requestDraw();
       return;

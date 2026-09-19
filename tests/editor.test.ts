@@ -1326,6 +1326,349 @@ test("clicking far from the path in view mode pans and leaves the time cursor al
   editor.destroy();
 });
 
+test("clicking an annotation places the time cursor at its span center", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "annotations";
+  const path = editor.getSequences()[0].path;
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+  // The zoom shrinks the end pick tolerance so the midpoint click stays on the segment.
+  editorRef(editor).view.zoom = 100;
+  editorRef(editor).getSequences()[0].annotations.push(new Annotation(0.05 as PathCoordinate, 0.55 as PathCoordinate));
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+  const mid = path.getPosition(0.3 as PathCoordinate);
+
+  mouse("mousedown", canvas, { clientX: sx(mid.x), clientY: sy(mid.y), button: 0, ctrlKey: false });
+  expect(editor.videoTimeSeconds).toBeCloseTo(1.2, 3);
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("dragging an annotation by its end keeps the time cursor at the dragged end", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "annotations";
+  const path = editor.getSequences()[0].path;
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+  // The span is wide enough that the end click hits the end, not the segment only.
+  const annotation = new Annotation(0.2 as PathCoordinate, 0.4 as PathCoordinate);
+  editorRef(editor).getSequences()[0].annotations.push(annotation);
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+  const end = path.getPosition(0.4 as PathCoordinate);
+
+  mouse("mousedown", canvas, { clientX: sx(end.x), clientY: sy(end.y), button: 0, ctrlKey: false });
+  expect(editorRef(editor).isDraggingAnnotationPoint).toBe(true);
+  expect(editor.videoTimeSeconds).toBeCloseTo(1.6, 3);
+
+  const dragged = path.getPosition(0.6 as PathCoordinate);
+  mouse("mousemove", window, { clientX: sx(dragged.x), clientY: sy(dragged.y), button: 0 });
+  expect(editor.videoTimeSeconds).toBeCloseTo(2.4, 3);
+  expect(annotation.end as number).toBeCloseTo(0.6, 3);
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("dragging an annotation by its segment keeps the time cursor at its new span center", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "annotations";
+  const path = editor.getSequences()[0].path;
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+  // The zoom shrinks the end pick tolerance so the midpoint click stays on the segment.
+  editorRef(editor).view.zoom = 100;
+  const annotation = new Annotation(0.05 as PathCoordinate, 0.55 as PathCoordinate);
+  editorRef(editor).getSequences()[0].annotations.push(annotation);
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+  const mid = path.getPosition(0.3 as PathCoordinate);
+
+  mouse("mousedown", canvas, { clientX: sx(mid.x), clientY: sy(mid.y), button: 0, ctrlKey: false });
+  expect(editorRef(editor).isDraggingAnnotationSegment).toBe(true);
+  expect(editor.videoTimeSeconds).toBeCloseTo(1.2, 3);
+
+  for (let i = 1; i <= 20; i++) {
+    const u = 0.3 + (i / 20) * 0.3;
+    const p = path.getPosition(u as PathCoordinate);
+    mouse("mousemove", window, { clientX: sx(p.x), clientY: sy(p.y), button: 0 });
+  }
+  mouse("mouseup", window, {});
+
+  const center = ((annotation.start as number) + (annotation.end as number)) / 2;
+  expect(center).toBeGreaterThan(0.3);
+  expect(editor.videoTimeSeconds).toBeCloseTo((center / path.length) * 4, 3);
+  editor.destroy();
+});
+
+test("clicking an empty part of the path in annotation mode places the provisional annotation and moves the time cursor to its center", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "annotations";
+  const path = editor.getSequences()[0].path;
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+  const mid = path.getPosition((path.length / 2) as PathCoordinate);
+
+  mouse("mousedown", canvas, { clientX: sx(mid.x), clientY: sy(mid.y), button: 0, ctrlKey: false });
+  expect(editorRef(editor).isCreatingProvisionalAnnotation).toBe(true);
+  const provisional = editorRef(editor).provisionalAnnotations.get(editor.getSequences()[0]);
+  expect((provisional.start + provisional.end) / 2).toBeCloseTo(path.length / 2, 3);
+  expect(editor.videoTimeSeconds).toBeCloseTo(2, 3);
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("dragging to create a provisional annotation keeps the time cursor under the mouse", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "annotations";
+  const path = editor.getSequences()[0].path;
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+  const at = (u: number) => path.getPosition(u as PathCoordinate);
+  const provisional = () =>
+    editorRef(editor).provisionalAnnotations.get(editor.getSequences()[0]) as { start: number; end: number };
+
+  mouse("mousedown", canvas, { clientX: sx(at(0.5).x), clientY: sy(at(0.5).y), button: 0, ctrlKey: false });
+  expect(editor.videoTimeSeconds).toBeCloseTo(2, 3);
+
+  mouse("mousemove", window, { clientX: sx(at(0.8).x), clientY: sy(at(0.8).y), button: 0 });
+  expect(editor.videoTimeSeconds, "the cursor follows the dragged end, not the span center").toBeCloseTo(3.2, 3);
+  expect(provisional().start).toBeCloseTo(0.5, 3);
+  expect(provisional().end).toBeCloseTo(0.8, 3);
+
+  mouse("mousemove", window, { clientX: sx(at(0.2).x), clientY: sy(at(0.2).y), button: 0 });
+  expect(editor.videoTimeSeconds, "the flip moves the cursor to the dragged start").toBeCloseTo(0.8, 3);
+  expect(provisional().start).toBeCloseTo(0.2, 3);
+  expect(provisional().end).toBeCloseTo(0.5, 3);
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("dragging to create a provisional element keeps the time cursor under the mouse", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const path = editor.getSequences()[0].path;
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+  const at = (u: number) => path.getPosition(u as PathCoordinate);
+
+  mouse("mousedown", canvas, { clientX: sx(at(0.5).x), clientY: sy(at(0.5).y), button: 0, ctrlKey: false });
+  expect(editor.videoTimeSeconds).toBeCloseTo(2, 3);
+
+  mouse("mousemove", window, { clientX: sx(at(0.8).x), clientY: sy(at(0.8).y), button: 0 });
+  expect(editor.videoTimeSeconds, "the cursor follows the dragged end, not the span center").toBeCloseTo(3.2, 3);
+
+  mouse("mousemove", window, { clientX: sx(at(0.2).x), clientY: sy(at(0.2).y), button: 0 });
+  expect(editor.videoTimeSeconds, "the flip moves the cursor to the dragged start").toBeCloseTo(0.8, 3);
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("clicking a path point moves the time cursor to that point", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "path";
+  const path = editor.getSequences()[0].path;
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  mouse("mousedown", canvas, { clientX: sx(1), clientY: sy(0), button: 0, ctrlKey: false });
+  expect(editorRef(editor).isDraggingPoint).toBe(true);
+  expect(editor.videoTimeSeconds, "p3 sits at the path end, so the time resolves to 4").toBeCloseTo(4, 3);
+  mouse("mouseup", window, {});
+
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(0), button: 0, ctrlKey: false });
+  expect(editor.videoTimeSeconds, "p0 sits at the path start, so the time resolves to 0").toBeCloseTo(0, 3);
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("clicking a path curve moves the time cursor to the clicked position on the curve", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "path";
+  const path = editor.getSequences()[0].path;
+  path.curves = [new Curve(new Vector(0, 0), new Vector(0.5, 0), new Vector(5, 4), new Vector(50, 0))];
+  path.updateLength();
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+  const u0 = path.length / 2;
+  const p = path.getPosition(u0 as PathCoordinate);
+
+  mouse("mousedown", canvas, { clientX: sx(p.x), clientY: sy(p.y), button: 0, ctrlKey: false });
+  expect(editorRef(editor).isDraggingCurve).toBe(true);
+  expect(editor.videoTimeSeconds, "the click lies on the curve, so the projection keeps the position").toBeCloseTo(
+    (u0 / path.length) * 4,
+    2,
+  );
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("a click off the path projects onto the nearest curve position", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "path";
+  const path = editor.getSequences()[0].path;
+  path.curves = [new Curve(new Vector(0, 0), new Vector(0.5, 0), new Vector(5, 4), new Vector(50, 0))];
+  path.updateLength();
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+  const u0 = path.length / 2;
+  const p = path.getPosition(u0 as PathCoordinate);
+
+  mouse("mousedown", canvas, { clientX: sx(p.x), clientY: sy(p.y - 0.2), button: 0, ctrlKey: false });
+  expect(editorRef(editor).isDraggingCurve).toBe(true);
+  expect(editor.videoTimeSeconds, "the projection lands on the curve, not on the mouse position").toBeCloseTo(2, 2);
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("a sequence without time keyframes keeps the time cursor untouched in path mode", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "path";
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(0), button: 0, ctrlKey: false });
+  expect(editorRef(editor).isDraggingPoint).toBe(true);
+  expect(editor.videoTimeSeconds, "a single time keyframe has no time evolution, so the cursor stays off").toBeNull();
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("moving control points keeps the time cursor at a fixed time", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "path";
+  const path = editor.getSequences()[0].path;
+  path.curves = [new Curve(new Vector(0, 0), new Vector(0.5, 0), new Vector(5, 4), new Vector(50, 0))];
+  path.updateLength();
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(0), button: 0, ctrlKey: false });
+  const after = editor.videoTimeSeconds;
+
+  mouse("mousemove", window, { clientX: sx(2), clientY: sy(1), button: 0 });
+  mouse("mousemove", window, { clientX: sx(4), clientY: sy(2), button: 0 });
+  expect(editor.videoTimeSeconds, "the path edit must not move the cursor").toBe(after);
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("moving a path curve keeps the time cursor at a fixed time", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "path";
+  const path = editor.getSequences()[0].path;
+  path.curves = [new Curve(new Vector(0, 0), new Vector(0.5, 0), new Vector(5, 4), new Vector(50, 0))];
+  path.updateLength();
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+  const p = path.getPosition((path.length / 2) as PathCoordinate);
+
+  mouse("mousedown", canvas, { clientX: sx(p.x), clientY: sy(p.y), button: 0, ctrlKey: false });
+  const after = editor.videoTimeSeconds;
+
+  mouse("mousemove", window, { clientX: sx(p.x) + 20, clientY: sy(p.y) + 10, button: 0 });
+  mouse("mousemove", window, { clientX: sx(p.x) + 40, clientY: sy(p.y) + 20, button: 0 });
+  expect(editor.videoTimeSeconds, "the curve drag must not move the cursor").toBe(after);
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("the p1 and p2 handles keep the time cursor at a fixed time in path mode", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "path";
+  const path = editor.getSequences()[0].path;
+  path.curves = [new Curve(new Vector(0, 0), new Vector(0.5, 0), new Vector(5, 4), new Vector(50, 0))];
+  path.updateLength();
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(0), button: 0, ctrlKey: false });
+  expect(editorRef(editor).isDraggingPoint).toBe(true);
+  expect(editor.videoTimeSeconds, "the p0 click placed the cursor at the curve start").toBeCloseTo(0, 3);
+  mouse("mouseup", window, {});
+
+  // The plain p0 click selected p0, so the p1 handle of the same curve is pickable.
+  mouse("mousedown", canvas, { clientX: sx(0.5), clientY: sy(0), button: 0, ctrlKey: false });
+  expect(editorRef(editor).isDraggingPoint).toBe(true);
+  expect(editor.videoTimeSeconds, "an off-curve handle click keeps the cursor at a fixed time").toBe(0);
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("clicking a time keyframe moves the time cursor to its keyframe time", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "timing";
+  const path = editor.getSequences()[0].path;
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  mouse("mousedown", canvas, { clientX: sx(path.length), clientY: sy(0), button: 0, ctrlKey: false });
+  expect(editorRef(editor).isDraggingTimingPoint).toBe(true);
+  expect(editor.videoTimeSeconds, "the end keyframe dot resolves to its own time").toBeCloseTo(4, 3);
+  mouse("mouseup", window, {});
+
+  mouse("mousedown", canvas, { clientX: sx(0), clientY: sy(0), button: 0, ctrlKey: false });
+  expect(editorRef(editor).isDraggingTimingPoint).toBe(true);
+  expect(editor.videoTimeSeconds, "the start keyframe dot resolves to its own time").toBeCloseTo(0, 3);
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("clicking elsewhere on the path keeps the time cursor fixed in timing mode", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "timing";
+  const path = editor.getSequences()[0].path;
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+  // The value differs from the time at the mid path, so a leaked scrub would fail the assertion.
+  editor.videoTimeSeconds = 2.5;
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  mouse("mousedown", canvas, { clientX: sx(path.length / 2), clientY: sy(0), button: 0, ctrlKey: false });
+  expect(editorRef(editor).isCreatingProvisionalTiming).toBe(true);
+  expect(editorRef(editor).selectedTimingKeyframes.size, "the mid click must not pick a keyframe dot").toBe(0);
+  expect(editor.videoTimeSeconds, "an empty path click must not scrub the cursor").toBe(2.5);
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
 function makeTwoSequences(): { editor: Editor; canvas: HTMLCanvasElement; first: Sequence; second: Sequence } {
   const { editor, canvas } = makeEditor();
   const first = editor.getSequences()[0];

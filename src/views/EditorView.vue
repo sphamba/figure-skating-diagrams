@@ -53,6 +53,7 @@ import { usePlaybackKeyToggle } from "@/composables/usePlaybackKeyToggle";
 import { useEditorModeKeys } from "@/composables/useEditorModeKeys";
 import { useTimeCursorStepping } from "@/composables/useTimeCursorStepping";
 import { useTimeCursorKeys } from "@/composables/useTimeCursorKeys";
+import { useTooltipTouchGuard } from "@/composables/useTooltipTouchGuard";
 import { usePlaybackSpeed } from "@/composables/usePlaybackSpeed";
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
@@ -1127,6 +1128,8 @@ watch(editMode, (mode) => {
 // The mode letters stay off while a modal dialog is open.
 useEditorModeKeys(editMode, () => !(elementChangeOpen.value || timingKeyframeOpen.value || annotationOpen.value));
 useTimeCursorKeys(stepTimeCursor, () => !(elementChangeOpen.value || timingKeyframeOpen.value || annotationOpen.value));
+// A finger tap emulates a mouse enter, so the tab tooltips must stay off while the touch is recent.
+useTooltipTouchGuard();
 watch(
   scaleElements,
   (value) => {
