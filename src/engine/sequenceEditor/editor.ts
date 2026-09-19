@@ -325,7 +325,7 @@ export class Editor {
   private onWindowResize = () => this.resize();
   private resizeObserver: ResizeObserver | null = null;
   // The canvas may get its real size only after a layout change, so the rink
-  // stays fitted until the first user zoom disables the auto fit.
+  // stays fitted until the user zooms or sets the time cursor from the canvas.
   private autoFitRink = true;
   // The element or annotation pane overlays the top of the canvas and hides it;
   // the getter returns the occluded height in px so the fit can avoid it.
@@ -654,22 +654,28 @@ export class Editor {
     return 2 * this.getVideoCursorRadius() * ANNOTATION_SCALE;
   }
 
+  // The user set the cursor from the canvas, so the auto fit must not
+  // recenter the view on a later resize.
+  private setVideoTime(seconds: number) {
+    this.autoFitRink = false;
+    this.videoTimeSeconds = seconds;
+    this.onVideoTimeChange?.(seconds);
+  }
+
   private setTimeCursorToElementCenter(element: Element) {
     const sequence = this.getSequenceOfElement(element);
     if (!sequence) return;
     const lo = Math.min(element.start as number, element.end as number);
     const hi = Math.max(element.start as number, element.end as number);
     const seconds = sequence.getTimeFromPathCoordinate(((lo + hi) / 2) as PathCoordinate, this.bpm);
-    this.videoTimeSeconds = seconds;
-    this.onVideoTimeChange?.(seconds);
+    this.setVideoTime(seconds);
   }
 
   private setTimeCursorToElementCoordinate(element: Element, u: PathCoordinate) {
     const sequence = this.getSequenceOfElement(element);
     if (!sequence) return;
     const seconds = sequence.getTimeFromPathCoordinate(u, this.bpm);
-    this.videoTimeSeconds = seconds;
-    this.onVideoTimeChange?.(seconds);
+    this.setVideoTime(seconds);
   }
 
   private setTimeCursorToAnnotationCenter(annotation: Annotation) {
@@ -678,29 +684,25 @@ export class Editor {
     const lo = Math.min(annotation.start as number, annotation.end as number);
     const hi = Math.max(annotation.start as number, annotation.end as number);
     const seconds = sequence.getTimeFromPathCoordinate(((lo + hi) / 2) as PathCoordinate, this.bpm);
-    this.videoTimeSeconds = seconds;
-    this.onVideoTimeChange?.(seconds);
+    this.setVideoTime(seconds);
   }
 
   private setTimeCursorToAnnotationCoordinate(annotation: Annotation, u: PathCoordinate) {
     const sequence = this.getSequenceOfAnnotation(annotation);
     if (!sequence) return;
     const seconds = sequence.getTimeFromPathCoordinate(u, this.bpm);
-    this.videoTimeSeconds = seconds;
-    this.onVideoTimeChange?.(seconds);
+    this.setVideoTime(seconds);
   }
 
   private moveVideoCursorToPathCoordinate(sequence: Sequence, u: number) {
     if (!hasTimeEvolution(sequence)) return;
     const seconds = sequence.getTimeFromPathCoordinate(u as PathCoordinate, this.bpm);
-    this.videoTimeSeconds = seconds;
-    this.onVideoTimeChange?.(seconds);
+    this.setVideoTime(seconds);
   }
 
   private setTimeCursorToTimingKeyframe(sequence: Sequence, keyframe: TimingKeyframe) {
     const seconds = sequence.getTimeFromPathCoordinate(keyframe.pathCoordinate, this.bpm);
-    this.videoTimeSeconds = seconds;
-    this.onVideoTimeChange?.(seconds);
+    this.setVideoTime(seconds);
   }
 
   private getVideoCursorPosition(sequence: Sequence): PathCoordinate | null {
@@ -932,8 +934,7 @@ export class Editor {
     const u = this.snapCursorToPathAnywhere(sequence, cursor);
     if (u == null) return;
     const seconds = sequence.getTimeFromPathCoordinate(u as PathCoordinate, this.bpm);
-    this.videoTimeSeconds = seconds;
-    this.onVideoTimeChange?.(seconds);
+    this.setVideoTime(seconds);
   }
 
   private drawVideoCursor() {
@@ -4308,7 +4309,8 @@ export class Editor {
   }
 
   // Re-run the auto fit after a layout change, for example when the pane above
-  // the canvas grows with its content. Blocked once the user zoomed manually.
+  // the canvas grows with its content. Blocked once the user zoomed or set the
+  // time cursor through the canvas.
   refit() {
     if (!this.autoFitRink) return;
     this.fitRink();

@@ -2117,6 +2117,70 @@ test("refit restores the auto fit until a user zoom disables it", () => {
   editor.destroy();
 });
 
+test("a time cursor set by tap or drag on the canvas disables the auto fit", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "view";
+  const path = editor.getSequences()[0].path;
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+  const view = (editor as unknown as { view: { center: Vector; zoom: number } }).view;
+
+  // The pan moves the center first, so the refit guard cannot pass vacuously:
+  // with the fit disabled the moved center must stay.
+  mouse("mousedown", canvas, { clientX: 900, clientY: 512, button: 0, ctrlKey: false });
+  mouse("mousemove", window, { clientX: 880, clientY: 512 });
+  mouse("mouseup", window, {});
+  expect(editorRef(editor).autoFitRink, "the pan alone keeps the auto fit").toBe(true);
+  const cx = view.center.x;
+  const cy = view.center.y;
+  const z2 = view.zoom;
+  expect(cx).not.toBeCloseTo(0, 6);
+
+  // After the pan the canvas maps to shifted world axes, so the tap target
+  // mirrors screenToWorld: the canvas point of world (0.5, 0) under the
+  // post-pan center.
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + (wx - view.center.x) * zoom;
+  const sy = (wy: number) => 512 - (wy - view.center.y) * zoom;
+  mouse("mousedown", canvas, { clientX: sx(0.5), clientY: sy(0), button: 0, ctrlKey: false });
+  expect(editor.videoTimeSeconds).toBeCloseTo(2, 3);
+  expect(editorRef(editor).autoFitRink).toBe(false);
+
+  editor.refit();
+  expect(view.zoom).toBeCloseTo(z2, 6);
+  expect(view.center.x).toBe(cx);
+  expect(view.center.y).toBe(cy);
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
+test("a timing keyframe tap on the canvas disables the auto fit", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "timing";
+  const path = editor.getSequences()[0].path;
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+  const view = (editor as unknown as { view: { center: Vector; zoom: number } }).view;
+
+  expect(editorRef(editor).autoFitRink).toBe(true);
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+
+  mouse("mousedown", canvas, { clientX: sx(path.length), clientY: sy(0), button: 0, ctrlKey: false });
+  expect(editorRef(editor).isDraggingTimingPoint).toBe(true);
+  expect(editor.videoTimeSeconds, "the end keyframe dot resolves to its own time").toBeCloseTo(4, 3);
+  expect(editorRef(editor).autoFitRink).toBe(false);
+
+  const cx = view.center.x;
+  const cy = view.center.y;
+  const z2 = view.zoom;
+  editor.refit();
+  expect(view.zoom).toBeCloseTo(z2, 6);
+  expect(view.center.x).toBe(cx);
+  expect(view.center.y).toBe(cy);
+  mouse("mouseup", window, {});
+  editor.destroy();
+});
+
 test("the path add buttons register as labels after a draw", () => {
   const { editor } = makeEditor();
   const sequence = editor.getSequences()[0];
