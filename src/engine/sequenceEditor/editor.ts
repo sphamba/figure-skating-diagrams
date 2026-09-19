@@ -91,6 +91,7 @@ const PROVISIONAL_COLOR = "#1976d2";
 export const PROVISIONAL_TOTAL_LENGTH = 0.8; // m
 export const DEFAULT_START_ELEMENT_LENGTH = 0.4; // m, total span of the default starting element
 const SPLIT_BUTTON_OFFSET = 14; // px, from the curve midpoint
+const DRAW_WINDOW_SECONDS = 3; // s, half of the short draw window
 const SELECTION_RECT_FILL = "rgba(100, 149, 237, 0.2)"; // gentle blue fill
 const SELECTION_RECT_STROKE = "rgba(100, 149, 237, 0.9)";
 const ZOOM_FACTOR = 1.005;
@@ -181,15 +182,14 @@ export class Editor {
   showLabels = true;
   activeSequence: Sequence | null = null;
 
-  private _drawRange = 1;
-  // Draw range fraction (0: only around the time cursor, 1: full extent).
-  get drawRange(): number {
-    return this._drawRange;
+  private _shortDrawRange = false;
+  // Short draw range (false: full extent, true: three seconds each side of the time cursor).
+  get shortDrawRange(): boolean {
+    return this._shortDrawRange;
   }
-  set drawRange(value: number) {
-    const clamped = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1;
-    if (clamped === this._drawRange) return;
-    this._drawRange = clamped;
+  set shortDrawRange(value: boolean) {
+    if (value === this._shortDrawRange) return;
+    this._shortDrawRange = value;
     this.requestDraw();
   }
 
@@ -1447,17 +1447,18 @@ export class Editor {
     ctx.globalAlpha = 1;
   }
 
-  // The time window the draw range renders around the time cursor.
+  // The time window the short draw range renders around the time cursor.
   private traceDrawWindow(): [number, number] | null {
-    if (this.drawRange >= 1) return null;
+    if (!this.shortDrawRange) return null;
     const extent = fullTimeExtentSeconds(this.sequences, this.bpm);
     if (!extent) return null;
     if (this.videoTimeSeconds === null) return null;
     const center = this.videoTimeSeconds;
-    const halfWindow = (extent[1] - extent[0]) * this.drawRange ** 2;
-    const t0 = Math.max(extent[0], center - halfWindow);
-    const t1 = Math.min(extent[1], center + halfWindow);
-    if (t1 <= t0) return null;
+    const t0 = Math.max(extent[0], center - DRAW_WINDOW_SECONDS);
+    const t1 = Math.min(extent[1], center + DRAW_WINDOW_SECONDS);
+    // The cursor lies outside the whole extent, so a zero-width window at the
+    // cursor keeps every time outside the draw range.
+    if (t1 <= t0) return [center, center];
     return [t0, t1];
   }
 

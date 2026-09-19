@@ -46,7 +46,7 @@ function loadStoredDiagram(): Diagram {
 
 export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
   const diagram = shallowRef<Diagram>(loadStoredDiagram());
-  const drawRange = ref<number>(1);
+  const shortDrawRange = ref(false);
   const activeSequence = shallowRef<Sequence | null>(diagram.value.sequences[0] ?? null);
   const hiddenSequences = shallowRef<Set<Sequence>>(new Set());
   const jsonBaseline = ref<string>(JSON.stringify(diagram.value.toJSON(), null, 2));
@@ -55,12 +55,12 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     return diagram.value;
   }
 
-  function getDrawRange(): number {
-    return drawRange.value;
+  function getShortDrawRange(): boolean {
+    return shortDrawRange.value;
   }
 
-  function setDrawRange(value: number) {
-    drawRange.value = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1;
+  function setShortDrawRange(value: boolean) {
+    shortDrawRange.value = value;
   }
 
   function getActiveSequence(): Sequence | null {
@@ -209,8 +209,8 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
   return {
     diagram,
     getDiagram,
-    getDrawRange,
-    setDrawRange,
+    getShortDrawRange,
+    setShortDrawRange,
     getActiveSequence,
     getSequences,
     isVisible,

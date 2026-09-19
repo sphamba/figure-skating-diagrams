@@ -63,7 +63,7 @@ function makeEditor() {
   editor.mode = "view";
   editor.scaleElements = true;
   editor.showLabels = true;
-  editor.drawRange = 1;
+  editor.shortDrawRange = false;
   const extent = (editor as unknown as { view: { zoom: number } }).view.zoom;
   return { editor, fitZoom: extent };
 }

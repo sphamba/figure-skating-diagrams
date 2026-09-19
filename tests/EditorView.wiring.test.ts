@@ -753,3 +753,19 @@ test("hovering a mode tab shows its key letter in a tooltip", async () => {
   wrapper.unmount();
   vi.unstubAllGlobals();
 });
+
+test("the short draw range toggle sits leftmost in the player controls", async () => {
+  const wrapper = await mountEditorView();
+  const controls = wrapper.find(".editor-view__player-controls");
+  expect(controls.exists()).toBe(true);
+  const buttons = controls.findAll("button");
+  const toggle = buttons[0]!;
+  expect(toggle.find(".pi-stopwatch").exists()).toBe(true);
+  expect(toggle.attributes("aria-pressed")).toBe("false");
+  await toggle.trigger("click");
+  await nextTick();
+  expect(toggle.attributes("aria-pressed")).toBe("true");
+  expect((recorder.editor as unknown as { shortDrawRange?: boolean }).shortDrawRange).toBe(true);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});

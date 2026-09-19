@@ -47,3 +47,11 @@ test("removing sequences never leaves an empty diagram and keeps one visible", (
   expect(store.getSequences()[0] as Sequence).toBeTruthy();
   expect(store.getActiveSequence()).toBe(store.getSequences()[0]);
 });
+
+test("the short draw range state defaults to off and mirrors the setter", () => {
+  setActivePinia(createPinia());
+  const store = useSequenceEditorStore();
+  expect(store.getShortDrawRange()).toBe(false);
+  store.setShortDrawRange(true);
+  expect(store.getShortDrawRange()).toBe(true);
+});

@@ -28,7 +28,6 @@ const props = defineProps<{
 const open = defineModel<boolean>("open", { default: false });
 const showLabels = defineModel<boolean>("showLabels", { required: true });
 const scaleElements = defineModel<boolean>("scaleElements", { required: true });
-const drawRange = defineModel<number>("drawRange", { required: true });
 
 const emit = defineEmits<{ "load-start": []; redraw: [] }>();
 
@@ -62,11 +61,7 @@ const sections = [
 
     <div class="diagram-sidebar__section">
       <div class="diagram-sidebar__section-head">Options</div>
-      <DiagramSidebarOptions
-        v-model:show-labels="showLabels"
-        v-model:scale-elements="scaleElements"
-        v-model:draw-range="drawRange"
-      />
+      <DiagramSidebarOptions v-model:show-labels="showLabels" v-model:scale-elements="scaleElements" />
     </div>
 
     <div class="diagram-sidebar__section">
@@ -92,11 +87,7 @@ const sections = [
           <DiagramSidebarSequences :mode="props.mode" @redraw="emit('redraw')" />
         </TabPanel>
         <TabPanel value="options">
-          <DiagramSidebarOptions
-            v-model:show-labels="showLabels"
-            v-model:scale-elements="scaleElements"
-            v-model:draw-range="drawRange"
-          />
+          <DiagramSidebarOptions v-model:show-labels="showLabels" v-model:scale-elements="scaleElements" />
         </TabPanel>
         <TabPanel value="help">
           <DiagramSidebarHelp :help-items="props.helpItems" />

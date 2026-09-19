@@ -165,16 +165,16 @@ watch(elementsPane, (pane) => {
 });
 onBeforeUnmount(() => paneObserver?.disconnect());
 
-const drawRange = computed({
-  get: () => store.getDrawRange(),
-  set: (value) => store.setDrawRange(value),
+const shortDrawRange = computed({
+  get: () => store.getShortDrawRange(),
+  set: (value) => store.setShortDrawRange(value),
 });
 
 watch(
-  drawRange,
+  shortDrawRange,
   (value) => {
     if (!editor) return;
-    editor.drawRange = value;
+    editor.shortDrawRange = value;
     editor.requestDraw();
   },
   { immediate: true },
@@ -325,7 +325,7 @@ function createEditor() {
   editorInstance.mode = "view";
   editorInstance.scaleElements = scaleElements.value;
   editorInstance.showLabels = showLabels.value;
-  editorInstance.drawRange = store.getDrawRange();
+  editorInstance.shortDrawRange = store.getShortDrawRange();
   editorInstance.setHiddenSequences(hiddenSequenceSet.value);
   editorInstance.onVideoTimeChange = (seconds) => setTimestamp(seconds);
   editorInstance.onTimeScrubStart = () => {
@@ -408,7 +408,6 @@ onBeforeUnmount(() => {
       v-model:open="drawerOpen"
       v-model:scale-elements="scaleElements"
       v-model:show-labels="showLabels"
-      v-model:draw-range="drawRange"
       mode="home"
       :mobile="isMobile"
       :help-items="helpItems"
@@ -467,6 +466,16 @@ onBeforeUnmount(() => {
           @click="drawerOpen = true"
         />
         <div class="home-view__player-controls">
+          <Button
+            icon="pi pi-stopwatch"
+            :aria-pressed="shortDrawRange"
+            aria-label="Limit the drawn animation to three seconds around the current time"
+            severity="secondary"
+            :text="!shortDrawRange"
+            rounded
+            size="small"
+            @click="shortDrawRange = !shortDrawRange"
+          />
           <Button
             icon="pi pi-step-backward"
             aria-label="Back to the earliest time"

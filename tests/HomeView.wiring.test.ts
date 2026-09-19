@@ -351,7 +351,7 @@ test("the space key toggles the playback and skips text targets", async () => {
 
   const findPlayButton = () =>
     Array.from(document.querySelectorAll("button")).find((button) =>
-      button.getAttribute("aria-label")?.includes("animation"),
+      ["Play the animation", "Pause the animation"].includes(button.getAttribute("aria-label") ?? ""),
     );
   const play = findPlayButton();
   expect(play, "the play button should mount").not.toBeUndefined();
@@ -579,6 +579,27 @@ test("a freshly loaded diagram snaps the timestamp to the earliest timestamp", a
   video.element.currentTime = 9;
   await nextTick();
   expect(video.element.currentTime).toBe(9);
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("the short draw range toggle sits leftmost in the player controls", async () => {
+  const wrapper = await mountHomeView(null, true, videoFile);
+  const controls = wrapper.find(".home-view__player-controls");
+  expect(controls.exists()).toBe(true);
+  const buttons = controls.findAll("button");
+  const toggle = buttons[0]!;
+  expect(toggle.find(".pi-stopwatch").exists()).toBe(true);
+  expect(toggle.attributes("aria-pressed")).toBe("false");
+  // The go-back button keeps its place behind the toggle.
+  expect(buttons[1]!.find(".pi-step-backward").exists()).toBe(true);
+  const instance = recorder.instances.at(-1) as { shortDrawRange?: boolean } | undefined;
+  expect(instance, "the editor should mount with the canvas").not.toBeUndefined();
+  expect(instance!.shortDrawRange).toBe(false);
+  await toggle.trigger("click");
+  await nextTick();
+  expect(toggle.attributes("aria-pressed")).toBe("true");
+  expect(instance!.shortDrawRange).toBe(true);
   wrapper.unmount();
   vi.unstubAllGlobals();
 });
