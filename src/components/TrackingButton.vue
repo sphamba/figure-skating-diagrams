@@ -34,11 +34,12 @@ defineEmits<{ toggle: [] }>();
       stroke-linecap="round"
       aria-hidden="true"
     >
-      <circle cx="12" cy="12" r="4" />
-      <line x1="12" y1="3.5" x2="12" y2="6" />
-      <line x1="12" y1="18" x2="12" y2="20.5" />
-      <line x1="3.5" y1="12" x2="6" y2="12" />
-      <line x1="18" y1="12" x2="20.5" y2="12" />
+      <circle cx="12" cy="12" r="5.5" />
+      <line x1="12" y1="4.4" x2="12" y2="8.6" />
+      <line x1="12" y1="15.4" x2="12" y2="19.6" />
+      <line x1="4.4" y1="12" x2="8.6" y2="12" />
+      <line x1="15.4" y1="12" x2="19.6" y2="12" />
+      <circle cx="12" cy="12" r="0.75" fill="currentColor" stroke="none" />
     </svg>
   </button>
 </template>
