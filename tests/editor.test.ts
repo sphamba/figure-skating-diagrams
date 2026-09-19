@@ -434,6 +434,8 @@ test("view mode draws the element, annotation, and beat labels", () => {
     new TimingKeyframe(0.8 as PathCoordinate, "beats", 4),
   ];
   editor.draw();
+  editor.finishLabelTransitions();
+  editor.draw();
 
   expect(drawn).toContain("LFO");
   expect(drawn).toContain("Annotation");
@@ -489,6 +491,8 @@ test("hidden labels come back in the edit modes with the show labels option off"
 
   drawn.length = 0;
   editorRef(editor).mode = "elements";
+  editor.draw();
+  editor.finishLabelTransitions();
   editor.draw();
   expect(drawn).toContain("LFO");
 
@@ -713,6 +717,8 @@ test("a crossed stroke draws a second 10px label anchored to the element start, 
   sequence.addElement(crossed);
   sequence.addElement(crossedBack);
   editor.draw();
+  editor.finishLabelTransitions();
+  editor.draw();
 
   const crossedLabels = drawn.filter((label) => label.text === "XF" || label.text === "XB");
   expect(crossedLabels.map((label) => label.text)).toEqual(["XF", "XB"]);
@@ -761,6 +767,8 @@ test("a forward crossed stroke draws no cross label when the curvature keeps its
   sequence.addElement(forward);
   sequence.addElement(forwardBack);
   sequence.addElement(backward);
+  editor.draw();
+  editor.finishLabelTransitions();
   editor.draw();
 
   const crossedLabels = drawn.filter((label) => ["XF", "XB", "XS"].includes(label.text));
@@ -818,6 +826,9 @@ test("an uncovered inflection point draws one small inflection label", () => {
 
   // The element ends before the inflection coordinate, so no element covers it.
   sequence.addElement(new LeftForwardOutsideGlide(0 as PathCoordinate, (inflectionU - 0.1) as PathCoordinate));
+  editor.draw();
+  editor.finishLabelTransitions();
+  drawn.length = 0;
   editor.draw();
 
   const inflectionLabels = drawn.filter((label) => label.text === "CE");
@@ -951,6 +962,8 @@ test("a curvature sign change draws XS for forward crossed strokes and replaces 
   sequence.addElement(backwardBack);
   sequence.addElement(backward);
   sequence.addElement(forwardBack);
+  editor.draw();
+  editor.finishLabelTransitions();
   editor.draw();
 
   const crossedLabels = drawn.filter((label) => ["XF", "XB", "XS"].includes(label.text));
@@ -1099,6 +1112,8 @@ test("a jump label is shifted in path and elements modes and centered in view mo
   let shiftedFont = "";
   for (const mode of ["elements", "path"] as const) {
     editorRef(editor).mode = mode;
+    editor.draw();
+    editor.finishLabelTransitions();
     drawn.length = 0;
     editor.draw();
     const shifted = drawn.filter((label) => label.text === "1T");
@@ -1125,8 +1140,11 @@ test("a jump label is shifted in path and elements modes and centered in view mo
   expect(centered[0]!.font).toBe(shiftedFont);
 
   // Timing mode hides the element labels and keeps the start and inflection
-  // CE and annotation labels.
+  // CE and annotation labels. The element label first shrinks away during its
+  // exit, so it must finish before the settled frame asserts it gone.
   editorRef(editor).mode = "timing";
+  editor.draw();
+  editor.finishLabelTransitions();
   drawn.length = 0;
   editor.draw();
   expect(drawn.filter((label) => label.text === "1T")).toHaveLength(0);

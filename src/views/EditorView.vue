@@ -1701,7 +1701,7 @@ function closeElementChange() {
           <Button
             icon="pi pi-stopwatch"
             :aria-pressed="shortDrawRange"
-            aria-label="Limit the drawn animation to three seconds around the current time"
+            aria-label="Limit the drawn animation to four seconds around the current time"
             severity="secondary"
             :text="!shortDrawRange"
             rounded

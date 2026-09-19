@@ -61,6 +61,14 @@ export const COG_INNER_RADIUS_FACTOR = 0.62;
 // Thick circle and teeth, thicker than the short teeth are long.
 export const ACTION_BUTTON_COG_LINE_WIDTH = 3.5; // px
 
+// A per-frame transition snapshot: the container scale (it may overshoot 1
+// briefly), and the growth of the text and connector from the label center.
+export type LabelProgress = {
+  container: number;
+  connector: number;
+  text: number;
+};
+
 export type LabelOptions = {
   fontSizePx?: number;
   // Screen distance from the anchor along the direction.
@@ -125,6 +133,13 @@ export abstract class CanvasLabel {
   protected x = 0;
   protected y = 0;
   protected empty = true;
+  // Transition snapshot set by the edit transition layer; null keeps the label
+  // at full size.
+  protected transition: LabelProgress | null = null;
+
+  setTransition(progress: LabelProgress | null): void {
+    this.transition = progress;
+  }
 
   constructor(text: string, point: Vector<2>, direction: Vector<2> | null, zoom: number, options: LabelOptions = {}) {
     this.text = text;
@@ -153,14 +168,17 @@ export abstract class CanvasLabel {
     this.textWidth = metrics.width;
     this.textHeight = (metrics.actualBoundingBoxAscent ?? 0) + (metrics.actualBoundingBoxDescent ?? 0);
     this.empty = this.textWidth === 0 && this.textHeight === 0;
+    // The scaled extents also shrink the collision and move the home position
+    // closer to the anchor, so a growing label slides out of its anchor.
+    const container = this.transition ? this.transition.container : 1;
     const { a, b } = this.computeExtents();
-    this.halfA = a;
-    this.halfB = b;
+    this.halfA = a * container;
+    this.halfB = b * container;
     if (this.directionX === 0 && this.directionY === 0) {
       this.homeX = this.anchorX;
       this.homeY = this.anchorY;
     } else {
-      const total = this.offsetCanvas + envelopeSupport(this.directionX, this.directionY, a, b);
+      const total = this.offsetCanvas + envelopeSupport(this.directionX, this.directionY, this.halfA, this.halfB);
       this.homeX = this.anchorX + this.directionX * total;
       this.homeY = this.anchorY + this.directionY * total;
     }
@@ -188,6 +206,7 @@ export abstract class CanvasLabel {
 
   draw(ctx: CanvasRenderingContext2DSized): void {
     if (this.empty) return;
+    if (this.transition !== null && this.transition.container <= 0) return;
     ctx.font = this.font();
     const previousAlpha = ctx.globalAlpha;
     ctx.save();
@@ -201,22 +220,30 @@ export abstract class CanvasLabel {
     ctx.globalAlpha = previousAlpha * this.alpha;
     this.drawBackground(ctx);
     ctx.fillStyle = this.textColor;
-    // The text opacity stays independent of the background opacity.
-    ctx.globalAlpha = previousAlpha * this.textAlpha;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(this.text, this.x, this.y);
+    const textProgress = this.transition ? this.transition.text : 1;
+    if (textProgress > 0) {
+      // The text opacity stays independent of the background opacity.
+      ctx.globalAlpha = previousAlpha * this.textAlpha * textProgress;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(this.text, this.x, this.y);
+    }
     ctx.globalAlpha = previousAlpha;
     ctx.restore();
   }
 
   isVisible(): boolean {
-    return !this.empty;
+    return !this.empty && (this.transition === null || this.transition.container > 0);
   }
 
   // Resolved position in canvas units, for hit testing after collision resolution.
   getResolvedCanvasPosition(): { x: number; y: number } {
     return { x: this.x, y: this.y };
+  }
+
+  // The transition snapshot, or null when the label draws at full size.
+  getTransition(): LabelProgress | null {
+    return this.transition;
   }
 
   getCollisionCapsule(): Capsule {
@@ -351,9 +378,12 @@ export class PillLabel extends CanvasLabel {
 
   // Isosceles triangle connector: pointed at the anchor, base at the pill center.
   // A first rink-stroked triangle, then the solid pill-colored one above it, at
-  // the label alpha only.
+  // the label alpha only. The whole triangle grows from the pill center toward
+  // the anchor with the connector progress.
   private drawConnector(ctx: CanvasRenderingContext2DSized): void {
-    const baseHalf = backgroundPadding(this.zoom, PILL_CONNECTOR_BASE / 2);
+    const growth = this.transition ? this.transition.connector : 1;
+    if (growth <= 0) return;
+    const baseHalf = backgroundPadding(this.zoom, PILL_CONNECTOR_BASE / 2) * growth;
     const dx = this.x - this.anchorX;
     const dy = this.y - this.anchorY;
     const length = Math.hypot(dx, dy);
@@ -362,8 +392,8 @@ export class PillLabel extends CanvasLabel {
     const uy = dy / length;
     const px = -uy * baseHalf;
     const py = ux * baseHalf;
-    const apexX = this.anchorX;
-    const apexY = this.anchorY;
+    const apexX = this.x + (this.anchorX - this.x) * growth;
+    const apexY = this.y + (this.anchorY - this.y) * growth;
     const base1X = this.x + px;
     const base1Y = this.y + py;
     const base2X = this.x - px;
@@ -598,6 +628,11 @@ export class LabelLayer {
 
   add(label: CanvasLabel): void {
     this.labels.push(label);
+  }
+
+  // Drops the labels of the frame, so a thrown frame cannot paint them later.
+  clear(): void {
+    this.labels.length = 0;
   }
 
   resolveAndDraw(ctx: CanvasRenderingContext2DSized): void {

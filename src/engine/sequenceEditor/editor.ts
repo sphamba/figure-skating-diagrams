@@ -27,6 +27,7 @@ import {
   WhiteCircleLabel,
   WhitePillLabel,
 } from "./label.js";
+import { LabelTransitions, type LabelTransitionBuild, type LabelVariantKey } from "./labelTransition.js";
 import { Vector } from "../vector.js";
 
 const WARNING_TRIANGLE_COLOR = "#c25205";
@@ -91,7 +92,7 @@ const PROVISIONAL_COLOR = "#1976d2";
 export const PROVISIONAL_TOTAL_LENGTH = 0.8; // m
 export const DEFAULT_START_ELEMENT_LENGTH = 0.4; // m, total span of the default starting element
 const SPLIT_BUTTON_OFFSET = 14; // px, from the curve midpoint
-const DRAW_WINDOW_SECONDS = 3; // s, half of the short draw window
+const DRAW_WINDOW_SECONDS = 4; // s, half of the short draw window
 const SELECTION_RECT_FILL = "rgba(100, 149, 237, 0.2)"; // gentle blue fill
 const SELECTION_RECT_STROKE = "rgba(100, 149, 237, 0.9)";
 const ZOOM_FACTOR = 1.005;
@@ -183,7 +184,7 @@ export class Editor {
   activeSequence: Sequence | null = null;
 
   private _shortDrawRange = false;
-  // Short draw range (false: full extent, true: three seconds each side of the time cursor).
+  // Short draw range (false: full extent, true: four seconds each side of the time cursor).
   get shortDrawRange(): boolean {
     return this._shortDrawRange;
   }
@@ -312,6 +313,8 @@ export class Editor {
   private labelLayer = new LabelLayer();
   // Action buttons of the last frame, for hit testing at their resolved positions.
   private drawnButtons: DrawnActionButton[] = [];
+  // Appear and disappear transitions of the element and annotation labels.
+  private transitions = new LabelTransitions();
 
   private onWheel = (event: WheelEvent) => this.handleWheel(event);
   private onMouseDown = (event: MouseEvent) => this.handleMouseDown(event);
@@ -372,6 +375,7 @@ export class Editor {
 
   destroy() {
     this.cancelTrackingAnimation();
+    this.transitions.clear();
     if (this.drawFrameHandle !== null) {
       if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(this.drawFrameHandle);
       this.drawFrameHandle = null;
@@ -560,6 +564,7 @@ export class Editor {
     this.drawnButtons.length = 0;
     this.advanceTrackingAnimation();
     this.updateTracking();
+    this.transitions.beginFrame();
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.width, this.height);
     // A mid-frame error must not leave ctx.save() on the stack.
@@ -605,6 +610,10 @@ export class Editor {
         this.collectInflectionLabels();
         this.collectStartLabels();
       }
+      // Labels that left this frame keep shrinking along their exit until it
+      // completes, and the body keeps scheduling frames while any runs.
+      this.transitions.collectExit(this.labelLayer);
+      this.scheduleTransitionDraw();
       // The buttons render above the labels, so no pointer crosses a button.
       if (this.mode === "path") {
         this.collectAddButtons();
@@ -621,6 +630,7 @@ export class Editor {
     } catch (error) {
       // A partial frame must not leave stale buttons registered for hit testing.
       this.drawnButtons.length = 0;
+      this.labelLayer.clear();
       throw error;
     } finally {
       if (this.ctxTransformApplied) {
@@ -644,6 +654,20 @@ export class Editor {
       this.drawFrameHandle = null;
       this.draw();
     });
+  }
+
+  // Keeps frames coming while a label transition runs and stops once every
+  // transition settles. Direct draws without a frame loop stay single-shot.
+  private scheduleTransitionDraw() {
+    if (!this.transitions.animating()) return;
+    if (typeof requestAnimationFrame !== "function") return;
+    this.requestDraw();
+  }
+
+  // Completes every running label transition, so the next draw paints a
+  // settled frame. Tests use it to settle in-flight transitions synchronously.
+  finishLabelTransitions() {
+    this.transitions.finishAll();
   }
 
   private getVideoCursorRadius(): number {
@@ -1775,15 +1799,19 @@ export class Editor {
       if (sequence.path.curves.length === 0) continue;
       for (const keyframe of this.sortedTimingKeyframes(sequence)) {
         if (keyframe.kind !== "time") continue;
-        const geometry = this.getLabelGeometryInside(sequence.path, keyframe.pathCoordinate);
-        this.labelLayer.add(
-          new WhitePillLabel(formatTimingLabel(keyframe.value), geometry.point, geometry.outside, this.view.zoom, {
-            fontSizePx: LABEL_FONT_SIZE_SMALL,
-            rotation: this.view.rotation,
-          }),
-        );
+        if (this.timingKeyframeHidden(sequence, keyframe)) continue;
+        this.collectTransitionedLabel(keyframe, "time", () => this.makeTimingTimeLabel(sequence, keyframe));
       }
     }
+  }
+
+  private makeTimingTimeLabel(sequence: Sequence, keyframe: TimingKeyframe): WhitePillLabel | null {
+    const geometry = this.getLabelGeometryInside(sequence.path, keyframe.pathCoordinate);
+    if (!geometry) return null;
+    return new WhitePillLabel(formatTimingLabel(keyframe.value), geometry.point, geometry.outside, this.view.zoom, {
+      fontSizePx: LABEL_FONT_SIZE_SMALL,
+      rotation: this.view.rotation,
+    });
   }
 
   private collectTimingBeatLabels() {
@@ -1793,18 +1821,33 @@ export class Editor {
       for (let index = 1; index < sorted.length; index++) {
         const keyframe = sorted[index];
         if (!keyframe || keyframe.kind !== "beats") continue;
-        const previous = sorted[index - 1];
-        if (!previous) continue;
-        const mid = (((previous.pathCoordinate as number) + keyframe.pathCoordinate) as number) / 2;
-        const geometry = this.getLabelGeometryInside(sequence.path, mid as PathCoordinate);
-        this.labelLayer.add(
-          new WhiteCircleLabel(String(Math.round(keyframe.value)), geometry.point, geometry.outside, this.view.zoom, {
-            fontSizePx: LABEL_FONT_SIZE_SMALL,
-            rotation: this.view.rotation,
-          }),
-        );
+        if (this.timingKeyframeHidden(sequence, keyframe)) continue;
+        this.collectTransitionedLabel(keyframe, "beat", () => this.makeTimingBeatLabel(sequence, keyframe));
       }
     }
+  }
+
+  private makeTimingBeatLabel(sequence: Sequence, keyframe: TimingKeyframe): WhiteCircleLabel | null {
+    const sorted = this.sortedTimingKeyframes(sequence);
+    let previous: TimingKeyframe | undefined;
+    const index = sorted.indexOf(keyframe);
+    if (index >= 1) {
+      previous = sorted[index - 1];
+    } else {
+      // A removed keyframe exits at its recorded place against the former neighbour.
+      const before = sorted.filter(
+        (candidate) => (candidate.pathCoordinate as number) < (keyframe.pathCoordinate as number),
+      );
+      previous = before[before.length - 1];
+    }
+    if (!previous) return null;
+    const mid = (((previous.pathCoordinate as number) + keyframe.pathCoordinate) as number) / 2;
+    const geometry = this.getLabelGeometryInside(sequence.path, mid as PathCoordinate);
+    if (!geometry) return null;
+    return new WhiteCircleLabel(String(Math.round(keyframe.value)), geometry.point, geometry.outside, this.view.zoom, {
+      fontSizePx: LABEL_FONT_SIZE_SMALL,
+      rotation: this.view.rotation,
+    });
   }
 
   private timingNeighbourBoundsAround(
@@ -2110,37 +2153,34 @@ export class Editor {
     if (sequence.path.curves.length === 0) return;
     for (const element of sequence.elements) {
       if (this.elementNameHidden(sequence, element)) continue;
-      const geometry = this.getElementLabelGeometry(sequence, element);
-      if (!geometry) continue;
-      if (isJumpType(element.type) && this.mode === "view") {
-        this.labelLayer.add(
-          new PillLabel(element.shortName, geometry.point, null, this.view.zoom, {
-            connector: true,
-            rotation: this.view.rotation,
-          }),
-        );
-      } else {
-        this.labelLayer.add(
-          new PillLabel(element.shortName, geometry.point, geometry.outside, this.view.zoom, {
-            connector: true,
-            rotation: this.view.rotation,
-          }),
-        );
-      }
+      this.collectTransitionedLabel(element, "name", () => this.makeElementNameLabel(sequence, element));
       if (isStrokeElement(element) && element.crossed) {
-        const text = this.crossedLabel(sequence, element);
-        if (text) {
-          const crossedGeometry = this.getLabelGeometryInside(sequence.path, element.start);
-          this.labelLayer.add(
-            new PillLabel(text, crossedGeometry.point, crossedGeometry.outside, this.view.zoom, {
-              fontSizePx: LABEL_FONT_SIZE_SMALL,
-              connector: true,
-              rotation: this.view.rotation,
-            }),
-          );
-        }
+        const stroke = element;
+        this.collectTransitionedLabel(element, "crossed", () => this.makeCrossedLabel(sequence, stroke));
       }
     }
+  }
+
+  private makeElementNameLabel(sequence: Sequence, element: Element): PillLabel | null {
+    const geometry = this.getElementLabelGeometry(sequence, element);
+    if (!geometry) return null;
+    const centered = isJumpType(element.type) && this.mode === "view";
+    return new PillLabel(element.shortName, geometry.point, centered ? null : geometry.outside, this.view.zoom, {
+      connector: true,
+      rotation: this.view.rotation,
+    });
+  }
+
+  private makeCrossedLabel(sequence: Sequence, element: DynamicGlide): PillLabel | null {
+    const text = this.crossedLabel(sequence, element);
+    if (!text) return null;
+    const geometry = this.getLabelGeometryInside(sequence.path, element.start);
+    if (!geometry) return null;
+    return new PillLabel(text, geometry.point, geometry.outside, this.view.zoom, {
+      fontSizePx: LABEL_FONT_SIZE_SMALL,
+      connector: true,
+      rotation: this.view.rotation,
+    });
   }
 
   private crossedLabel(sequence: Sequence, element: DynamicGlide): string | null {
@@ -2187,22 +2227,42 @@ export class Editor {
     for (const annotation of annotations) {
       const { lo, hi } = this.clampedAnnotationSpan(sequence, annotation);
       if (hi <= lo) continue;
-      const geometry = this.getLabelGeometryAt(sequence.path, ((lo + hi) / 2) as PathCoordinate);
-      if (!geometry) continue;
-      // The title clears the highlight band before the normal label offset.
-      const extraOffset = this.getAnnotationLineWidth() / 2 + ANNOTATION_BUTTON_GAP / this.view.zoom;
-      // The pill uses the annotation color; the text is always black.
-      this.labelLayer.add(
-        new PillLabel(annotation.title, geometry.point, geometry.outside, this.view.zoom, {
-          rotation: this.view.rotation,
-          extraOffset: extraOffset,
-          alpha: ANNOTATION_LABEL_ALPHA,
-          background: annotation.color,
-          textColor: "#000",
-          textAlpha: ANNOTATION_LABEL_TEXT_ALPHA,
-        }),
-      );
+      this.collectTransitionedLabel(annotation, "annotation", () => this.makeAnnotationLabel(sequence, annotation));
     }
+  }
+
+  private makeAnnotationLabel(sequence: Sequence, annotation: Annotation): PillLabel | null {
+    const { lo, hi } = this.clampedAnnotationSpan(sequence, annotation);
+    if (hi <= lo) return null;
+    const geometry = this.getLabelGeometryAt(sequence.path, ((lo + hi) / 2) as PathCoordinate);
+    if (!geometry) return null;
+    // The title clears the highlight band before the normal label offset.
+    const extraOffset = this.getAnnotationLineWidth() / 2 + ANNOTATION_BUTTON_GAP / this.view.zoom;
+    // The pill uses the annotation color; the text is always black.
+    return new PillLabel(annotation.title, geometry.point, geometry.outside, this.view.zoom, {
+      rotation: this.view.rotation,
+      extraOffset: extraOffset,
+      alpha: ANNOTATION_LABEL_ALPHA,
+      background: annotation.color,
+      textColor: "#000",
+      textAlpha: ANNOTATION_LABEL_TEXT_ALPHA,
+    });
+  }
+
+  // Collects one label through the transition registry: the container grows
+  // after the first appearance, then the text and pointer appear together.
+  // Labels that left keep drawing through collectExit until the exit ends.
+  private collectTransitionedLabel(
+    owner: Element | Annotation | TimingKeyframe,
+    variant: LabelVariantKey,
+    build: LabelTransitionBuild,
+  ) {
+    const progress = this.transitions.touch(owner, variant, build);
+    if (progress.container <= 0) return;
+    const label = build();
+    if (!label) return;
+    label.setTransition(progress);
+    this.labelLayer.add(label);
   }
 
   private collectStartLabels() {
@@ -2224,6 +2284,15 @@ export class Editor {
     const window = this.traceDrawWindow();
     if (window === null) return false;
     const t = sequence.getTimeFromPathCoordinate(u, this.bpm);
+    return t < window[0] || t > window[1];
+  }
+
+  // Hides a timing keyframe label when the short draw range leaves its time outside.
+  private timingKeyframeHidden(sequence: Sequence, keyframe: TimingKeyframe): boolean {
+    if (!this.shortDrawRange) return false;
+    const window = this.traceDrawWindow();
+    if (window === null) return false;
+    const t = sequence.getTimeFromPathCoordinate(keyframe.pathCoordinate, this.bpm);
     return t < window[0] || t > window[1];
   }
 

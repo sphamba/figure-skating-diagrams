@@ -97,7 +97,7 @@ test("the short draw window collapses when the cursor lies outside the extent", 
   expect(window()).toBeNull();
   editor.videoTimeSeconds = 5;
   editor.shortDrawRange = true;
-  expect(window()).toEqual([2, 8]);
+  expect(window()).toEqual([1, 9]);
   editor.videoTimeSeconds = 20;
   expect(window()).toEqual([20, 20]);
   editor.videoTimeSeconds = -5;
