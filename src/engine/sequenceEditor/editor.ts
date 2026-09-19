@@ -1378,7 +1378,8 @@ export class Editor {
         continue;
       }
       if (sequence.path.curves.length === 0) continue;
-      if (!hasTimeEvolution(sequence)) {
+      const anchorRange = this.traceDrawAnchorRange(sequence);
+      if (anchorRange === null) {
         // No computable time along the path: keep it fully drawn.
         this.ctx.globalAlpha = hiddenAlpha;
         this.drawMetres(() =>
@@ -1395,35 +1396,14 @@ export class Editor {
         this.ctx.globalAlpha = 1;
         continue;
       }
-      const timeRange = sequenceTimeRange(sequence, this.bpm);
-      if (!timeRange) {
-        this.ctx.globalAlpha = hiddenAlpha;
-        this.drawMetres(() =>
-          sequence.drawTraces(
-            this.ctx,
-            minTraceWidth,
-            minBladeLength,
-            minMarkSize,
-            minDrawIncrement,
-            viewport,
-            this.sequenceMutated,
-          ),
-        );
-        this.ctx.globalAlpha = 1;
-        continue;
-      }
       const path = sequence.path;
-      const overlapT0 = Math.max(window[0], timeRange[0]);
-      const overlapT1 = Math.min(window[1], timeRange[1]);
-      if (overlapT1 <= overlapT0) {
+      if (anchorRange[1] <= anchorRange[0]) {
         this.drawOutsideDrawRangeStroke(path, 0 as PathCoordinate, undefined, hiddenAlpha);
         continue;
       }
-      const uLoRaw = sequence.getPathCoordinateFromTime(overlapT0 as Time, this.bpm);
-      const uHiRaw = sequence.getPathCoordinateFromTime(overlapT1 as Time, this.bpm);
-      const uLo = Math.min(uLoRaw, uHiRaw);
-      const uHi = Math.max(uLoRaw, uHiRaw);
-      this.drawOutsideDrawRangeStroke(path, 0 as PathCoordinate, uLo as PathCoordinate, hiddenAlpha);
+      const uLo = anchorRange[0] as PathCoordinate;
+      const uHi = anchorRange[1] as PathCoordinate;
+      this.drawOutsideDrawRangeStroke(path, 0 as PathCoordinate, uLo, hiddenAlpha);
       this.drawOutsideDrawRangeStroke(path, uHi as PathCoordinate, undefined, hiddenAlpha);
       this.ctx.globalAlpha = hiddenAlpha;
       this.drawMetres(() =>
@@ -1443,16 +1423,18 @@ export class Editor {
     }
   }
 
-  // Hides when the element time span lies entirely outside the drawing range.
+  // Hides when the path anchor lies outside the drawing range.
+  private anchorHidden(sequence: Sequence, u: PathCoordinate): boolean {
+    const range = this.traceDrawAnchorRange(sequence);
+    if (range === null) return false;
+    return u < range[0] || u > range[1];
+  }
+
+  // Hides when the name label anchor lies outside the drawing range: stroke
+  // names anchor later than their span, other names at the span midpoint.
   private elementNameHidden(sequence: Sequence, element: Element): boolean {
     if (this.mode !== "view") return false;
-    const window = this.traceDrawWindow();
-    if (window === null) return false;
-    const loU = Math.min(element.start as number, element.end as number);
-    const hiU = Math.max(element.start as number, element.end as number);
-    const lo = sequence.getTimeFromPathCoordinate(loU as PathCoordinate, this.bpm);
-    const hi = sequence.getTimeFromPathCoordinate(hiU as PathCoordinate, this.bpm);
-    return Math.max(lo, hi) < window[0] || Math.min(lo, hi) > window[1];
+    return this.anchorHidden(sequence, this.elementLabelAnchor(sequence, element));
   }
 
   private drawOutsideDrawRangeStroke(
@@ -1485,6 +1467,26 @@ export class Editor {
     // cursor keeps every time outside the draw range.
     if (t1 <= t0) return [center, center];
     return [t0, t1];
+  }
+
+  // The drawing range as path coordinates: the same range the traces draw.
+  // Label anchors compare against it directly, not against resolved times from
+  // the timing timeline. Null when nothing is limited: the option is off, or
+  // the sequence keeps fully drawn traces because its time is not computable.
+  private traceDrawAnchorRange(sequence: Sequence): [number, number] | null {
+    const window = this.traceDrawWindow();
+    if (window === null) return null;
+    if (!hasTimeEvolution(sequence) || sequence.path.curves.length === 0) return null;
+    const range = sequenceTimeRange(sequence, this.bpm);
+    if (!range) return null;
+    const overlapT0 = Math.max(window[0], range[0]);
+    const overlapT1 = Math.min(window[1], range[1]);
+    // The sequence lies outside the window, so the empty range keeps every
+    // anchor outside the draw range.
+    if (overlapT1 <= overlapT0) return [0, -1];
+    const uLoRaw = sequence.getPathCoordinateFromTime(overlapT0 as Time, this.bpm);
+    const uHiRaw = sequence.getPathCoordinateFromTime(overlapT1 as Time, this.bpm);
+    return [Math.min(uLoRaw, uHiRaw), Math.max(uLoRaw, uHiRaw)];
   }
 
   private getTraceViewport(minBladeLength?: number): AxisRect {
@@ -1799,7 +1801,7 @@ export class Editor {
       if (sequence.path.curves.length === 0) continue;
       for (const keyframe of this.sortedTimingKeyframes(sequence)) {
         if (keyframe.kind !== "time") continue;
-        if (this.timingKeyframeHidden(sequence, keyframe)) continue;
+        if (this.anchorHidden(sequence, keyframe.pathCoordinate)) continue;
         this.collectTransitionedLabel(keyframe, "time", () => this.makeTimingTimeLabel(sequence, keyframe));
       }
     }
@@ -1821,13 +1823,18 @@ export class Editor {
       for (let index = 1; index < sorted.length; index++) {
         const keyframe = sorted[index];
         if (!keyframe || keyframe.kind !== "beats") continue;
-        if (this.timingKeyframeHidden(sequence, keyframe)) continue;
+        // The beat marker anchors halfway to the previous keyframe, so the
+        // anchor that decides visibility is one stop earlier than the keyframe.
+        const anchor = this.beatLabelAnchor(sequence, keyframe);
+        if (anchor === null || this.anchorHidden(sequence, anchor)) continue;
         this.collectTransitionedLabel(keyframe, "beat", () => this.makeTimingBeatLabel(sequence, keyframe));
       }
     }
   }
 
-  private makeTimingBeatLabel(sequence: Sequence, keyframe: TimingKeyframe): WhiteCircleLabel | null {
+  // The beat marker anchors halfway to the previous time keyframe: one stop
+  // earlier than the keyframe itself.
+  private beatLabelAnchor(sequence: Sequence, keyframe: TimingKeyframe): PathCoordinate | null {
     const sorted = this.sortedTimingKeyframes(sequence);
     let previous: TimingKeyframe | undefined;
     const index = sorted.indexOf(keyframe);
@@ -1841,8 +1848,13 @@ export class Editor {
       previous = before[before.length - 1];
     }
     if (!previous) return null;
-    const mid = (((previous.pathCoordinate as number) + keyframe.pathCoordinate) as number) / 2;
-    const geometry = this.getLabelGeometryInside(sequence.path, mid as PathCoordinate);
+    return (((previous.pathCoordinate as number) + keyframe.pathCoordinate) / 2) as PathCoordinate;
+  }
+
+  private makeTimingBeatLabel(sequence: Sequence, keyframe: TimingKeyframe): WhiteCircleLabel | null {
+    const mid = this.beatLabelAnchor(sequence, keyframe);
+    if (mid === null) return null;
+    const geometry = this.getLabelGeometryInside(sequence.path, mid);
     if (!geometry) return null;
     return new WhiteCircleLabel(String(Math.round(keyframe.value)), geometry.point, geometry.outside, this.view.zoom, {
       fontSizePx: LABEL_FONT_SIZE_SMALL,
@@ -2077,10 +2089,14 @@ export class Editor {
   ): { point: Vector<2>; outside: Vector<2> } | null {
     const path = sequence.path;
     if (path.curves.length === 0) return null;
-    const anchorU = isStrokeElement(element)
-      ? this.getStrokeLabelAnchor(sequence, element)
-      : this.getSpanMidpoint(element);
-    return this.getLabelGeometryAt(path, anchorU);
+    return this.getLabelGeometryAt(path, this.elementLabelAnchor(sequence, element));
+  }
+
+  // The path coordinate the name label sits on: stroke names anchor later,
+  // between the stroke end and the next element start; other names anchor at
+  // the span midpoint.
+  private elementLabelAnchor(sequence: Sequence, element: Element): PathCoordinate {
+    return isStrokeElement(element) ? this.getStrokeLabelAnchor(sequence, element) : this.getSpanMidpoint(element);
   }
 
   private getLabelGeometryAt(path: Path, u: PathCoordinate): { point: Vector<2>; outside: Vector<2> } {
@@ -2152,12 +2168,15 @@ export class Editor {
   private collectElementLabels(sequence: Sequence) {
     if (sequence.path.curves.length === 0) return;
     for (const element of sequence.elements) {
-      if (this.elementNameHidden(sequence, element)) continue;
-      this.collectTransitionedLabel(element, "name", () => this.makeElementNameLabel(sequence, element));
-      if (isStrokeElement(element) && element.crossed) {
-        const stroke = element;
-        this.collectTransitionedLabel(element, "crossed", () => this.makeCrossedLabel(sequence, stroke));
+      if (!this.elementNameHidden(sequence, element)) {
+        this.collectTransitionedLabel(element, "name", () => this.makeElementNameLabel(sequence, element));
       }
+      if (!(isStrokeElement(element) && element.crossed)) continue;
+      const stroke = element;
+      // The crossed pill anchors at the stroke start, so it shows by its own
+      // anchor even when the main label stays hidden.
+      if (this.anchorHidden(sequence, stroke.start)) continue;
+      this.collectTransitionedLabel(element, "crossed", () => this.makeCrossedLabel(sequence, stroke));
     }
   }
 
@@ -2278,22 +2297,10 @@ export class Editor {
     }
   }
 
-  // Hides when the time lies outside the drawing range.
+  // Hides when the anchor path coordinate lies outside the drawing range.
   private changeEdgeHidden(sequence: Sequence, u: PathCoordinate): boolean {
     if (this.mode !== "view") return false;
-    const window = this.traceDrawWindow();
-    if (window === null) return false;
-    const t = sequence.getTimeFromPathCoordinate(u, this.bpm);
-    return t < window[0] || t > window[1];
-  }
-
-  // Hides a timing keyframe label when the short draw range leaves its time outside.
-  private timingKeyframeHidden(sequence: Sequence, keyframe: TimingKeyframe): boolean {
-    if (!this.shortDrawRange) return false;
-    const window = this.traceDrawWindow();
-    if (window === null) return false;
-    const t = sequence.getTimeFromPathCoordinate(keyframe.pathCoordinate, this.bpm);
-    return t < window[0] || t > window[1];
+    return this.anchorHidden(sequence, u);
   }
 
   private getUncoveredInflectionCoordinates(sequence: Sequence): PathCoordinate[] {
