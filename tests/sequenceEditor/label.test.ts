@@ -2,10 +2,17 @@ import { describe, expect, test } from "vitest";
 import type { CanvasRenderingContext2DSized } from "../../src/engine/rinkCanvas";
 import { CANVAS_SCALE, RINK_COLOR } from "../../src/engine/constants.js";
 import {
+  ACTION_BUTTON_RADIUS,
+  ACTION_BUTTON_WEIGHT,
+  BUTTON_DISC_WHITE_FRACTION,
+  buttonDiscColor,
+  CogButtonLabel,
   LABEL_ANCHOR_LIMIT,
   LABEL_COLLISION_PADDING,
   LabelLayer,
+  MinusButtonLabel,
   PillLabel,
+  PlusButtonLabel,
   WhiteCircleLabel,
   capsuleSeparation,
 } from "../../src/engine/sequenceEditor/label";
@@ -327,5 +334,120 @@ describe("CanvasLabel collision", () => {
     const capsule = label.getCollisionCapsule();
     expect(capsule.radius).toBeCloseTo(radius + (LABEL_COLLISION_PADDING * CANVAS_SCALE) / ZOOM, 9);
     expect(capsule.x0).toBeCloseTo(capsule.x1, 9);
+  });
+});
+
+describe("ActionButtonLabel", () => {
+  test("weights a button 10x and a plain label 1x", () => {
+    const pill = new PillLabel("a", new Vector(0, 0), null, ZOOM);
+    expect(pill.getCollisionWeight()).toBe(1);
+    const button = new PlusButtonLabel(new Vector(0, 0), ZOOM, "#d33");
+    expect(button.getCollisionWeight()).toBe(ACTION_BUTTON_WEIGHT);
+  });
+
+  test("a collision moves a button 10x less than a weight 1 label", () => {
+    const button = new PlusButtonLabel(new Vector(0, 0), ZOOM, "#d33");
+    const pill = new PillLabel("a", new Vector(0.28, 0), null, ZOOM);
+    button.measure(stubCtx());
+    pill.measure(stubCtx());
+    const separation = capsuleSeparation(button.getCollisionCapsule(), pill.getCollisionCapsule());
+    expect(separation).not.toBeNull();
+    // LABEL_PUSH_FACTOR 0.75 shares the full resolution distance between the pair.
+    const total = separation!.overlap * 0.75;
+    const layer = new LabelLayer();
+    layer.add(button);
+    layer.add(pill);
+    layer.resolveAndDraw(stubCtx());
+    // The button is heavier, so it takes the 1/11 share and the pill the 10/11 share.
+    expect(button.getResolvedCanvasPosition().x).toBeCloseTo(-total / (1 + ACTION_BUTTON_WEIGHT), 9);
+    expect((pill as unknown as { x: number }).x).toBeCloseTo(
+      0.28 * CANVAS_SCALE + (total * ACTION_BUTTON_WEIGHT) / (1 + ACTION_BUTTON_WEIGHT),
+      9,
+    );
+  });
+
+  test("a button anchors at its point and keeps a full disc capsule", () => {
+    const button = new MinusButtonLabel(new Vector(2, 3), ZOOM, "#d33");
+    button.measure(stubCtx());
+    expect(button.isVisible()).toBe(true);
+    expect(button.getResolvedCanvasPosition()).toEqual({ x: 2 * CANVAS_SCALE, y: -3 * CANVAS_SCALE });
+    const capsule = button.getCollisionCapsule();
+    const radius = ((ACTION_BUTTON_RADIUS + LABEL_COLLISION_PADDING) * CANVAS_SCALE) / ZOOM;
+    expect(capsule.radius).toBeCloseTo(radius, 9);
+    expect(capsule.x0).toBeCloseTo(capsule.x1, 9);
+  });
+
+  test("a plus button draws the tinted disc, then the outline and symbol, with no text", () => {
+    const tracked = stubCtx() as unknown as {
+      globalAlpha: number;
+      fillStyle: string;
+      strokeStyle: string;
+      lineWidth: number;
+      fillText: (text: string, x: number, y: number) => void;
+      fill: () => void;
+      stroke: () => void;
+    };
+    const captured: Array<{ kind: "fill" | "stroke" | "text"; alpha: number; color: string; lineWidth: number }> = [];
+    const fill = tracked.fill;
+    const stroke = tracked.stroke;
+    tracked.fill = () => {
+      captured.push({ kind: "fill", alpha: tracked.globalAlpha, color: tracked.fillStyle, lineWidth: tracked.lineWidth });
+      fill();
+    };
+    tracked.stroke = () => {
+      captured.push({ kind: "stroke", alpha: tracked.globalAlpha, color: tracked.strokeStyle, lineWidth: tracked.lineWidth });
+      stroke();
+    };
+    tracked.fillText = (text: string, x: number, y: number) => {
+      captured.push({ kind: "text", alpha: tracked.globalAlpha, color: text, lineWidth: x + y });
+    };
+    const button = new PlusButtonLabel(new Vector(1, 2), ZOOM, "#1976d2");
+    button.measure(stubCtx());
+    button.draw(tracked as unknown as CanvasRenderingContext2DSized);
+    // One disc fill, then the circle stroke and one more stroke for both plus bars.
+    expect(captured).toHaveLength(3);
+    expect(captured[0]!.kind).toBe("fill");
+    expect(captured[0]!.alpha).toBeCloseTo(1, 9);
+    expect(captured[0]!.color).toBe(buttonDiscColor("#1976d2"));
+    for (const entry of captured.slice(1)) {
+      expect(entry.kind).toBe("stroke");
+      expect(entry.alpha).toBe(1);
+      expect(entry.color).toBe("#1976d2");
+      expect(entry.lineWidth).toBeCloseTo((1.5 * CANVAS_SCALE) / ZOOM, 9);
+    }
+  });
+
+  test("the disc color blends the pill white with the button color", () => {
+    expect(BUTTON_DISC_WHITE_FRACTION).toBe(0.96);
+    expect(buttonDiscColor("#d33")).toBe("#f9f2f3");
+    expect(buttonDiscColor("#1976d2")).toBe("#f1f5f9");
+  });
+
+  test("a cog button strokes the inner circle and all teeth at the cog width", () => {
+    const tracked = stubCtx() as unknown as {
+      globalAlpha: number;
+      strokeStyle: string;
+      lineWidth: number;
+      fill: () => void;
+      stroke: () => void;
+    };
+    const captured: Array<{ kind: "fill" | "stroke"; color: string; lineWidth: number }> = [];
+    tracked.stroke = () => {
+      captured.push({ kind: "stroke", color: tracked.strokeStyle, lineWidth: tracked.lineWidth });
+    };
+    tracked.fill = () => {
+      captured.push({ kind: "fill", color: tracked.fillStyle, lineWidth: tracked.lineWidth });
+    };
+    const button = new CogButtonLabel(new Vector(0, 0), ZOOM, "#444444");
+    button.measure(stubCtx());
+    button.draw(tracked as unknown as CanvasRenderingContext2DSized);
+    // The cog has no disc background.
+    expect(captured.every((entry) => entry.kind === "stroke")).toBe(true);
+    expect(captured).toHaveLength(9);
+    for (const entry of captured) {
+      expect(entry.color).toBe("#444444");
+      // Thick circle and teeth, thicker than the short teeth are long.
+      expect(entry.lineWidth).toBeCloseTo((3.5 * CANVAS_SCALE) / ZOOM, 9);
+    }
   });
 });

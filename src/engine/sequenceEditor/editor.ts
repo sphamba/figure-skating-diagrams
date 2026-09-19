@@ -14,7 +14,19 @@ import { createDefaultFootTurn, isJumpType } from "../element/turnTypes.js";
 import { TimingKeyframe } from "../keyframe.js";
 import { Sequence, DEFAULT_BPM, hasTimeEvolution, sequenceTimeRange } from "../sequence.js";
 import { checkSequenceCurvatures, isStrokeElement } from "./curvatureWarning.js";
-import { LABEL_FONT_SIZE_SMALL, LabelLayer, PillLabel, WhiteCircleLabel, WhitePillLabel } from "./label.js";
+import {
+  ACTION_BUTTON_HIT_RADIUS,
+  ACTION_BUTTON_RADIUS,
+  ActionButtonLabel,
+  CogButtonLabel,
+  LabelLayer,
+  LABEL_FONT_SIZE_SMALL,
+  MinusButtonLabel,
+  PillLabel,
+  PlusButtonLabel,
+  WhiteCircleLabel,
+  WhitePillLabel,
+} from "./label.js";
 import { Vector } from "../vector.js";
 
 const WARNING_TRIANGLE_COLOR = "#c25205";
@@ -72,20 +84,9 @@ const POLYGON_ALPHA = 0.25;
 const PICK_RADIUS = 8; // px
 const RECT_CLICK_THRESHOLD = 4; // px (max movement still counted as a click)
 const ADD_BUTTON_OFFSET = 20; // px, screen distance from the path end to the button center
-const ADD_BUTTON_RADIUS = 7; // px
-const ADD_BUTTON_LINE_WIDTH = 1.5; // px
-const ADD_PLUS_LENGTH = 7; // px
-const ADD_BUTTON_HIT_RADIUS = 9; // px, slightly above the drawn radius
-const ADD_BUTTON_COLOR = "#d33";
+const BUTTON_RED_COLOR = "#d33";
+const BUTTON_GREY_COLOR = "#444";
 const DELETE_BUTTON_OFFSET = 20; // px, screen distance from the path line to the button center
-const DELETE_BUTTON_RADIUS = 7; // px
-const DELETE_BUTTON_LINE_WIDTH = 1.5; // px
-const DELETE_MINUS_LENGTH = 7; // px
-const DELETE_BUTTON_HIT_RADIUS = 9; // px, slightly above the drawn radius
-const DELETE_BUTTON_COLOR = "#d33";
-const COG_BUTTON_COLOR = "#444";
-const COG_LINE_WIDTH = 3.5; // px (thick circle and teeth, thicker than the short teeth are long)
-const COG_TEETH_COUNT = 8;
 const PROVISIONAL_COLOR = "#1976d2";
 export const PROVISIONAL_TOTAL_LENGTH = 0.8; // m
 export const DEFAULT_START_ELEMENT_LENGTH = 0.4; // m, total span of the default starting element
@@ -119,6 +120,35 @@ type ViewState = {
 };
 
 export type EditMode = "view" | "path" | "elements" | "timing" | "annotations";
+
+// One canvas action button drawn in the last frame. The owner is what a hit
+// returns, so the hit functions read it back per kind.
+type DrawnActionButton = {
+  kind:
+    | "add"
+    | "split"
+    | "delete"
+    | "provisionalPlus"
+    | "elementCog"
+    | "elementDelete"
+    | "timingPlus"
+    | "timingCog"
+    | "timingMinus"
+    | "annotationPlus"
+    | "annotationCog"
+    | "annotationDelete";
+  owner:
+    | Sequence
+    | Element
+    | TimingKeyframe
+    | Annotation
+    | { sequence: Sequence; curveIndex: number }
+    | {
+        sequence: Sequence;
+        removable: { point: Vector<2>; dir: Vector<2>; isStart: boolean; isEnd: boolean };
+      };
+  label: ActionButtonLabel;
+};
 
 export type ControlPointSelection = {
   sequence: Sequence;
@@ -280,6 +310,8 @@ export class Editor {
   private destroyed = false;
   // Labels collected during the frame, drawn together after collision resolution.
   private labelLayer = new LabelLayer();
+  // Action buttons of the last frame, for hit testing at their resolved positions.
+  private drawnButtons: DrawnActionButton[] = [];
 
   private onWheel = (event: WheelEvent) => this.handleWheel(event);
   private onMouseDown = (event: MouseEvent) => this.handleMouseDown(event);
@@ -525,6 +557,7 @@ export class Editor {
   }
 
   draw() {
+    this.drawnButtons.length = 0;
     this.advanceTrackingAnimation();
     this.updateTracking();
     const ctx = this.ctx;
@@ -543,26 +576,21 @@ export class Editor {
         }
       }
       this.drawSelectedCurves();
+      let drewElements = false;
       if (this.mode === "path") {
         for (const sequence of this.editSequences()) {
           this.drawControlHandles(sequence);
         }
-        this.drawAddButtons();
-        this.drawSplitButtons();
-        this.drawDeleteButtons();
       } else if (this.mode === "elements") {
-        this.drawElements();
+        drewElements = this.drawElements();
       } else if (this.mode === "view") {
         this.drawTraces();
         if (this.showLabels) this.collectTimingBeatLabels();
       } else if (this.mode === "timing") {
         this.drawTimingElements();
         this.drawTimingKeyframes();
-        this.drawTimingButtons();
         this.collectTimingTimeLabels();
         this.collectTimingBeatLabels();
-      } else if (this.mode === "annotations") {
-        this.drawAnnotationButtons();
       }
       if (this.mode === "path" || this.mode === "elements") {
         this.drawCurvatureWarnings();
@@ -577,7 +605,23 @@ export class Editor {
         this.collectInflectionLabels();
         this.collectStartLabels();
       }
+      // The buttons render above the labels, so no pointer crosses a button.
+      if (this.mode === "path") {
+        this.collectAddButtons();
+        this.collectSplitButtons();
+        this.collectPathDeleteButtons();
+      } else if (this.mode === "elements") {
+        if (drewElements) this.collectElementModeButtons();
+      } else if (this.mode === "timing") {
+        this.collectTimingButtons();
+      } else if (this.mode === "annotations") {
+        this.collectAnnotationButtons();
+      }
       this.labelLayer.resolveAndDraw(this.ctx);
+    } catch (error) {
+      // A partial frame must not leave stale buttons registered for hit testing.
+      this.drawnButtons.length = 0;
+      throw error;
     } finally {
       if (this.ctxTransformApplied) {
         this.ctxTransformApplied = false;
@@ -1231,16 +1275,20 @@ export class Editor {
   }
 
   private annotationButtonOffset(): number {
-    return this.getAnnotationLineWidth() / 2 + (DELETE_BUTTON_RADIUS + ANNOTATION_BUTTON_GAP) / this.view.zoom;
+    return this.getAnnotationLineWidth() / 2 + (ACTION_BUTTON_RADIUS + ANNOTATION_BUTTON_GAP) / this.view.zoom;
   }
 
-  private drawAnnotationButtons() {
+  private collectAnnotationButtons() {
     const offset = this.annotationButtonOffset();
     for (const [sequence, provisional] of this.provisionalAnnotations) {
       if (sequence.path.curves.length === 0) continue;
       const geometry = this.midpointNormal(sequence, provisional);
       if (!geometry) continue;
-      this.drawPlusInCircleWithColor(geometry.point.plus(geometry.perp.times(-offset)), PROVISIONAL_COLOR);
+      this.collectActionButton(
+        "annotationPlus",
+        provisional,
+        new PlusButtonLabel(geometry.point.plus(geometry.perp.times(-offset)), this.view.zoom, PROVISIONAL_COLOR),
+      );
     }
     const selected = this.getSingleSelectedAnnotation();
     if (!selected || this.isProvisionalAnnotation(selected)) return;
@@ -1248,26 +1296,21 @@ export class Editor {
     if (!owner || owner.path.curves.length === 0) return;
     const geometry = this.midpointNormal(owner, selected);
     if (!geometry) return;
-    this.drawMinusInCircle(geometry.point.plus(geometry.perp.times(offset)));
-    this.drawCogInCircle(geometry.point.plus(geometry.perp.times(-offset)));
-  }
-
-  private hitAnnotationActionButton(annotation: Annotation, side: 1 | -1, screenX: number, screenY: number): boolean {
-    const owner = this.getSequenceOfAnnotation(annotation);
-    if (!owner || owner.path.curves.length === 0) return false;
-    const geometry = this.midpointNormal(owner, annotation);
-    if (!geometry) return false;
-    const offset = this.annotationButtonOffset();
-    const [iconX, iconY] = this.worldToScreen(geometry.point.plus(geometry.perp.times(offset * side)));
-    return Math.hypot(screenX - iconX, screenY - iconY) <= DELETE_BUTTON_HIT_RADIUS;
+    this.collectActionButton(
+      "annotationDelete",
+      selected,
+      new MinusButtonLabel(geometry.point.plus(geometry.perp.times(offset)), this.view.zoom, BUTTON_RED_COLOR),
+    );
+    this.collectActionButton(
+      "annotationCog",
+      selected,
+      new CogButtonLabel(geometry.point.plus(geometry.perp.times(-offset)), this.view.zoom, BUTTON_GREY_COLOR),
+    );
   }
 
   private hitProvisionalAnnotationPlus(screenX: number, screenY: number): Annotation | null {
-    for (const [sequence, provisional] of this.provisionalAnnotations) {
-      if (sequence.path.curves.length === 0) continue;
-      if (this.hitAnnotationActionButton(provisional, -1, screenX, screenY)) return provisional;
-    }
-    return null;
+    const button = this.findDrawnActionButton("annotationPlus", screenX, screenY);
+    return button ? (button.owner as Annotation) : null;
   }
 
   private getAnnotationActionButtonAnnotation(): Annotation | null {
@@ -1277,15 +1320,11 @@ export class Editor {
   }
 
   private hitAnnotationCogButton(screenX: number, screenY: number): boolean {
-    const selected = this.getAnnotationActionButtonAnnotation();
-    if (!selected) return false;
-    return this.hitAnnotationActionButton(selected, -1, screenX, screenY);
+    return this.findDrawnActionButton("annotationCog", screenX, screenY) !== null;
   }
 
   private hitAnnotationDeleteButton(screenX: number, screenY: number): boolean {
-    const selected = this.getAnnotationActionButtonAnnotation();
-    if (!selected) return false;
-    return this.hitAnnotationActionButton(selected, 1, screenX, screenY);
+    return this.findDrawnActionButton("annotationDelete", screenX, screenY) !== null;
   }
 
   private drawTraces() {
@@ -1673,38 +1712,32 @@ export class Editor {
     return this.getLabelGeometryInside(sequence.path, keyframe.pathCoordinate);
   }
 
-  private drawTimingButtons() {
+  private collectTimingButtons() {
     const offset = DELETE_BUTTON_OFFSET / this.view.zoom;
     for (const [sequence, provisional] of this.provisionalTimingKeyframes) {
       const geometry = this.getTimingKeyframeGeometry(sequence, provisional);
       if (!geometry) continue;
-      this.drawPlusInCircleWithColor(geometry.point.plus(geometry.outside.times(offset)), PROVISIONAL_COLOR);
+      this.collectActionButton(
+        "timingPlus",
+        provisional,
+        new PlusButtonLabel(geometry.point.plus(geometry.outside.times(offset)), this.view.zoom, PROVISIONAL_COLOR),
+      );
     }
     const selected = this.getSingleSelectedTimingKeyframe();
     if (!selected) return;
     const sequence = this.getSequenceOfTimingKeyframe(selected);
     const geometry = sequence ? this.getTimingKeyframeGeometry(sequence, selected) : null;
     if (!geometry) return;
-    this.drawMinusInCircle(geometry.point.plus(geometry.outside.times(offset)));
-    this.drawCogInCircle(geometry.point.plus(geometry.outside.times(-offset)));
-  }
-
-  private hitTimingButton(keyframe: TimingKeyframe, side: 1 | -1, screenX: number, screenY: number): boolean {
-    const owner = this.getSequenceOfTimingKeyframe(keyframe);
-    if (!owner) return false;
-    const geometry = this.getTimingKeyframeGeometry(owner, keyframe);
-    if (!geometry) return false;
-    const offset = DELETE_BUTTON_OFFSET / this.view.zoom;
-    const [iconX, iconY] = this.worldToScreen(geometry.point.plus(geometry.outside.times(offset * side)));
-    return Math.hypot(screenX - iconX, screenY - iconY) <= DELETE_BUTTON_HIT_RADIUS;
-  }
-
-  private hitProvisionalTimingPlus(screenX: number, screenY: number): TimingKeyframe | null {
-    for (const [sequence, provisional] of this.provisionalTimingKeyframes) {
-      if (sequence.path.curves.length === 0) continue;
-      if (this.hitTimingButton(provisional, 1, screenX, screenY)) return provisional;
-    }
-    return null;
+    this.collectActionButton(
+      "timingMinus",
+      selected,
+      new MinusButtonLabel(geometry.point.plus(geometry.outside.times(offset)), this.view.zoom, BUTTON_RED_COLOR),
+    );
+    this.collectActionButton(
+      "timingCog",
+      selected,
+      new CogButtonLabel(geometry.point.plus(geometry.outside.times(-offset)), this.view.zoom, BUTTON_GREY_COLOR),
+    );
   }
 
   private getSingleSelectedTimingKeyframe(): TimingKeyframe | null {
@@ -1713,16 +1746,19 @@ export class Editor {
     return this.isProvisionalTiming(selected) ? null : selected;
   }
 
+  private hitProvisionalTimingPlus(screenX: number, screenY: number): TimingKeyframe | null {
+    const button = this.findDrawnActionButton("timingPlus", screenX, screenY);
+    return button ? (button.owner as TimingKeyframe) : null;
+  }
+
   private hitTimingCogButton(screenX: number, screenY: number): TimingKeyframe | null {
-    const selected = this.getSingleSelectedTimingKeyframe();
-    if (!selected) return null;
-    return this.hitTimingButton(selected, -1, screenX, screenY) ? selected : null;
+    const button = this.findDrawnActionButton("timingCog", screenX, screenY);
+    return button ? (button.owner as TimingKeyframe) : null;
   }
 
   private hitTimingMinusButton(screenX: number, screenY: number): TimingKeyframe | null {
-    const selected = this.getSingleSelectedTimingKeyframe();
-    if (!selected) return null;
-    return this.hitTimingButton(selected, 1, screenX, screenY) ? selected : null;
+    const button = this.findDrawnActionButton("timingMinus", screenX, screenY);
+    return button ? (button.owner as TimingKeyframe) : null;
   }
 
   private getLabelGeometryInside(path: Path, u: PathCoordinate): { point: Vector<2>; outside: Vector<2> } {
@@ -1906,7 +1942,7 @@ export class Editor {
     }
   }
 
-  private drawElements() {
+  private drawElements(): boolean {
     const nodeSize = (NODE_SIZE * CANVAS_SCALE) / this.view.zoom;
     let drewElements = false;
 
@@ -1947,11 +1983,7 @@ export class Editor {
       }
     }
 
-    if (!drewElements) return;
-
-    this.drawElementDeleteButton();
-    this.drawElementCogButton();
-    this.drawProvisionalPlusButtons();
+    return drewElements;
   }
 
   private drawTimingElements() {
@@ -2519,51 +2551,48 @@ export class Editor {
     return end.plus(dir.times(offset));
   }
 
-  private drawPlusInCircle(world: Vector<2>) {
-    this.drawPlusInCircleWithColor(world, ADD_BUTTON_COLOR);
+  private collectActionButton(
+    kind: DrawnActionButton["kind"],
+    owner: DrawnActionButton["owner"],
+    label: ActionButtonLabel,
+  ) {
+    this.drawnButtons.push({ kind, owner, label });
+    this.labelLayer.add(label);
   }
 
-  private drawPlusInCircleWithColor(world: Vector<2>, color: string) {
-    const ctx = this.ctx;
-    const cx = world.x * CANVAS_SCALE;
-    const cy = -world.y * CANVAS_SCALE;
-
-    const radius = (ADD_BUTTON_RADIUS * CANVAS_SCALE) / this.view.zoom;
-    const halfPlus = ((ADD_PLUS_LENGTH / 2) * CANVAS_SCALE) / this.view.zoom;
-
-    ctx.strokeStyle = color;
-    ctx.lineWidth = (ADD_BUTTON_LINE_WIDTH * CANVAS_SCALE) / this.view.zoom;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(cx - halfPlus, cy);
-    ctx.lineTo(cx + halfPlus, cy);
-    ctx.moveTo(cx, cy - halfPlus);
-    ctx.lineTo(cx, cy + halfPlus);
-    ctx.stroke();
+  // Screen position of a drawn button at its collision-resolved label position.
+  private drawnButtonScreenPosition(label: ActionButtonLabel): [number, number] {
+    const resolved = label.getResolvedCanvasPosition();
+    return this.worldToScreen(new Vector<2>(resolved.x / CANVAS_SCALE, -resolved.y / CANVAS_SCALE));
   }
 
-  private drawAddButtons() {
+  private findDrawnActionButton(
+    kind: DrawnActionButton["kind"],
+    screenX: number,
+    screenY: number,
+  ): DrawnActionButton | null {
+    for (const button of this.drawnButtons) {
+      if (button.kind !== kind) continue;
+      const [iconX, iconY] = this.drawnButtonScreenPosition(button.label);
+      if (Math.hypot(screenX - iconX, screenY - iconY) <= ACTION_BUTTON_HIT_RADIUS) return button;
+    }
+    return null;
+  }
+
+  private collectAddButtons() {
     for (const sequence of this.editSequences()) {
       if (sequence.path.curves.length === 0) continue;
-      this.drawPlusInCircle(this.getAddButtonPosition(sequence));
+      this.collectActionButton(
+        "add",
+        sequence,
+        new PlusButtonLabel(this.getAddButtonPosition(sequence), this.view.zoom, BUTTON_RED_COLOR),
+      );
     }
   }
 
   private hitAddButton(screenX: number, screenY: number): Sequence | null {
-    for (const sequence of this.editSequences()) {
-      if (sequence.path.curves.length === 0) continue;
-      const [iconX, iconY] = this.worldToScreen(this.getAddButtonPosition(sequence));
-      const dx = screenX - iconX;
-      const dy = screenY - iconY;
-      if (Math.hypot(dx, dy) <= ADD_BUTTON_HIT_RADIUS) return sequence;
-    }
-    return null;
+    const button = this.findDrawnActionButton("add", screenX, screenY);
+    return button ? (button.owner as Sequence) : null;
   }
 
   private getRemovablePoint(
@@ -2610,34 +2639,15 @@ export class Editor {
     return { removable, center: removable.point.plus(perp.times(offset)) };
   }
 
-  private drawMinusInCircle(world: Vector<2>) {
-    const ctx = this.ctx;
-    const cx = world.x * CANVAS_SCALE;
-    const cy = -world.y * CANVAS_SCALE;
-
-    const radius = (DELETE_BUTTON_RADIUS * CANVAS_SCALE) / this.view.zoom;
-    const halfMinus = ((DELETE_MINUS_LENGTH / 2) * CANVAS_SCALE) / this.view.zoom;
-
-    ctx.strokeStyle = DELETE_BUTTON_COLOR;
-    ctx.lineWidth = (DELETE_BUTTON_LINE_WIDTH * CANVAS_SCALE) / this.view.zoom;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(cx - halfMinus, cy);
-    ctx.lineTo(cx + halfMinus, cy);
-    ctx.stroke();
-  }
-
-  private drawDeleteButtons() {
+  private collectPathDeleteButtons() {
     for (const sequence of this.editSequences()) {
       const data = this.getDeleteButtonData(sequence);
       if (!data) continue;
-      this.drawMinusInCircle(data.center);
+      this.collectActionButton(
+        "delete",
+        { sequence, removable: data.removable },
+        new MinusButtonLabel(data.center, this.view.zoom, BUTTON_RED_COLOR),
+      );
     }
   }
 
@@ -2676,10 +2686,33 @@ export class Editor {
     return geometry.point.plus(geometry.perp.times(offset));
   }
 
-  private drawElementDeleteButton() {
-    const center = this.getElementDeleteButtonPosition();
-    if (!center) return;
-    this.drawMinusInCircle(center);
+  private collectElementModeButtons() {
+    const element = this.getElementDeleteButtonElement();
+    if (element) {
+      const deleteCenter = this.getElementDeleteButtonPosition();
+      if (deleteCenter) {
+        this.collectActionButton(
+          "elementDelete",
+          element,
+          new MinusButtonLabel(deleteCenter, this.view.zoom, BUTTON_RED_COLOR),
+        );
+      }
+      const cogCenter = this.getElementCogButtonPosition();
+      if (cogCenter) {
+        this.collectActionButton(
+          "elementCog",
+          element,
+          new CogButtonLabel(cogCenter, this.view.zoom, BUTTON_GREY_COLOR),
+        );
+      }
+    }
+    for (const { sequence, center } of this.getProvisionalPlusButtons()) {
+      this.collectActionButton(
+        "provisionalPlus",
+        sequence,
+        new PlusButtonLabel(center, this.view.zoom, PROVISIONAL_COLOR),
+      );
+    }
   }
 
   private getElementCogButtonPosition(): Vector<2> | null {
@@ -2687,38 +2720,6 @@ export class Editor {
     if (!geometry) return null;
     const offset = DELETE_BUTTON_OFFSET / this.view.zoom; // px -> m
     return geometry.point.plus(geometry.perp.times(-offset));
-  }
-
-  private drawCogInCircle(world: Vector<2>, color: string = COG_BUTTON_COLOR) {
-    const ctx = this.ctx;
-    const cx = world.x * CANVAS_SCALE;
-    const cy = -world.y * CANVAS_SCALE;
-
-    const outerRadius = (DELETE_BUTTON_RADIUS * CANVAS_SCALE) / this.view.zoom;
-    const circleRadius = outerRadius * 0.62;
-
-    ctx.strokeStyle = color;
-    ctx.lineWidth = (COG_LINE_WIDTH * CANVAS_SCALE) / this.view.zoom;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    ctx.beginPath();
-    ctx.arc(cx, cy, circleRadius, 0, 2 * Math.PI);
-    ctx.stroke();
-
-    for (let i = 0; i < COG_TEETH_COUNT; i++) {
-      const angle = (i / COG_TEETH_COUNT) * 2 * Math.PI;
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(angle) * circleRadius, cy + Math.sin(angle) * circleRadius);
-      ctx.lineTo(cx + Math.cos(angle) * outerRadius, cy + Math.sin(angle) * outerRadius);
-      ctx.stroke();
-    }
-  }
-
-  private drawElementCogButton() {
-    const center = this.getElementCogButtonPosition();
-    if (!center) return;
-    this.drawCogInCircle(center);
   }
 
   private isProvisionalElement(element: Element): boolean {
@@ -2830,20 +2831,9 @@ export class Editor {
     return result;
   }
 
-  private drawProvisionalPlusButtons() {
-    for (const { center } of this.getProvisionalPlusButtons()) {
-      this.drawPlusInCircleWithColor(center, PROVISIONAL_COLOR);
-    }
-  }
-
   private hitProvisionalPlusButton(screenX: number, screenY: number): Sequence | null {
-    for (const { sequence, center } of this.getProvisionalPlusButtons()) {
-      const [iconX, iconY] = this.worldToScreen(center);
-      const dx = screenX - iconX;
-      const dy = screenY - iconY;
-      if (Math.hypot(dx, dy) <= DELETE_BUTTON_HIT_RADIUS) return sequence;
-    }
-    return null;
+    const button = this.findDrawnActionButton("provisionalPlus", screenX, screenY);
+    return button ? (button.owner as Sequence) : null;
   }
 
   private openProvisionalChange(sequence: Sequence) {
@@ -2926,36 +2916,21 @@ export class Editor {
   }
 
   private hitElementCogButton(screenX: number, screenY: number): boolean {
-    const center = this.getElementCogButtonPosition();
-    if (!center) return false;
-    const [iconX, iconY] = this.worldToScreen(center);
-    const dx = screenX - iconX;
-    const dy = screenY - iconY;
-    return Math.hypot(dx, dy) <= DELETE_BUTTON_HIT_RADIUS;
+    return this.findDrawnActionButton("elementCog", screenX, screenY) !== null;
   }
 
   private hitElementDeleteButton(screenX: number, screenY: number): boolean {
-    const center = this.getElementDeleteButtonPosition();
-    if (!center) return false;
-    const [iconX, iconY] = this.worldToScreen(center);
-    const dx = screenX - iconX;
-    const dy = screenY - iconY;
-    return Math.hypot(dx, dy) <= DELETE_BUTTON_HIT_RADIUS;
+    return this.findDrawnActionButton("elementDelete", screenX, screenY) !== null;
   }
 
   private hitDeleteButton(
     screenX: number,
     screenY: number,
   ): { sequence: Sequence; removable: NonNullable<ReturnType<Editor["getRemovablePoint"]>> } | null {
-    for (const sequence of this.editSequences()) {
-      const data = this.getDeleteButtonData(sequence);
-      if (!data) continue;
-      const [iconX, iconY] = this.worldToScreen(data.center);
-      const dx = screenX - iconX;
-      const dy = screenY - iconY;
-      if (Math.hypot(dx, dy) <= DELETE_BUTTON_HIT_RADIUS) return { sequence, removable: data.removable };
-    }
-    return null;
+    const button = this.findDrawnActionButton("delete", screenX, screenY);
+    return button
+      ? (button.owner as { sequence: Sequence; removable: NonNullable<ReturnType<Editor["getRemovablePoint"]>> })
+      : null;
   }
 
   private getSplitButtonData(): { sequence: Sequence; curveIndex: number; center: Vector<2> }[] {
@@ -2976,20 +2951,19 @@ export class Editor {
     return result;
   }
 
-  private drawSplitButtons() {
-    for (const { center } of this.getSplitButtonData()) {
-      this.drawPlusInCircle(center);
+  private collectSplitButtons() {
+    for (const { sequence, curveIndex, center } of this.getSplitButtonData()) {
+      this.collectActionButton(
+        "split",
+        { sequence, curveIndex },
+        new PlusButtonLabel(center, this.view.zoom, BUTTON_RED_COLOR),
+      );
     }
   }
 
   private hitSplitButton(screenX: number, screenY: number): { sequence: Sequence; curveIndex: number } | null {
-    for (const { sequence, curveIndex, center } of this.getSplitButtonData()) {
-      const [iconX, iconY] = this.worldToScreen(center);
-      const dx = screenX - iconX;
-      const dy = screenY - iconY;
-      if (Math.hypot(dx, dy) <= ADD_BUTTON_HIT_RADIUS) return { sequence, curveIndex };
-    }
-    return null;
+    const button = this.findDrawnActionButton("split", screenX, screenY);
+    return button ? (button.owner as { sequence: Sequence; curveIndex: number }) : null;
   }
 
   private isHandleVisible(sequence: Sequence, curveIndex: number, pointKey: ControlPointKey): boolean {
@@ -3269,7 +3243,19 @@ export class Editor {
     this.suspendTracking();
   }
 
+  // A pointerdown must hit-test the drawn state, so a scheduled frame paints first.
+  private flushScheduledDraw() {
+    if (!this.drawScheduled) return;
+    if (this.drawFrameHandle !== null && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(this.drawFrameHandle);
+    }
+    this.drawScheduled = false;
+    this.drawFrameHandle = null;
+    this.draw();
+  }
+
   private handlePrimaryDown(screenX: number, screenY: number, ctrlKey: boolean) {
+    this.flushScheduledDraw();
     // Panning is the only interaction below the time cursor, so in view mode
     // the circle keeps priority.
     if (this.mode === "view") {

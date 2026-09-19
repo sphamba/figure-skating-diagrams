@@ -69,6 +69,7 @@ test("new end curve keeps the end derivative and aligns control points at equal 
 });
 
 import { Editor } from "../src/engine/sequenceEditor/editor";
+import { ActionButtonLabel, PillLabel } from "../src/engine/sequenceEditor/label";
 import { LABEL_ANCHOR_LIMIT } from "../src/engine/sequenceEditor/label";
 
 // Main label background half-extent: half text height times the size factor,
@@ -2113,5 +2114,68 @@ test("refit restores the auto fit until a user zoom disables it", () => {
   const afterWheel = view.zoom;
   editor.refit();
   expect(view.zoom).toBeCloseTo(afterWheel, 6);
+  editor.destroy();
+});
+
+test("the path add buttons register as labels after a draw", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  editor.draw();
+  const drawn = editorRef(editor).drawnButtons as Array<{ kind: string; owner: unknown; label: unknown }>;
+  expect(drawn.length).toBeGreaterThanOrEqual(1);
+  const addButton = drawn[0]!;
+  expect(addButton.kind).toBe("add");
+  expect(addButton.owner).toBe(sequence);
+  // The resolved label position converts back to the provider's world position.
+  const provider = editorRef(editor).worldToScreen(editorRef(editor).getAddButtonPosition(sequence));
+  const resolved = editorRef(editor).drawnButtonScreenPosition(addButton.label);
+  expect(resolved[0]).toBeCloseTo(provider[0], 0);
+  expect(resolved[1]).toBeCloseTo(provider[1], 0);
+  editor.destroy();
+});
+
+test("a click at the resolved add button position adds a curve end", () => {
+  const { editor, canvas } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  editor.draw();
+  const drawn = editorRef(editor).drawnButtons as Array<{ kind: string; label: unknown }>;
+  const addButton = drawn.find((button) => button.kind === "add")!;
+  const [iconX, iconY] = editorRef(editor).drawnButtonScreenPosition(addButton.label);
+  const before = sequence.path.curves.length;
+  mouse("mousedown", canvas, { clientX: iconX, clientY: iconY, button: 0, ctrlKey: false });
+  mouse("mouseup", window, {});
+  expect(sequence.path.curves.length).toBe(before + 1);
+  editor.destroy();
+});
+
+test("a pending scheduled draw flushes at pointerdown", () => {
+  const { editor, canvas } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  editor.draw();
+  const before = sequence.path.curves.length;
+  // Zooming moves the add button on screen and schedules a deferred frame.
+  editorRef(editor).view.zoom = 500;
+  editor.requestDraw();
+  expect(editorRef(editor).drawScheduled).toBe(true);
+  const [iconX, iconY] = editorRef(editor).worldToScreen(
+    editorRef(editor).getAddButtonPosition(sequence),
+  );
+  mouse("mousedown", canvas, { clientX: iconX, clientY: iconY, button: 0, ctrlKey: false });
+  mouse("mouseup", window, {});
+  expect(sequence.path.curves.length).toBe(before + 1);
+  editor.destroy();
+});
+
+test("action buttons sit above the labels in the draw layer", () => {
+  const { editor } = makeEditor();
+  editor.draw();
+  // The layer array is replaced at each frame end, so a captured reference
+  // keeps the collected order of the next frame.
+  const layer = editorRef(editor).labelLayer.labels as unknown[];
+  const sequence = editor.getSequences()[0];
+  sequence.addAnnotation(new Annotation(0.2 as PathCoordinate, 0.6 as PathCoordinate));
+  editor.draw();
+  expect(layer.filter((label) => label instanceof PillLabel).length).toBeGreaterThanOrEqual(1);
+  expect(layer[layer.length - 1]).toBeInstanceOf(ActionButtonLabel);
   editor.destroy();
 });

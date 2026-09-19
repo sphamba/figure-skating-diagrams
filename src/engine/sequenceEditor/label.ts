@@ -42,6 +42,25 @@ const LABEL_COLLISION_ITERATIONS = 1;
 // than this multiple of its background radius, so it stays near its anchor.
 export const LABEL_ANCHOR_LIMIT = 2;
 
+// Screen radius of an action button disc.
+export const ACTION_BUTTON_RADIUS = 7; // px
+// Outline and symbol stroke width.
+export const ACTION_BUTTON_LINE_WIDTH = 1.5; // px
+// Full length of the plus and minus symbols.
+export const ACTION_BUTTON_SYMBOL_LENGTH = 7; // px
+// Slightly above the drawn radius.
+export const ACTION_BUTTON_HIT_RADIUS = 9; // px
+// Collision weight: a button moves this much less than a weight 1 label.
+export const ACTION_BUTTON_WEIGHT = 10;
+// Fraction of the pill white in the plus and minus disc fill, the rest is the button color.
+export const BUTTON_DISC_WHITE_FRACTION = 0.96;
+// Teeth of the cog symbol.
+export const COG_TEETH_COUNT = 8;
+// Inner circle radius as a fraction of the outer.
+export const COG_INNER_RADIUS_FACTOR = 0.62;
+// Thick circle and teeth, thicker than the short teeth are long.
+export const ACTION_BUTTON_COG_LINE_WIDTH = 3.5; // px
+
 export type LabelOptions = {
   fontSizePx?: number;
   // Screen distance from the anchor along the direction.
@@ -195,6 +214,11 @@ export abstract class CanvasLabel {
     return !this.empty;
   }
 
+  // Resolved position in canvas units, for hit testing after collision resolution.
+  getResolvedCanvasPosition(): { x: number; y: number } {
+    return { x: this.x, y: this.y };
+  }
+
   getCollisionCapsule(): Capsule {
     // The collision radius grows past the background, so resolved pills keep a gap.
     const radius = this.halfB + (LABEL_COLLISION_PADDING * CANVAS_SCALE) / this.zoom;
@@ -206,6 +230,11 @@ export abstract class CanvasLabel {
       y1: this.y,
       radius,
     };
+  }
+
+  // Relative collision weight: a heavier label moves less when resolving.
+  getCollisionWeight(): number {
+    return 1;
   }
 
   moveBy(dx: number, dy: number): void {
@@ -230,6 +259,24 @@ function envelopeSupport(ux: number, uy: number, a: number, b: number): number {
 // Padding between the text and a background shaped by the label, screen px to canvas units.
 function backgroundPadding(zoom: number, screenPadding: number): number {
   return (screenPadding * CANVAS_SCALE) / zoom;
+}
+
+// Disc color of a plus or minus button: the pill white with a slight tint of the button color.
+export function buttonDiscColor(color: string): string {
+  const [tintR, tintG, tintB] = parseHexColor(color);
+  const [whiteR, whiteG, whiteB] = parseHexColor(PILL_COLOR);
+  const w = BUTTON_DISC_WHITE_FRACTION;
+  const toHex = (value: number) => Math.round(value).toString(16).padStart(2, "0");
+  return `#${toHex(whiteR * w + tintR * (1 - w))}${toHex(whiteG * w + tintG * (1 - w))}${toHex(whiteB * w + tintB * (1 - w))}`;
+}
+
+// Channels of a hex color, with 3-digit and 6-digit forms supported.
+function parseHexColor(color: string): [number, number, number] {
+  const digits = color.slice(1);
+  if (digits.length === 3) {
+    return digits.split("").map((digit) => parseInt(digit + digit, 16)) as [number, number, number];
+  }
+  return [0, 2, 4].map((start) => parseInt(digits.slice(start, start + 2), 16)) as [number, number, number];
 }
 
 // Rounded pill via path plus fill.
@@ -419,6 +466,132 @@ export class WhiteCircleLabel extends CanvasLabel {
   }
 }
 
+// An action button drawn as a label: a disc with a light tint of the symbol
+// color, a saturated outline and symbol, and no triangle pointer. The anchor is
+// the home position, so collision keeps the button near its anchor and moves it
+// much less than other labels.
+export abstract class ActionButtonLabel extends CanvasLabel {
+  protected readonly color: string;
+  protected drawsDisc = true;
+
+  constructor(point: Vector<2>, zoom: number, color: string) {
+    super("", point, null, zoom);
+    this.color = color;
+  }
+
+  // A button has no text: the extents are the drawn disc radius.
+  measure(_ctx: CanvasRenderingContext2DSized): void {
+    this.textWidth = 0;
+    this.textHeight = 0;
+    this.empty = false;
+    const radius = (ACTION_BUTTON_RADIUS * CANVAS_SCALE) / this.zoom;
+    this.halfA = radius;
+    this.halfB = radius;
+    this.homeX = this.anchorX;
+    this.homeY = this.anchorY;
+    this.x = this.homeX;
+    this.y = this.homeY;
+  }
+
+  getCollisionWeight(): number {
+    return ACTION_BUTTON_WEIGHT;
+  }
+
+  // These two stay abstract on CanvasLabel for the text sized labels; a button
+  // replaces the whole pipeline with measure and draw.
+  protected computeExtents(): { a: number; b: number } {
+    return { a: this.halfA, b: this.halfB };
+  }
+
+  protected drawBackground(_ctx: CanvasRenderingContext2DSized): void {
+    // Not used, because draw paints the disc and the symbol directly.
+  }
+
+  draw(ctx: CanvasRenderingContext2DSized): void {
+    const previousAlpha = ctx.globalAlpha;
+    ctx.save();
+    if (this.drawsDisc) {
+      // The opaque disc keeps the symbol readable over any drawing.
+      ctx.globalAlpha = previousAlpha * this.alpha;
+      ctx.fillStyle = buttonDiscColor(this.color);
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.halfA, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+    ctx.globalAlpha = previousAlpha * this.alpha;
+    this.drawGlyph(ctx);
+    ctx.restore();
+  }
+
+  // The saturated circle outline of the plus and minus buttons.
+  protected strokeGlyphFrame(ctx: CanvasRenderingContext2DSized): void {
+    ctx.strokeStyle = this.color;
+    ctx.lineWidth = (ACTION_BUTTON_LINE_WIDTH * CANVAS_SCALE) / this.zoom;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.halfA, 0, 2 * Math.PI);
+    ctx.stroke();
+  }
+
+  protected abstract drawGlyph(ctx: CanvasRenderingContext2DSized): void;
+}
+
+// Plus-in-circle button.
+export class PlusButtonLabel extends ActionButtonLabel {
+  protected drawGlyph(ctx: CanvasRenderingContext2DSized): void {
+    this.strokeGlyphFrame(ctx);
+    const half = ((ACTION_BUTTON_SYMBOL_LENGTH / 2) * CANVAS_SCALE) / this.zoom;
+    ctx.beginPath();
+    ctx.moveTo(this.x - half, this.y);
+    ctx.lineTo(this.x + half, this.y);
+    ctx.moveTo(this.x, this.y - half);
+    ctx.lineTo(this.x, this.y + half);
+    ctx.stroke();
+  }
+}
+
+// Minus-in-circle button.
+export class MinusButtonLabel extends ActionButtonLabel {
+  protected drawGlyph(ctx: CanvasRenderingContext2DSized): void {
+    this.strokeGlyphFrame(ctx);
+    const half = ((ACTION_BUTTON_SYMBOL_LENGTH / 2) * CANVAS_SCALE) / this.zoom;
+    ctx.beginPath();
+    ctx.moveTo(this.x - half, this.y);
+    ctx.lineTo(this.x + half, this.y);
+    ctx.stroke();
+  }
+}
+
+// Cog button. The thick inner circle and the teeth form the saturated outline;
+// no disc background and no extra outer ring, since that looked cluttered.
+export class CogButtonLabel extends ActionButtonLabel {
+  constructor(point: Vector<2>, zoom: number, color: string) {
+    super(point, zoom, color);
+    this.drawsDisc = false;
+  }
+
+  protected drawGlyph(ctx: CanvasRenderingContext2DSized): void {
+    ctx.strokeStyle = this.color;
+    ctx.lineWidth = (ACTION_BUTTON_COG_LINE_WIDTH * CANVAS_SCALE) / this.zoom;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    const inner = this.halfA * COG_INNER_RADIUS_FACTOR;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, inner, 0, 2 * Math.PI);
+    ctx.stroke();
+    for (let i = 0; i < COG_TEETH_COUNT; i++) {
+      const angle = (i / COG_TEETH_COUNT) * 2 * Math.PI;
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      ctx.beginPath();
+      ctx.moveTo(this.x + cos * inner, this.y + sin * inner);
+      ctx.lineTo(this.x + cos * this.halfA, this.y + sin * this.halfA);
+      ctx.stroke();
+    }
+  }
+}
+
 // Collector for the labels of one frame: measure all, resolve collisions once, draw all.
 export class LabelLayer {
   private labels: CanvasLabel[] = [];
@@ -449,9 +622,13 @@ export class LabelLayer {
           const cb = b.getCollisionCapsule();
           const separation = capsuleSeparation(ca, cb);
           if (!separation) continue;
-          const push = (separation.overlap * LABEL_PUSH_FACTOR) / 2;
-          a.moveBy(-separation.dx * push, -separation.dy * push);
-          b.moveBy(separation.dx * push, separation.dy * push);
+          // Heavier labels move less: the split is inverse to the weights.
+          const total = separation.overlap * LABEL_PUSH_FACTOR;
+          const weightA = a.getCollisionWeight();
+          const weightB = b.getCollisionWeight();
+          const shareA = weightB / (weightA + weightB);
+          a.moveBy(-separation.dx * total * shareA, -separation.dy * total * shareA);
+          b.moveBy(separation.dx * total * (1 - shareA), separation.dy * total * (1 - shareA));
         }
       }
     }
