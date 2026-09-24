@@ -672,6 +672,9 @@ function getBpm(): number {
 
 const bpm = computed(() => getBpm());
 
+const backgroundImage = computed(() => store.getDiagram().backgroundImage);
+const backgroundImageOpacity = computed(() => store.getDiagram().backgroundImageOpacity ?? 1);
+
 // The bpm can change from the sidebar, so the canvas editor follows through here.
 watch(bpm, (value) => {
   if (editor) editor.bpm = value;
@@ -698,6 +701,26 @@ const videoUrl = computed(() => store.getDiagram().videoUrl ?? "");
 const videoSet = computed(() => videoUrl.value.trim() !== "");
 const videoStatus = ref<"empty" | "pending" | "valid" | "invalid">("empty");
 const videoValid = computed(() => videoStatus.value === "valid");
+
+// The background image lives in the diagram, so the canvas editor follows the store here.
+watch(
+  backgroundImage,
+  (dataUrl) => {
+    editor?.setBackgroundImage(dataUrl ?? undefined);
+  },
+  { immediate: true },
+);
+
+watch(
+  backgroundImageOpacity,
+  (value) => {
+    if (!editor) return;
+    editor.backgroundImageOpacity = value;
+    editor.requestDraw();
+  },
+  { immediate: true },
+);
+
 const { speed: playbackSpeed, options: playbackSpeedOptions, apply: applyPlaybackSpeed } = usePlaybackSpeed(videoRef);
 // The extent is a computed: the playback loop reads it once per frame, so the
 // cached value avoids a full timing resolution at the frame rate.
@@ -1180,6 +1203,8 @@ onMounted(() => {
   editorInstance.activeSequence = activeSequence.value;
   editorInstance.bpm = getBpm();
   editorInstance.videoTimeSeconds = videoTime.value;
+  editorInstance.setBackgroundImage(backgroundImage.value ?? undefined);
+  editorInstance.backgroundImageOpacity = backgroundImageOpacity.value;
   editorInstance.shortDrawRange = store.getShortDrawRange();
   editorInstance.onElementChangeRequest = (element) => {
     elementToChange.value = element;

@@ -196,6 +196,10 @@ export class Editor {
 
   bpm: number = DEFAULT_BPM;
   videoTimeSeconds: number | null = null;
+  // Base64 data URL of the rink background image; an empty/null value keeps the plain rink fill.
+  backgroundImage: string | undefined = undefined;
+  // 0-1 draw opacity of the background image; the plain fill sits under it, so lower values blend into it.
+  backgroundImageOpacity: number = 1;
   hiddenSequences: Set<Sequence> = new Set();
   onVideoTimeChange?: (seconds: number) => void;
   onTimeScrubStart?: () => void;
@@ -330,6 +334,10 @@ export class Editor {
   // The canvas may get its real size only after a layout change, so the rink
   // stays fitted until the user zooms or sets the time cursor from the canvas.
   private autoFitRink = true;
+  // The background image element of the last loaded data URL, so a repeated
+  // url never reloads the same image.
+  private backgroundImageElement: HTMLImageElement | null = null;
+  private backgroundImageSource: string | null = null;
   // The element or annotation pane overlays the top of the canvas and hides it;
   // the getter returns the occluded height in px so the fit can avoid it.
   private occludedTop: () => number = () => 0;
@@ -558,6 +566,33 @@ export class Editor {
     sequence.path.addCurveEnd();
     this.notifySequenceChange();
     this.draw();
+  }
+
+  // Loads the background image of the diagram; the redraw happens once the
+  // image is ready. Only a changed url reloads it.
+  setBackgroundImage(dataUrl: string | undefined) {
+    this.backgroundImage = dataUrl;
+    if (!dataUrl) {
+      this.backgroundImageElement = null;
+      this.backgroundImageSource = null;
+      this.requestDraw();
+      return;
+    }
+    if (this.backgroundImageSource === dataUrl) {
+      this.requestDraw();
+      return;
+    }
+    this.backgroundImageSource = dataUrl;
+    // The browser may be out of scope in unit tests, so only the canvas draws without the image.
+    if (typeof Image === "undefined") {
+      this.backgroundImageElement = null;
+      return;
+    }
+    const image = new Image();
+    image.onload = () => this.requestDraw();
+    image.src = dataUrl;
+    this.backgroundImageElement = image;
+    this.requestDraw();
   }
 
   draw() {
@@ -1556,6 +1591,12 @@ export class Editor {
     ctx.fillRect(-width / 2, -height / 2, width, height);
     ctx.strokeRect(-width / 2, -height / 2, width, height);
 
+    // A background image replaces the markings: it covers the plain fill first, so lower opacity blends back into it.
+    if (this.backgroundImage) {
+      this.drawRinkBackgroundImage();
+      return;
+    }
+
     this.drawMetres(() => {
       ctx.lineCap = "butt";
       ctx.lineWidth = Math.max(RINK_MARKING_WIDTH, RINK_MARKING_MIN_WIDTH / this.view.zoom);
@@ -1605,6 +1646,31 @@ export class Editor {
         }
       }
     });
+  }
+
+  // Draws the background image stretched over the full rink bounds, clipped to the rounded rink shape.
+  // Plain fill stays under it while the image loads, so the rink keeps its shape in the meantime.
+  private drawRinkBackgroundImage() {
+    const image = this.backgroundImageElement;
+    if (!image || !image.complete || image.naturalWidth === 0) return;
+
+    const ctx = this.ctx;
+    const width = WIDTH * CANVAS_SCALE;
+    const height = LENGTH * CANVAS_SCALE;
+    const radius = CORNER_RADIUS * CANVAS_SCALE;
+    ctx.save();
+    // The strokeRect of the plain fill rounds its corners, so the clip copies that shape.
+    ctx.beginPath();
+    ctx.moveTo(-width / 2 + radius, -height / 2);
+    ctx.arcTo(width / 2, -height / 2, width / 2, height / 2, radius);
+    ctx.arcTo(width / 2, height / 2, -width / 2, height / 2, radius);
+    ctx.arcTo(-width / 2, height / 2, -width / 2, -height / 2, radius);
+    ctx.arcTo(-width / 2, -height / 2, width / 2, -height / 2, radius);
+    ctx.closePath();
+    ctx.clip();
+    ctx.globalAlpha = Math.min(1, Math.max(0, this.backgroundImageOpacity));
+    ctx.drawImage(image, -width / 2, -height / 2, width, height);
+    ctx.restore();
   }
 
   // Half width of the rink outline at a given metre y, so end-zone lines stay inside

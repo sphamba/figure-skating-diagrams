@@ -38,6 +38,9 @@ const videoStatus = ref<"empty" | "pending" | "valid" | "invalid">("empty");
 const videoValid = computed(() => videoStatus.value === "valid");
 const videoRef = ref<HTMLVideoElement | null>(null);
 
+const backgroundImage = computed(() => store.getDiagram().backgroundImage);
+const backgroundImageOpacity = computed(() => store.getDiagram().backgroundImageOpacity ?? 1);
+
 function getBpm(): number {
   return store.getDiagram().bpm || 120;
 }
@@ -175,6 +178,25 @@ watch(
   (value) => {
     if (!editor) return;
     editor.shortDrawRange = value;
+    editor.requestDraw();
+  },
+  { immediate: true },
+);
+
+// The background image and its opacity live in the diagram, so the canvas editor follows the store here.
+watch(
+  backgroundImage,
+  (dataUrl) => {
+    editor?.setBackgroundImage(dataUrl ?? undefined);
+  },
+  { immediate: true },
+);
+
+watch(
+  backgroundImageOpacity,
+  (value) => {
+    if (!editor) return;
+    editor.backgroundImageOpacity = value;
     editor.requestDraw();
   },
   { immediate: true },
@@ -341,6 +363,8 @@ function createEditor() {
   editorInstance.activeSequence = activeSequence.value;
   editorInstance.bpm = getBpm();
   editorInstance.videoTimeSeconds = videoTime.value;
+  editorInstance.setBackgroundImage(backgroundImage.value ?? undefined);
+  editorInstance.backgroundImageOpacity = backgroundImageOpacity.value;
 }
 
 watch(

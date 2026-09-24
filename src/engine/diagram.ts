@@ -31,6 +31,8 @@ export interface DiagramJSON {
   name: string;
   bpm?: number;
   videoUrl?: string;
+  backgroundImage?: string;
+  backgroundImageOpacity?: number;
   sequences: SequenceJSON[];
 }
 
@@ -38,6 +40,10 @@ export class Diagram {
   name: string;
   bpm?: number;
   videoUrl?: string;
+  // Base64 data URL of the rink background image; the canvas draws it over the plain rink fill.
+  backgroundImage?: string;
+  // 0-1 draw opacity of the background image; 1 replaces the plain rink fill entirely.
+  backgroundImageOpacity?: number;
   sequences: Sequence[];
 
   constructor(name: string, sequences: Sequence[] = [], bpm?: number) {
@@ -60,6 +66,8 @@ export class Diagram {
       name: this.name,
       bpm: this.bpm,
       videoUrl: this.videoUrl,
+      backgroundImage: this.backgroundImage,
+      backgroundImageOpacity: this.backgroundImageOpacity,
       sequences: this.sequences.map((sequence) => sequence.toJSON()),
     };
   }
@@ -71,6 +79,8 @@ export class Diagram {
       json.bpm,
     );
     diagram.videoUrl = json.videoUrl;
+    diagram.backgroundImage = json.backgroundImage;
+    diagram.backgroundImageOpacity = json.backgroundImageOpacity;
     return diagram;
   }
 }

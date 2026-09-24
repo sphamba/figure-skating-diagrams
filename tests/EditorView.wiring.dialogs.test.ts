@@ -54,6 +54,8 @@ class EditorStub {
 
   invalidateTimeCachesFor(_keyframe: unknown) {}
 
+  setBackgroundImage(dataUrl: string | undefined) {}
+
   refit() {}
   clearSelection() {}
   requestDraw() {}

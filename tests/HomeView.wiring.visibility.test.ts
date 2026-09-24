@@ -50,6 +50,7 @@ class EditorStub {
   }
 
   clearSelection() {}
+  setBackgroundImage(dataUrl: string | undefined) {}
   requestDraw() {}
   setSequences(list: unknown[]) {
     recorder.sequences = list;

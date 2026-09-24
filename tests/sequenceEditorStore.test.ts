@@ -55,3 +55,46 @@ test("the short draw range state defaults to off and mirrors the setter", () => 
   store.setShortDrawRange(true);
   expect(store.getShortDrawRange()).toBe(true);
 });
+
+const EXAMPLE_IMAGE = "data:image/png;base64,AAAA";
+
+test("the background image and its opacity persist to local storage", () => {
+  localStorage.clear();
+  setActivePinia(createPinia());
+  const store = useSequenceEditorStore();
+  store.setDiagramBackgroundImage(EXAMPLE_IMAGE);
+  store.setDiagramBackgroundImageOpacity(0.55);
+
+  const stored = JSON.parse(localStorage.getItem("sequence-editor") as string) as {
+    backgroundImage?: string;
+    backgroundImageOpacity?: number;
+  };
+  expect(stored.backgroundImage).toBe(EXAMPLE_IMAGE);
+  expect(stored.backgroundImageOpacity).toBeCloseTo(0.55);
+});
+
+test("a blank string clears the background image from the diagram and the storage", () => {
+  localStorage.clear();
+  setActivePinia(createPinia());
+  const store = useSequenceEditorStore();
+  store.setDiagramBackgroundImage(EXAMPLE_IMAGE);
+  store.setDiagramBackgroundImage("");
+
+  expect(store.getDiagram().backgroundImage).toBeUndefined();
+  const stored = JSON.parse(localStorage.getItem("sequence-editor") as string) as {
+    backgroundImage?: string;
+  };
+  expect(stored.backgroundImage).toBeUndefined();
+});
+
+test("the background image opacity stays inside the 0-1 range", () => {
+  localStorage.clear();
+  setActivePinia(createPinia());
+  const store = useSequenceEditorStore();
+  store.setDiagramBackgroundImageOpacity(2);
+  expect(store.getDiagram().backgroundImageOpacity).toBe(1);
+  store.setDiagramBackgroundImageOpacity(-1);
+  expect(store.getDiagram().backgroundImageOpacity).toBe(0);
+  store.setDiagramBackgroundImageOpacity(Number.NaN);
+  expect(store.getDiagram().backgroundImageOpacity).toBe(0);
+});

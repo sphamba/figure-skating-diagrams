@@ -160,6 +160,21 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     saveToStorage();
   }
 
+  // The image travels as a base64 data URL, so it fits inside the stored and exported json.
+  function setDiagramBackgroundImage(dataUrl: string) {
+    const trimmed = dataUrl.trim();
+    diagram.value.backgroundImage = trimmed !== "" ? trimmed : undefined;
+    triggerRef(diagram);
+    saveToStorage();
+  }
+
+  function setDiagramBackgroundImageOpacity(value: number) {
+    if (!Number.isFinite(value)) return;
+    diagram.value.backgroundImageOpacity = Math.min(1, Math.max(0, value));
+    triggerRef(diagram);
+    saveToStorage();
+  }
+
   function saveToStorage() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(diagram.value.toJSON()));
@@ -225,6 +240,8 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     setDiagramName,
     setDiagramBpm,
     setDiagramVideoUrl,
+    setDiagramBackgroundImage,
+    setDiagramBackgroundImageOpacity,
     saveToStorage,
     loadFromJSON,
     toJSON,
