@@ -1945,7 +1945,7 @@ function closeElementChange() {
               v-model="shortNameDraft"
               class="w-full"
               autofocus
-              @keyup.enter="commitElementChange"
+              @keydown.enter="commitElementChange"
             />
             <InputGroupAddon>
               <Button
@@ -2024,7 +2024,7 @@ function closeElementChange() {
             class="w-full"
             :invalid="timingValueInvalid"
             autofocus
-            @keyup.enter="commitTimingKeyframe"
+            @keydown.enter="commitTimingKeyframe"
           />
           <InputGroupAddon>
             <div class="editor-view__timing-arrows">
@@ -2063,7 +2063,7 @@ function closeElementChange() {
           button-layout="stacked"
           fluid
           :pt="{ pcInputText: { root: { autofocus: true } } }"
-          @keyup.enter="commitTimingKeyframe"
+          @keydown.enter="commitTimingKeyframe"
         />
         <small v-if="timingValueInvalid" class="editor-view__timing-error">
           {{
@@ -2104,7 +2104,8 @@ function closeElementChange() {
           id="annotation-title"
           v-model="annotationTitleDraft"
           class="w-full"
-          @keyup.enter="commitAnnotationChange"
+          autofocus
+          @keydown.enter="commitAnnotationChange"
         />
         <label class="editor-view__mode-label" for="annotation-description">Description</label>
         <Textarea

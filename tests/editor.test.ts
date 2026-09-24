@@ -6,11 +6,7 @@ import { Path } from "../src/engine/path";
 import { Sequence } from "../src/engine/sequence";
 import type { PathCoordinate } from "../src/engine/coordinates";
 import { Vector } from "../src/engine/vector";
-import {
-  LABEL_FONT_SIZE,
-  PILL_PADDING,
-  PILL_SIZE_FACTOR,
-} from "../src/engine/sequenceEditor/label";
+import { LABEL_FONT_SIZE, PILL_PADDING, PILL_SIZE_FACTOR } from "../src/engine/sequenceEditor/label";
 import { LeftForwardOutsideThreeTurn } from "../src/engine/element/threeTurn";
 import { glideConstructorsByType, LeftForwardOutsideGlide } from "../src/engine/element/glide";
 import { jumpConstructorsByType } from "../src/engine/element/jump";
@@ -460,7 +456,9 @@ test("view mode draws no labels when the show labels option is off", () => {
   ) => LeftNormalForwardInsideGlide)(0.2 as PathCoordinate, 0.6 as PathCoordinate);
   sequence.addElement(crossed);
   // A second curve with the opposite curvature draws an uncovered CE label.
-  sequence.path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(4 / 3, -1 / 3), new Vector(5 / 3, -2 / 3), new Vector(2, -4)));
+  sequence.path.addCurveEnd(
+    new Curve(new Vector(1, 0), new Vector(4 / 3, -1 / 3), new Vector(5 / 3, -2 / 3), new Vector(2, -4)),
+  );
   sequence.addAnnotation(new Annotation(0 as PathCoordinate, 1 as PathCoordinate));
   sequence.keyframes.time = [
     new TimingKeyframe(0.2 as PathCoordinate, "time", 1),
@@ -732,7 +730,9 @@ test("a crossed stroke draws a second 10px label anchored to the element start, 
   // mirrors the main label: the crossed label is on the opposite side of the
   // path. Collision resolution may push labels apart, so the anchor only bounds
   // the resolved position and the push may change the exact mirrored y values.
-  expect(Math.abs(crossedLabels[0]!.x - 0.2 * 20)).toBeLessThanOrEqual(LABEL_ANCHOR_LIMIT * halfB(editorRef(editor).view.zoom));
+  expect(Math.abs(crossedLabels[0]!.x - 0.2 * 20)).toBeLessThanOrEqual(
+    LABEL_ANCHOR_LIMIT * halfB(editorRef(editor).view.zoom),
+  );
   expect(Math.abs(crossedLabels[0]!.x - 0.2 * 20)).toBeLessThan(Math.abs(crossedLabels[0]!.x - 0.4 * 20));
   mainLabels.forEach((label, index) => {
     expect(crossedLabels[index]!.y).toBeGreaterThan(0); // opposite sides of the path line
@@ -1122,7 +1122,9 @@ test("a jump label is shifted in path and elements modes and centered in view mo
     // shifts it away from the path line. The grown collision radius may push
     // the label along the path, so the span midpoint only bounds the resolved
     // position.
-    expect(Math.abs(shifted[0]!.x - 0.5 * 20)).toBeLessThanOrEqual(LABEL_ANCHOR_LIMIT * halfB(editorRef(editor).view.zoom));
+    expect(Math.abs(shifted[0]!.x - 0.5 * 20)).toBeLessThanOrEqual(
+      LABEL_ANCHOR_LIMIT * halfB(editorRef(editor).view.zoom),
+    );
     expect(shifted[0]!.y).not.toBeCloseTo(0, 6);
     shiftedFont = shifted[0]!.font;
   }
@@ -1135,7 +1137,9 @@ test("a jump label is shifted in path and elements modes and centered in view mo
   // In view mode only the label sits on the anchor without the outward shift.
   // The grown collision radius may push the label against other labels, so the
   // anchor only bounds the resolved position.
-  expect(Math.abs(centered[0]!.x - 0.5 * 20)).toBeLessThanOrEqual(LABEL_ANCHOR_LIMIT * halfB(editorRef(editor).view.zoom));
+  expect(Math.abs(centered[0]!.x - 0.5 * 20)).toBeLessThanOrEqual(
+    LABEL_ANCHOR_LIMIT * halfB(editorRef(editor).view.zoom),
+  );
   expect(Math.abs(centered[0]!.y)).toBeLessThanOrEqual(LABEL_ANCHOR_LIMIT * halfB(editorRef(editor).view.zoom));
   expect(centered[0]!.font).toBe(shiftedFont);
 
@@ -1320,7 +1324,9 @@ test("clicking an annotation places the time cursor at its span center", () => {
   editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
   // The zoom shrinks the end pick tolerance so the midpoint click stays on the segment.
   editorRef(editor).view.zoom = 100;
-  editorRef(editor).getSequences()[0].annotations.push(new Annotation(0.05 as PathCoordinate, 0.55 as PathCoordinate));
+  editorRef(editor)
+    .getSequences()[0]
+    .annotations.push(new Annotation(0.05 as PathCoordinate, 0.55 as PathCoordinate));
 
   const zoom = editorRef(editor).view.zoom;
   const sx = (wx: number) => 512 + wx * zoom;
@@ -1716,7 +1722,10 @@ test("the time cursor takes its orientation from the interpolated hips keyframes
   const first = editor.getSequences()[0];
   first.addKeyframe("time", new TimingKeyframe(1 as PathCoordinate, "time", 4));
   for (const u of [0, 1]) {
-    first.addKeyframe("hips", new HipsKeyframe(u as PathCoordinate, { orientation: getQuaternionFromAngleAxis(Math.PI) }));
+    first.addKeyframe(
+      "hips",
+      new HipsKeyframe(u as PathCoordinate, { orientation: getQuaternionFromAngleAxis(Math.PI) }),
+    );
   }
   const ctx = canvas.getContext() as unknown as Record<string, unknown>;
   const tips: { x: number; y: number }[] = [];
@@ -1773,10 +1782,9 @@ test("clicking an element in elements mode moves the time cursor of every edited
 
   // The shared scalar places a cursor on the other sequence at its own midpoint.
   const second = editor.getSequences()[1];
-  expect(editorRef(editor).hitVideoCursor(
-    sx(second.path.getPosition((second.path.length / 2) as PathCoordinate).x),
-    sy(4),
-  )).toBe(second);
+  expect(
+    editorRef(editor).hitVideoCursor(sx(second.path.getPosition((second.path.length / 2) as PathCoordinate).x), sy(4)),
+  ).toBe(second);
   editor.destroy();
 });
 
@@ -2207,9 +2215,7 @@ test("a pending scheduled draw flushes at pointerdown", () => {
   editorRef(editor).view.zoom = 500;
   editor.requestDraw();
   expect(editorRef(editor).drawScheduled).toBe(true);
-  const [iconX, iconY] = editorRef(editor).worldToScreen(
-    editorRef(editor).getAddButtonPosition(sequence),
-  );
+  const [iconX, iconY] = editorRef(editor).worldToScreen(editorRef(editor).getAddButtonPosition(sequence));
   mouse("mousedown", canvas, { clientX: iconX, clientY: iconY, button: 0, ctrlKey: false });
   mouse("mouseup", window, {});
   expect(sequence.path.curves.length).toBe(before + 1);
@@ -2227,5 +2233,479 @@ test("action buttons sit above the labels in the draw layer", () => {
   editor.draw();
   expect(layer.filter((label) => label instanceof PillLabel).length).toBeGreaterThanOrEqual(1);
   expect(layer[layer.length - 1]).toBeInstanceOf(ActionButtonLabel);
+  editor.destroy();
+});
+
+function straightCurve(startX: number): Curve {
+  return new Curve(
+    new Vector(startX, 0),
+    new Vector(startX + 1, 0),
+    new Vector(startX + 2, 0),
+    new Vector(startX + 3, 0),
+  );
+}
+
+test("Delete does nothing in view mode", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  editor.mode = "view";
+  editorRef(editor).getSelectedPointsFor(sequence).add("0:p0");
+  const curvesBefore = sequence.path.curves.length;
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+  expect(sequence.path.curves.length).toBe(curvesBefore);
+  expect(editorRef(editor).getSelectedPointsFor(sequence).size).toBe(1);
+  editor.destroy();
+});
+
+test("Delete with nothing selected is a no-op", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const curvesBefore = sequence.path.curves.length;
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+  expect(sequence.path.curves.length).toBe(curvesBefore);
+  editor.destroy();
+});
+
+test("Delete ignores handle points and keeps the path", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  path.curves = [straightCurve(0), straightCurve(3)];
+  path.updateLength();
+  editorRef(editor).getSelectedPointsFor(sequence).add("0:p1");
+  const curvesBefore = path.curves.length;
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+  expect(path.curves.length).toBe(curvesBefore);
+  editor.destroy();
+});
+
+test("Delete removes every selected element", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const first = new LeftForwardOutsideGlide(0.1 as PathCoordinate, 0.2 as PathCoordinate);
+  const second = new LeftForwardOutsideThreeTurn("footL", 0.3 as PathCoordinate, 0.5 as PathCoordinate);
+  sequence.elements.push(first, second);
+  editorRef(editor).selectedElements = new Set([first, second]);
+  editor.mode = "elements";
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+  expect(sequence.elements.length).toBe(0);
+  expect(editorRef(editor).selectedElements.size).toBe(0);
+  editor.destroy();
+});
+
+test("Delete removes every selected timing keyframe", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const first = new TimingKeyframe(0.2 as PathCoordinate, "beats", 4);
+  const second = new TimingKeyframe(0.6 as PathCoordinate, "beats", 4);
+  sequence.keyframes.time.push(first, second);
+  editorRef(editor).selectedTimingKeyframes = new Set([...sequence.keyframes.time]);
+  editor.mode = "timing";
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+  expect(sequence.keyframes.time.length).toBe(0);
+  expect(editorRef(editor).selectedTimingKeyframes.size).toBe(0);
+  editor.destroy();
+});
+
+test("Delete removes every selected annotation", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const first = new Annotation(0.2 as PathCoordinate, 0.6 as PathCoordinate);
+  const second = new Annotation(0.7 as PathCoordinate, 0.8 as PathCoordinate);
+  sequence.annotations.push(first, second);
+  editorRef(editor).selectedAnnotations = new Set([first, second]);
+  editor.mode = "annotations";
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+  expect(sequence.annotations.length).toBe(0);
+  expect(editorRef(editor).selectedAnnotations.size).toBe(0);
+  editor.destroy();
+});
+
+test("Delete with a selected junction node merges the two curves around it", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  const c0 = straightCurve(0);
+  const c1 = straightCurve(3);
+  c1.p0 = c0.p3;
+  path.curves = [c0, c1];
+  path.updateLength();
+  const start = (c0.length * 0.75) as PathCoordinate;
+  const end = (c0.length + c1.length * 0.25) as PathCoordinate;
+  const el = new LeftForwardOutsideGlide(start, end);
+  sequence.elements.push(el);
+  editorRef(editor).getSelectedPointsFor(sequence).add("0:p3");
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+  expect(path.curves.length).toBe(1);
+  expect(path.curves[0]!.p0).toBe(c0.p0);
+  expect(path.curves[0]!.p3).toBe(c1.p3);
+  expect(el.start as number).toBeGreaterThanOrEqual(0);
+  expect(el.start as number).toBeLessThan(el.end as number);
+  expect(el.end as number).toBeLessThanOrEqual(path.length);
+  expect(editorRef(editor).getSelectedPointsFor(sequence).size).toBe(0);
+  editor.destroy();
+});
+
+test("Delete with duplicate junction keys deletes the junction once", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  const c0 = straightCurve(0);
+  const c1 = straightCurve(3);
+  const c2 = straightCurve(6);
+  c1.p0 = c0.p3;
+  c2.p0 = c1.p3;
+  path.curves = [c0, c1, c2];
+  path.updateLength();
+  editorRef(editor).getSelectedPointsFor(sequence).add("0:p3");
+  editorRef(editor).getSelectedPointsFor(sequence).add("1:p0");
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+  expect(path.curves.length).toBe(2);
+  expect(path.curves[0]!.p0).toBe(c0.p0);
+  expect(path.curves[0]!.p3).toBe(c2.p0);
+  expect(path.curves[1]).toBe(c2);
+  editor.destroy();
+});
+
+test("Delete with a selected end node removes the last curve", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  const c0 = straightCurve(0);
+  const c1 = straightCurve(3);
+  path.curves = [c0, c1];
+  path.updateLength();
+  editorRef(editor).getSelectedPointsFor(sequence).add("1:p3");
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+  expect(path.curves).toEqual([c0]);
+  editor.destroy();
+});
+
+test("Delete with a selected start node removes the first curve", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  const c0 = straightCurve(0);
+  const c1 = straightCurve(3);
+  path.curves = [c0, c1];
+  path.updateLength();
+  editorRef(editor).getSelectedPointsFor(sequence).add("0:p0");
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+  expect(path.curves).toEqual([c1]);
+  editor.destroy();
+});
+
+test("Delete with a single-curve path selected through its nodes keeps the curve", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  path.curves = [straightCurve(0)];
+  path.updateLength();
+  editorRef(editor).getSelectedPointsFor(sequence).add("0:p0");
+  editorRef(editor).getSelectedPointsFor(sequence).add("0:p3");
+  const curvesBefore = path.curves.length;
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+  expect(path.curves.length).toBe(curvesBefore);
+  editor.destroy();
+});
+
+test("Delete with a selected interior edge deletes its two end nodes", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  const c0 = straightCurve(0);
+  const c1 = straightCurve(3);
+  const c2 = straightCurve(6);
+  c1.p0 = c0.p3;
+  c2.p0 = c1.p3;
+  path.curves = [c0, c1, c2];
+  path.updateLength();
+  editorRef(editor).getSelectedCurvesFor(sequence).add(1);
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+  expect(path.curves.length).toBe(1);
+  const merged = path.curves[0]!;
+  expect(merged.p0).toBe(c0.p0);
+  expect(merged.p1).toBe(c0.p1);
+  expect(merged.p2).toBe(c2.p2);
+  expect(merged.p3).toBe(c2.p3);
+  expect(editorRef(editor).getSelectedCurvesFor(sequence).size).toBe(0);
+  editor.destroy();
+});
+
+test("Delete with the last edge selected removes it", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  const c0 = straightCurve(0);
+  const c1 = straightCurve(3);
+  const c2 = straightCurve(6);
+  path.curves = [c0, c1, c2];
+  path.updateLength();
+  editorRef(editor).getSelectedCurvesFor(sequence).add(2);
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+  expect(path.curves).toEqual([c0, c1]);
+  editor.destroy();
+});
+
+test("Delete with the first edge selected removes it", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  const c0 = straightCurve(0);
+  const c1 = straightCurve(3);
+  const c2 = straightCurve(6);
+  path.curves = [c0, c1, c2];
+  path.updateLength();
+  editorRef(editor).getSelectedCurvesFor(sequence).add(0);
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+  expect(path.curves).toEqual([c1, c2]);
+  editor.destroy();
+});
+
+test("Delete after Ctrl+A in path mode merges the path into one curve", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  const c0 = straightCurve(0);
+  const c1 = straightCurve(3);
+  const c2 = straightCurve(6);
+  c1.p0 = c0.p3;
+  c2.p0 = c1.p3;
+  path.curves = [c0, c1, c2];
+  path.updateLength();
+  editor.mode = "path";
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "A", ctrlKey: true }));
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+  expect(path.curves.length).toBe(1);
+  expect(path.curves[0]!.p0).toBe(c0.p0);
+  expect(path.curves[0]!.p3).toBe(c2.p3);
+  editor.destroy();
+});
+
+test("Backspace works like Delete", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const el = new LeftForwardOutsideGlide(0.1 as PathCoordinate, 0.3 as PathCoordinate);
+  sequence.elements.push(el);
+  editorRef(editor).selectedElements = new Set([el]);
+  editor.mode = "elements";
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Backspace" }));
+  expect(sequence.elements.length).toBe(0);
+  editor.destroy();
+});
+
+test("Delete pressed inside an input does not delete", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const el = new LeftForwardOutsideGlide(0.1 as PathCoordinate, 0.3 as PathCoordinate);
+  sequence.elements.push(el);
+  editorRef(editor).selectedElements = new Set([el]);
+  editor.mode = "elements";
+  const input = document.createElement("input");
+  document.body.appendChild(input);
+  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
+  input.remove();
+  expect(sequence.elements.length).toBe(1);
+  expect(editorRef(editor).selectedElements.size).toBe(1);
+  editor.destroy();
+});
+
+test("a second Delete after a deletion is a no-op", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const el = new LeftForwardOutsideGlide(0.1 as PathCoordinate, 0.3 as PathCoordinate);
+  sequence.elements.push(el);
+  editorRef(editor).selectedElements = new Set([el]);
+  editor.mode = "elements";
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+  expect(sequence.elements.length).toBe(0);
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+  expect(sequence.elements.length).toBe(0);
+  editor.destroy();
+});
+
+test("Enter appends a curve like clicking the path add button", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  editorRef(editor).draw();
+  const before = sequence.path.curves.length;
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  expect(sequence.path.curves.length).toBe(before + 1);
+  editor.destroy();
+});
+
+test("Enter splits a selected curve at its middle like the split button", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  editorRef(editor).getSelectedCurvesFor(sequence).add(0);
+  const originalLength = path.length;
+  editorRef(editor).draw();
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  expect(path.curves.length).toBe(2);
+  expect(path.length).toBeCloseTo(originalLength, 3);
+  expect(path.curves[0]!.length).toBeCloseTo(originalLength / 2, 3);
+  expect(path.curves[1]!.length).toBeCloseTo(originalLength / 2, 3);
+  expect([...editorRef(editor).getSelectedCurvesFor(sequence)]).toEqual([0, 1]);
+  editor.destroy();
+});
+
+test("Enter does nothing without a drawn add button", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  sequence.path.curves = [];
+  sequence.path.updateLength();
+  editorRef(editor).draw();
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  expect(sequence.path.curves.length).toBe(0);
+  editor.destroy();
+});
+
+test("Enter opens the element dialog like clicking the element cog button", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const el = new LeftForwardOutsideGlide(0.1 as PathCoordinate, 0.3 as PathCoordinate);
+  sequence.elements.push(el);
+  editorRef(editor).selectedElements = new Set([el]);
+  editorRef(editor).mode = "elements";
+  editorRef(editor).draw();
+  let requested: unknown = null;
+  editorRef(editor).onElementChangeRequest = (element: unknown) => {
+    requested = element;
+  };
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  expect(requested).toBe(el);
+  editor.destroy();
+});
+
+test("Enter without a displayed plus or cog does nothing", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const el = new LeftForwardOutsideGlide(0.1 as PathCoordinate, 0.3 as PathCoordinate);
+  sequence.elements.push(el);
+  editorRef(editor).mode = "elements";
+  editorRef(editor).draw();
+  let requested: unknown = null;
+  editorRef(editor).onElementChangeRequest = (element: unknown) => {
+    requested = element;
+  };
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  expect(requested).toBeNull();
+  editor.destroy();
+});
+
+test("Enter requests the provisional element like the provisional plus button", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const provisional = new LeftForwardOutsideGlide(0.1 as PathCoordinate, 0.3 as PathCoordinate);
+  editorRef(editor).provisionalElements.set(sequence, provisional);
+  editorRef(editor).mode = "elements";
+  editorRef(editor).draw();
+  let requested: unknown = null;
+  editorRef(editor).onElementChangeRequest = (element: unknown) => {
+    requested = element;
+  };
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  expect(requested).toBe(provisional);
+  editor.destroy();
+});
+
+test("Enter opens the timing dialog like the plus button on a provisional keyframe", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const keyframe = new TimingKeyframe(0.4 as PathCoordinate, "beats", 4);
+  editorRef(editor).provisionalTimingKeyframes.set(sequence, keyframe);
+  editorRef(editor).mode = "timing";
+  editorRef(editor).draw();
+  const calls: Array<[unknown, boolean, unknown]> = [];
+  editorRef(editor).onTimingKeyframeChangeRequest = (
+    received: unknown,
+    isProvisional: boolean,
+    previous: unknown,
+  ) => {
+    calls.push([received, isProvisional, previous]);
+  };
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  expect(calls).toEqual([[keyframe, true, sequence.keyframes.time[0]!]]);
+  editor.destroy();
+});
+
+test("Enter opens the timing dialog like the cog button on a selected keyframe", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const first = new TimingKeyframe(0.2 as PathCoordinate, "beats", 4);
+  const selected = new TimingKeyframe(0.6 as PathCoordinate, "beats", 4);
+  sequence.keyframes.time.push(first, selected);
+  editorRef(editor).selectedTimingKeyframes = new Set([selected]);
+  editorRef(editor).mode = "timing";
+  editorRef(editor).draw();
+  const calls: Array<[unknown, boolean, unknown]> = [];
+  editorRef(editor).onTimingKeyframeChangeRequest = (
+    keyframe: unknown,
+    isProvisional: boolean,
+    previous: unknown,
+  ) => {
+    calls.push([keyframe, isProvisional, previous]);
+  };
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  expect(calls).toEqual([[selected, false, first]]);
+  editor.destroy();
+});
+
+test("Enter opens the annotation dialog like the plus button on a provisional annotation", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const annotation = new Annotation(0.2 as PathCoordinate, 0.6 as PathCoordinate);
+  editorRef(editor).provisionalAnnotations.set(sequence, annotation);
+  editorRef(editor).mode = "annotations";
+  editorRef(editor).draw();
+  let requested: unknown = null;
+  editorRef(editor).onAnnotationChangeRequest = (item: unknown) => {
+    requested = item;
+  };
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  expect(requested).toBe(annotation);
+  editor.destroy();
+});
+
+test("Enter opens the annotation dialog like the cog button on a selected annotation", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  const annotation = new Annotation(0.2 as PathCoordinate, 0.6 as PathCoordinate);
+  sequence.annotations.push(annotation);
+  editorRef(editor).selectedAnnotations = new Set([annotation]);
+  editorRef(editor).mode = "annotations";
+  editorRef(editor).draw();
+  let requested: unknown = null;
+  editorRef(editor).onAnnotationChangeRequest = (item: unknown) => {
+    requested = item;
+  };
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  expect(requested).toBe(annotation);
+  editor.destroy();
+});
+
+test("Enter pressed inside an input does not activate buttons", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  editorRef(editor).draw();
+  const before = sequence.path.curves.length;
+  const input = document.createElement("input");
+  document.body.appendChild(input);
+  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  input.remove();
+  expect(sequence.path.curves.length).toBe(before);
+  editor.destroy();
+});
+
+test("a repeated Enter dispatch adds only one item", () => {
+  const { editor } = makeEditor();
+  const sequence = editor.getSequences()[0];
+  editorRef(editor).draw();
+  const before = sequence.path.curves.length;
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  expect(sequence.path.curves.length).toBe(before + 1);
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", repeat: true }));
+  expect(sequence.path.curves.length).toBe(before + 1);
   editor.destroy();
 });

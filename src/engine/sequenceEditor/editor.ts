@@ -1,4 +1,4 @@
-import type { Curvilinear, Curve } from "../curve.js";
+import { Curve, type Curvilinear } from "../curve.js";
 import { type AxisRect } from "../curve.js";
 import { bladeLength, CANVAS_SCALE, RINK_COLOR, WHEEL_SENSITIVITY } from "../constants.js";
 import type { PathCoordinate, Time } from "../coordinates.js";
@@ -28,6 +28,7 @@ import {
   WhitePillLabel,
 } from "./label.js";
 import { LabelTransitions, type LabelTransitionBuild, type LabelVariantKey } from "./labelTransition.js";
+import { isInteractiveKeyTarget } from "../../utils/keyboard.js";
 import { Vector } from "../vector.js";
 
 const WARNING_TRIANGLE_COLOR = "#c25205";
@@ -169,6 +170,7 @@ type MoveSnapshot = {
 
 type JointDeletionSnapshot = MoveSnapshot & {
   jointOldIndex: number;
+  jointOldCount: number;
 };
 
 export class Editor {
@@ -2723,6 +2725,10 @@ export class Editor {
     return null;
   }
 
+  private lastDrawnButton(kind: DrawnActionButton["kind"]): DrawnActionButton | null {
+    return this.drawnButtons.find((button) => button.kind === kind) ?? null;
+  }
+
   private collectAddButtons() {
     for (const sequence of this.editSequences()) {
       if (sequence.path.curves.length === 0) continue;
@@ -3108,6 +3114,24 @@ export class Editor {
   private hitSplitButton(screenX: number, screenY: number): { sequence: Sequence; curveIndex: number } | null {
     const button = this.findDrawnActionButton("split", screenX, screenY);
     return button ? (button.owner as { sequence: Sequence; curveIndex: number }) : null;
+  }
+
+  private splitCurve(hit: { sequence: Sequence; curveIndex: number }) {
+    const curve = hit.sequence.path.curves[hit.curveIndex];
+    if (!curve) return;
+    const mid = curve.getHalfLengthCoordinate();
+    hit.sequence.path.cut(hit.curveIndex, mid);
+    const remapFrom = this.selectedCurves.get(hit.sequence) ?? new Set<number>();
+    const newSelected = new Set<number>();
+    for (const idx of remapFrom) {
+      if (idx < hit.curveIndex) newSelected.add(idx);
+      else if (idx > hit.curveIndex) newSelected.add(idx + 1);
+    }
+    newSelected.add(hit.curveIndex);
+    newSelected.add(hit.curveIndex + 1);
+    this.selectedCurves.set(hit.sequence, newSelected);
+    this.notifySequenceChange();
+    this.draw();
   }
 
   private isHandleVisible(sequence: Sequence, curveIndex: number, pointKey: ControlPointKey): boolean {
@@ -3630,23 +3654,7 @@ export class Editor {
     }
     const splitHit = this.hitSplitButton(screenX, screenY);
     if (splitHit) {
-      const sequence = splitHit.sequence;
-      const curve = sequence.path.curves[splitHit.curveIndex];
-      if (curve) {
-        const mid = curve.getHalfLengthCoordinate();
-        sequence.path.cut(splitHit.curveIndex, mid);
-        const remapFrom = this.selectedCurves.get(sequence) ?? [];
-        const newSelected = new Set<number>();
-        for (const idx of remapFrom) {
-          if (idx < splitHit.curveIndex) newSelected.add(idx);
-          else if (idx > splitHit.curveIndex) newSelected.add(idx + 1);
-        }
-        newSelected.add(splitHit.curveIndex);
-        newSelected.add(splitHit.curveIndex + 1);
-        this.selectedCurves.set(sequence, newSelected);
-        this.notifySequenceChange();
-        this.draw();
-      }
+      this.splitCurve(splitHit);
       return;
     }
     const picked = this.pickControlPoint(screenX, screenY);
@@ -4148,10 +4156,258 @@ export class Editor {
   }
 
   private handleKeyDown(event: KeyboardEvent) {
+    if (isInteractiveKeyTarget(event.target)) return;
     if (this.mode === "path" && event.ctrlKey && (event.key === "a" || event.key === "A")) {
       event.preventDefault();
       this.selectAll();
+      return;
     }
+    if (this.mode === "view") return;
+    if (event.key === "Delete" || event.key === "Backspace") {
+      event.preventDefault();
+      this.deleteSelection();
+      return;
+    }
+    if (event.key === "Enter") {
+      if (event.repeat) return;
+      event.preventDefault();
+      this.activateButtonOnEnter();
+    }
+  }
+
+  // Enter presses the visible plus or cog button like a pointer click on it.
+  private activateButtonOnEnter() {
+    if (this.mode === "path") {
+      const split = this.lastDrawnButton("split");
+      if (split) {
+        this.splitCurve(split.owner as { sequence: Sequence; curveIndex: number });
+        return;
+      }
+      const add = this.lastDrawnButton("add");
+      if (add) this.addSegmentEnd(add.owner as Sequence);
+      return;
+    }
+    if (this.mode === "elements") {
+      const plus = this.lastDrawnButton("provisionalPlus");
+      if (plus) {
+        this.openProvisionalChange(plus.owner as Sequence);
+        return;
+      }
+      if (this.lastDrawnButton("elementCog") && this.onElementChangeRequest) {
+        const element = this.getElementDeleteButtonElement();
+        if (element) this.onElementChangeRequest(element);
+      }
+      return;
+    }
+    if (this.mode === "timing") {
+      const plus = this.lastDrawnButton("timingPlus");
+      if (plus) {
+        const keyframe = plus.owner as TimingKeyframe;
+        this.onTimingKeyframeChangeRequest?.(keyframe, true, this.getPreviousTimingKeyframe(keyframe));
+        return;
+      }
+      const cog = this.lastDrawnButton("timingCog");
+      if (cog) {
+        const keyframe = cog.owner as TimingKeyframe;
+        this.onTimingKeyframeChangeRequest?.(keyframe, false, this.getPreviousTimingKeyframe(keyframe));
+      }
+      return;
+    }
+    if (this.mode === "annotations") {
+      const plus = this.lastDrawnButton("annotationPlus");
+      if (plus) {
+        this.onAnnotationChangeRequest?.(plus.owner as Annotation);
+        return;
+      }
+      if (this.lastDrawnButton("annotationCog") && this.onAnnotationChangeRequest) {
+        const annotation = this.getAnnotationActionButtonAnnotation();
+        if (annotation) this.onAnnotationChangeRequest(annotation);
+      }
+    }
+  }
+
+  // A successful deletion clears the selection, so held keys do not repeat it.
+  private deleteSelection() {
+    let changed = false;
+    if (this.mode === "path") changed = this.deletePathSelection();
+    else if (this.mode === "elements") changed = this.deleteSelectedElements();
+    else if (this.mode === "timing") changed = this.deleteSelectedTimingKeyframes();
+    else if (this.mode === "annotations") changed = this.deleteSelectedAnnotations();
+    if (!changed) return;
+    this.notifySequenceChange();
+    this.draw();
+  }
+
+  private deleteSelectedElements(): boolean {
+    const selected = this.selectedElements;
+    if (selected.size === 0) return false;
+    let changed = false;
+    for (const element of [...selected]) {
+      if (this.isProvisionalElement(element)) {
+        for (const [sequence, provisional] of this.provisionalElements) {
+          if (provisional === element) this.provisionalElements.delete(sequence);
+        }
+        changed = true;
+        continue;
+      }
+      const sequence = this.getSequenceOfElement(element);
+      if (!sequence) continue;
+      sequence.removeElement(element);
+      changed = true;
+    }
+    selected.clear();
+    return changed;
+  }
+
+  private deleteSelectedTimingKeyframes(): boolean {
+    const selected = this.selectedTimingKeyframes;
+    if (selected.size === 0) return false;
+    let changed = false;
+    for (const keyframe of [...selected]) {
+      if (this.isProvisionalTiming(keyframe)) {
+        for (const [sequence, provisional] of this.provisionalTimingKeyframes) {
+          if (provisional === keyframe) this.provisionalTimingKeyframes.delete(sequence);
+        }
+        changed = true;
+        continue;
+      }
+      const sequence = this.getSequenceOfTimingKeyframe(keyframe);
+      if (!sequence) continue;
+      sequence.keyframes.time = sequence.keyframes.time.filter((candidate) => candidate !== keyframe);
+      sequence.invalidateTimeCaches();
+      changed = true;
+    }
+    selected.clear();
+    return changed;
+  }
+
+  private deleteSelectedAnnotations(): boolean {
+    const selected = this.selectedAnnotations;
+    if (selected.size === 0) return false;
+    let changed = false;
+    for (const annotation of [...selected]) {
+      if (this.isProvisionalAnnotation(annotation)) {
+        for (const [sequence, provisional] of this.provisionalAnnotations) {
+          if (provisional === annotation) this.provisionalAnnotations.delete(sequence);
+        }
+        changed = true;
+        continue;
+      }
+      const sequence = this.getSequenceOfAnnotation(annotation);
+      if (!sequence) continue;
+      sequence.removeAnnotation(annotation);
+      changed = true;
+    }
+    selected.clear();
+    return changed;
+  }
+
+  private deletePathSelection(): boolean {
+    let changed = false;
+    const sequences = new Set<Sequence>([...this.selectedPoints.keys(), ...this.selectedCurves.keys()]);
+    for (const sequence of sequences) {
+      if (this.deletePointSelectionOf(sequence)) changed = true;
+      if (this.deleteCurveSelectionOf(sequence)) changed = true;
+    }
+    if (changed) {
+      this.selectedPoints.clear();
+      this.selectedCurves.clear();
+    }
+    return changed;
+  }
+
+  private deletePointSelectionOf(sequence: Sequence): boolean {
+    const selected = this.selectedPoints.get(sequence);
+    if (!selected || selected.size === 0) return false;
+    const path = sequence.path;
+    // Junction deletions keyed by the junction index, applied from the last joint to the first.
+    const junctions = new Map<number, Vector<2>>();
+    let startNode = false;
+    let endNode = false;
+    for (const key of selected) {
+      const [ciStr, pkStr] = key.split(":");
+      const curveIndex = Number(ciStr);
+      const pointKey = pkStr as ControlPointKey;
+      const curve = path.curves[curveIndex];
+      if (!curve || (pointKey !== "p0" && pointKey !== "p3")) continue;
+      if (pointKey === "p0") {
+        if (curveIndex === 0) startNode = true;
+        else junctions.set(curveIndex, path.curves[curveIndex - 1]!.p3);
+      } else if (curveIndex === path.curves.length - 1) endNode = true;
+      else junctions.set(curveIndex + 1, path.curves[curveIndex]!.p3);
+    }
+    let changed = false;
+    for (const [, point] of [...junctions.entries()].sort((a, b) => b[0] - a[0])) {
+      if (this.deleteJunction(sequence, point)) changed = true;
+    }
+    if (startNode && path.curves.length > 1) {
+      path.removeStartCurve();
+      changed = true;
+    }
+    if (endNode && path.curves.length > 1) {
+      path.removeEndCurve();
+      changed = true;
+    }
+    return changed;
+  }
+
+  // The point must stay between two curves: earlier junction deletions may have
+  // merged it away, and getCurvesAroundPoint throws for a missing point.
+  private deleteJunction(sequence: Sequence, point: Vector<2>): boolean {
+    const path = sequence.path;
+    if (path.curves.length < 2) return false;
+    const between = path.curves.slice(0, -1).some((curve) => curve.p3 === point);
+    if (!between) return false;
+    const [curveBefore] = path.getCurvesAroundPoint(point);
+    this.jointDeletionSnapshot = this.makeJointDeletionSnapshot(sequence, path.curves.indexOf(curveBefore), 2);
+    path.removePoint(point);
+    this.remapElementsAfterCurveRemoval();
+    return true;
+  }
+
+  private deleteCurveSelectionOf(sequence: Sequence): boolean {
+    const selected = this.selectedCurves.get(sequence);
+    if (!selected || selected.size === 0) return false;
+    const runs: Array<[number, number]> = [];
+    for (const index of [...selected].sort((a, b) => a - b)) {
+      if (index >= sequence.path.curves.length) continue;
+      const last = runs[runs.length - 1];
+      if (last && last[1] + 1 === index) last[1] = index;
+      else runs.push([index, index]);
+    }
+    let changed = false;
+    for (const [start, end] of runs.reverse()) {
+      if (this.deleteCurveRun(sequence, start, end)) changed = true;
+    }
+    return changed;
+  }
+
+  private deleteCurveRun(sequence: Sequence, start: number, end: number): boolean {
+    const path = sequence.path;
+    const curves = path.curves;
+    if (start < 0 || end >= curves.length || end < start) return false;
+    const lastIndex = curves.length - 1;
+    if (start === 0 && end === lastIndex) {
+      this.jointDeletionSnapshot = this.makeJointDeletionSnapshot(sequence, 0, curves.length);
+      path.curves = [];
+    } else if (start === 0) {
+      this.jointDeletionSnapshot = this.makeJointDeletionSnapshot(sequence, 0, end + 1);
+      path.curves = curves.slice(end + 1);
+    } else if (end === lastIndex) {
+      this.jointDeletionSnapshot = this.makeJointDeletionSnapshot(sequence, start, curves.length - start);
+      path.curves = curves.slice(0, start);
+    } else {
+      // The merged curve keeps the left neighbour's p0/p1 and the right
+      // neighbour's p2/p3 like removePoint does.
+      const left = curves[start - 1]!;
+      const right = curves[end + 1]!;
+      const merged = new Curve(left.p0, left.p1, right.p2, right.p3);
+      this.jointDeletionSnapshot = this.makeJointDeletionSnapshot(sequence, start - 1, end - start + 3);
+      path.curves = [...curves.slice(0, start - 1), merged, ...curves.slice(end + 2)];
+    }
+    path.updateLength();
+    this.remapElementsAfterCurveRemoval();
+    return true;
   }
 
   private ownedTimingKeyframes(sequence: Sequence): TimingKeyframe[] {
@@ -4266,9 +4522,16 @@ export class Editor {
     return { curveStarts, curveLengths };
   }
 
-  private makeJointDeletionSnapshot(sequence: Sequence, jointOldIndex: number) {
+  private makeJointDeletionSnapshot(sequence: Sequence, jointOldIndex: number, jointOldCount = 2) {
     const { curveStarts, curveLengths } = this.axisTables(sequence);
-    return { sequence, jointOldIndex, curveStarts, curveLengths, ...this.makeItemsAndKeyframes(sequence) };
+    return {
+      sequence,
+      jointOldIndex,
+      jointOldCount,
+      curveStarts,
+      curveLengths,
+      ...this.makeItemsAndKeyframes(sequence),
+    };
   }
 
   private remapElementsAfterCurveRemoval() {
@@ -4286,7 +4549,7 @@ export class Editor {
         curveStarts,
         curveLengths,
         snapshot.jointOldIndex,
-        2,
+        snapshot.jointOldCount,
       ) as PathCoordinate;
       item.element.end = remapUniformAtRemoval(
         item.end,
@@ -4295,7 +4558,7 @@ export class Editor {
         curveStarts,
         curveLengths,
         snapshot.jointOldIndex,
-        2,
+        snapshot.jointOldCount,
       ) as PathCoordinate;
       this.updateElementKeyframes(item.element);
     }
@@ -4308,7 +4571,7 @@ export class Editor {
         curveStarts,
         curveLengths,
         snapshot.jointOldIndex,
-        2,
+        snapshot.jointOldCount,
       ) as PathCoordinate;
     }
     for (const sequence of this.sequences) sequence.invalidateTimeCaches();
@@ -4321,7 +4584,7 @@ export class Editor {
         curveStarts,
         curveLengths,
         snapshot.jointOldIndex,
-        2,
+        snapshot.jointOldCount,
       ) as PathCoordinate;
       item.annotation.end = remapUniformAtRemoval(
         item.end,
@@ -4330,7 +4593,7 @@ export class Editor {
         curveStarts,
         curveLengths,
         snapshot.jointOldIndex,
-        2,
+        snapshot.jointOldCount,
       ) as PathCoordinate;
     }
     this.jointDeletionSnapshot = null;
