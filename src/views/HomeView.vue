@@ -40,6 +40,7 @@ const videoRef = ref<HTMLVideoElement | null>(null);
 
 const backgroundImage = computed(() => store.getDiagram().backgroundImage);
 const backgroundImageOpacity = computed(() => store.getDiagram().backgroundImageOpacity ?? 1);
+const diagramSymmetric = computed(() => store.getDiagram().symmetric === true);
 
 function getBpm(): number {
   return store.getDiagram().bpm || 120;
@@ -197,6 +198,17 @@ watch(
   (value) => {
     if (!editor) return;
     editor.backgroundImageOpacity = value;
+    editor.requestDraw();
+  },
+  { immediate: true },
+);
+
+// The symmetric traces live in the diagram options, so the canvas editor follows the store here.
+watch(
+  diagramSymmetric,
+  (value) => {
+    if (!editor) return;
+    editor.symmetric = value;
     editor.requestDraw();
   },
   { immediate: true },
@@ -365,6 +377,7 @@ function createEditor() {
   editorInstance.videoTimeSeconds = videoTime.value;
   editorInstance.setBackgroundImage(backgroundImage.value ?? undefined);
   editorInstance.backgroundImageOpacity = backgroundImageOpacity.value;
+  editorInstance.symmetric = diagramSymmetric.value;
 }
 
 watch(

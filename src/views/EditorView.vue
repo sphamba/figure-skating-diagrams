@@ -674,6 +674,7 @@ const bpm = computed(() => getBpm());
 
 const backgroundImage = computed(() => store.getDiagram().backgroundImage);
 const backgroundImageOpacity = computed(() => store.getDiagram().backgroundImageOpacity ?? 1);
+const diagramSymmetric = computed(() => store.getDiagram().symmetric === true);
 
 // The bpm can change from the sidebar, so the canvas editor follows through here.
 watch(bpm, (value) => {
@@ -716,6 +717,17 @@ watch(
   (value) => {
     if (!editor) return;
     editor.backgroundImageOpacity = value;
+    editor.requestDraw();
+  },
+  { immediate: true },
+);
+
+// The symmetric traces live in the diagram options, so the canvas editor follows the store here.
+watch(
+  diagramSymmetric,
+  (value) => {
+    if (!editor) return;
+    editor.symmetric = value;
     editor.requestDraw();
   },
   { immediate: true },
@@ -1205,6 +1217,7 @@ onMounted(() => {
   editorInstance.videoTimeSeconds = videoTime.value;
   editorInstance.setBackgroundImage(backgroundImage.value ?? undefined);
   editorInstance.backgroundImageOpacity = backgroundImageOpacity.value;
+  editorInstance.symmetric = diagramSymmetric.value;
   editorInstance.shortDrawRange = store.getShortDrawRange();
   editorInstance.onElementChangeRequest = (element) => {
     elementToChange.value = element;

@@ -175,6 +175,12 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     saveToStorage();
   }
 
+  function setDiagramSymmetric(value: boolean) {
+    diagram.value.symmetric = value;
+    triggerRef(diagram);
+    saveToStorage();
+  }
+
   function saveToStorage() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(diagram.value.toJSON()));
@@ -242,6 +248,7 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     setDiagramVideoUrl,
     setDiagramBackgroundImage,
     setDiagramBackgroundImageOpacity,
+    setDiagramSymmetric,
     saveToStorage,
     loadFromJSON,
     toJSON,

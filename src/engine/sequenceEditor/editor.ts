@@ -35,6 +35,7 @@ const WARNING_TRIANGLE_COLOR = "#c25205";
 const WARNING_TRIANGLE_SIZE = 30; // px, side length of the filled warning triangle
 const HIDDEN_SEQUENCE_ALPHA = 0.3; // hidden sequences keep their foot traces at this opacity
 const OUTSIDE_DRAW_RANGE_ALPHA = 0.3; // path opacity outside the rendered draw range
+const SYMMETRIC_GHOST_ALPHA = 0.3; // edit-mode ghost opacity of the mirrored traces and path lines
 const OUTSIDE_DRAW_RANGE_COLOR = "#000";
 const ANNOTATION_LABEL_ALPHA = 0.3; // annotation labels dim to this opacity
 const ANNOTATION_LABEL_TEXT_ALPHA = 0.6; // annotation label text dims to this opacity
@@ -104,6 +105,7 @@ const VIDEO_CURSOR_FILL = "rgba(68, 0, 0, 0.2)";
 const VIDEO_CURSOR_REAR_DEPTH = 0.5; // rear corners behind as a fraction of the radius
 const VIDEO_CURSOR_WIDTH = 0.6; // arrowhead width as a fraction of the unthinned width
 const VIDEO_CURSOR_INSET = 0.25; // inset depth behind as a fraction of the radius
+const SYMMETRIC_VIDEO_CURSOR_LINE_WIDTH = 1.5; // px, stroke thickness of the symmetric time cursor
 
 const ANNOTATION_SCALE = 0.6; // 0.3 m line width with the 30 px minimum on-screen when zoomed out
 const ANNOTATION_PICK_RADIUS = 15; // px, half of the 30 px highlight line diameter
@@ -202,6 +204,8 @@ export class Editor {
   backgroundImage: string | undefined = undefined;
   // 0-1 draw opacity of the background image; the plain fill sits under it, so lower values blend into it.
   backgroundImageOpacity: number = 1;
+  // Central symmetry of the drawn foot traces around the rink center.
+  symmetric = false;
   hiddenSequences: Set<Sequence> = new Set();
   onVideoTimeChange?: (seconds: number) => void;
   onTimeScrubStart?: () => void;
@@ -616,6 +620,7 @@ export class Editor {
         for (const sequence of this.sequences) {
           this.drawPath(sequence);
         }
+        if (this.symmetric) this.drawSymmetricGhost();
       }
       this.drawSelectedCurves();
       let drewElements = false;
@@ -709,6 +714,26 @@ export class Editor {
 
   private getVideoCursorRadius(): number {
     return Math.max(VIDEO_CURSOR_RADIUS, VIDEO_CURSOR_MIN_SIZE / 2 / this.view.zoom);
+  }
+
+  // The cursor is an isosceles triangle, tip forward, with a low
+  // triangular inset cut behind. The tip lies on the circle of the former
+  // timestamp circle, so the length stays the same; the arrowhead is
+  // thinned to 60% of the unthinned width.
+  private videoCursorVertices(geometry: { point: Vector<2>; angle: number }): Vector<2>[] {
+    const radius = this.getVideoCursorRadius();
+    const rear = -VIDEO_CURSOR_REAR_DEPTH * radius;
+    const halfBase = VIDEO_CURSOR_WIDTH * Math.sin(Math.acos(-rear / radius)) * radius;
+    const cos = Math.cos(geometry.angle);
+    const sin = Math.sin(geometry.angle);
+    const rotate = (x: number, y: number): Vector<2> =>
+      new Vector<2>(geometry.point.x + x * cos - y * sin, geometry.point.y + x * sin + y * cos);
+    return [
+      rotate(radius, 0),
+      rotate(rear, halfBase),
+      rotate(rear + VIDEO_CURSOR_INSET * radius, 0),
+      rotate(rear, -halfBase),
+    ];
   }
 
   private getAnnotationLineWidth(): number {
@@ -1004,29 +1029,40 @@ export class Editor {
       if (!geometry) continue;
       this.drawMetres(() => {
         const ctx = this.ctx;
-        const radius = this.getVideoCursorRadius();
-        // The cursor is an isosceles triangle, tip forward, with a low
-        // triangular inset cut behind. The tip lies on the circle of the former
-        // timestamp circle, so the length stays the same; the arrowhead is
-        // thinned to 60% of the unthinned width.
-        const rear = -VIDEO_CURSOR_REAR_DEPTH * radius;
-        const halfBase = VIDEO_CURSOR_WIDTH * Math.sin(Math.acos(-rear / radius)) * radius;
-        const cos = Math.cos(geometry.angle);
-        const sin = Math.sin(geometry.angle);
-        const rotate = (x: number, y: number): Vector<2> =>
-          new Vector<2>(geometry.point.x + x * cos - y * sin, geometry.point.y + x * sin + y * cos);
-        const vertices = [
-          rotate(radius, 0),
-          rotate(rear, halfBase),
-          rotate(rear + VIDEO_CURSOR_INSET * radius, 0),
-          rotate(rear, -halfBase),
-        ];
+        const vertices = this.videoCursorVertices(geometry);
         ctx.fillStyle = VIDEO_CURSOR_FILL;
         ctx.beginPath();
         ctx.moveTo(vertices[0]!.x, -vertices[0]!.y);
         for (const vertex of vertices.slice(1)) ctx.lineTo(vertex.x, -vertex.y);
         ctx.closePath();
         ctx.fill();
+      });
+    }
+    this.drawSymmetricVideoCursor();
+  }
+
+  // The symmetric cursors mirror every drawn cursor through the rink center
+  // with the same shape as the original, closed with a 1.5px stroked line in
+  // the cursor fill color. The marks stay passive: hit testing and view
+  // tracking keep working on the real cursors only.
+  private drawSymmetricVideoCursor() {
+    if (!this.symmetric) return;
+    const ctx = this.ctx;
+    for (const sequence of this.editSequences()) {
+      const geometry = this.getVideoCursorGeometry(sequence);
+      if (!geometry) continue;
+      ctx.lineWidth = SYMMETRIC_VIDEO_CURSOR_LINE_WIDTH / this.view.zoom;
+      ctx.strokeStyle = VIDEO_CURSOR_FILL;
+      this.drawMetres(() => {
+        ctx.save();
+        ctx.scale(-1, -1);
+        const vertices = this.videoCursorVertices(geometry);
+        ctx.beginPath();
+        ctx.moveTo(vertices[0]!.x, -vertices[0]!.y);
+        for (const vertex of vertices.slice(1)) ctx.lineTo(vertex.x, -vertex.y);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
       });
     }
   }
@@ -1389,7 +1425,16 @@ export class Editor {
     return this.findDrawnActionButton("annotationDelete", screenX, screenY) !== null;
   }
 
+  // View mode draws the foot traces once, then a second central-symmetric pass
+  // around the rink center when the diagram asks for it. Labels, time, and
+  // annotations never redraw in the second pass.
   private drawTraces() {
+    this.drawTracesPass(false);
+    if (this.symmetric) this.drawTracesPass(true);
+  }
+
+  private drawTracesPass(symmetric: boolean) {
+    const ctx = this.ctx;
     const minTraceWidth = MIN_TRACE_WIDTH / this.view.zoom;
     const minBladeLength = this.scaleElements ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
     const minMarkSize = MIN_MARK_SIZE / this.view.zoom;
@@ -1400,17 +1445,22 @@ export class Editor {
       const hiddenAlpha = this.hiddenSequences.has(sequence) ? HIDDEN_SEQUENCE_ALPHA : 1;
       if (window === null) {
         this.ctx.globalAlpha = hiddenAlpha;
-        this.drawMetres(() =>
+        this.drawMetres(() => {
+          if (symmetric) {
+            ctx.save();
+            ctx.scale(-1, -1);
+          }
           sequence.drawTraces(
             this.ctx,
             minTraceWidth,
             minBladeLength,
             minMarkSize,
             minDrawIncrement,
-            viewport,
+            symmetric ? this.mirrorViewport(viewport) : viewport,
             this.sequenceMutated,
-          ),
-        );
+          );
+          if (symmetric) ctx.restore();
+        });
         this.ctx.globalAlpha = 1;
         continue;
       }
@@ -1419,31 +1469,40 @@ export class Editor {
       if (anchorRange === null) {
         // No computable time along the path: keep it fully drawn.
         this.ctx.globalAlpha = hiddenAlpha;
-        this.drawMetres(() =>
+        this.drawMetres(() => {
+          if (symmetric) {
+            ctx.save();
+            ctx.scale(-1, -1);
+          }
           sequence.drawTraces(
             this.ctx,
             minTraceWidth,
             minBladeLength,
             minMarkSize,
             minDrawIncrement,
-            viewport,
+            symmetric ? this.mirrorViewport(viewport) : viewport,
             this.sequenceMutated,
-          ),
-        );
+          );
+          if (symmetric) ctx.restore();
+        });
         this.ctx.globalAlpha = 1;
         continue;
       }
       const path = sequence.path;
       if (anchorRange[1] <= anchorRange[0]) {
-        this.drawOutsideDrawRangeStroke(path, 0 as PathCoordinate, undefined, hiddenAlpha);
+        this.drawOutsideDrawRangeStroke(path, 0 as PathCoordinate, undefined, hiddenAlpha, symmetric);
         continue;
       }
       const uLo = anchorRange[0] as PathCoordinate;
       const uHi = anchorRange[1] as PathCoordinate;
-      this.drawOutsideDrawRangeStroke(path, 0 as PathCoordinate, uLo, hiddenAlpha);
-      this.drawOutsideDrawRangeStroke(path, uHi as PathCoordinate, undefined, hiddenAlpha);
+      this.drawOutsideDrawRangeStroke(path, 0 as PathCoordinate, uLo, hiddenAlpha, symmetric);
+      this.drawOutsideDrawRangeStroke(path, uHi as PathCoordinate, undefined, hiddenAlpha, symmetric);
       this.ctx.globalAlpha = hiddenAlpha;
-      this.drawMetres(() =>
+      this.drawMetres(() => {
+        if (symmetric) {
+          ctx.save();
+          ctx.scale(-1, -1);
+        }
         sequence.drawFootTraces(
           this.ctx,
           uLo as PathCoordinate,
@@ -1452,12 +1511,19 @@ export class Editor {
           minBladeLength,
           minMarkSize,
           minDrawIncrement,
-          viewport,
+          symmetric ? this.mirrorViewport(viewport) : viewport,
           this.sequenceMutated,
-        ),
-      );
+        );
+        if (symmetric) ctx.restore();
+      });
       this.ctx.globalAlpha = 1;
     }
+  }
+
+  // The symmetric pass mirrors the figure through the rink center, so the culling
+  // box mirrors through the center too: a zoomed view keeps the opposite half drawn.
+  private mirrorViewport(viewport: AxisRect): AxisRect {
+    return { minX: -viewport.maxX, maxX: -viewport.minX, minY: -viewport.maxY, maxY: -viewport.minY };
   }
 
   // Hides when the path anchor lies outside the drawing range.
@@ -1479,6 +1545,7 @@ export class Editor {
     uStart: PathCoordinate,
     uEnd: PathCoordinate | undefined,
     hiddenAlpha: number,
+    symmetric = false,
   ) {
     const start = Math.max(0, uStart as number);
     const end = Math.min(path.length, uEnd ?? path.length);
@@ -1487,8 +1554,52 @@ export class Editor {
     ctx.globalAlpha = OUTSIDE_DRAW_RANGE_ALPHA * hiddenAlpha;
     ctx.strokeStyle = OUTSIDE_DRAW_RANGE_COLOR;
     ctx.lineWidth = PATH_WIDTH / this.view.zoom;
-    this.drawMetres(() => path.drawRange(ctx, uStart, (uEnd ?? path.length) as PathCoordinate));
+    this.drawMetres(() => {
+      if (symmetric) {
+        ctx.save();
+        ctx.scale(-1, -1);
+      }
+      path.drawRange(ctx, uStart, (uEnd ?? path.length) as PathCoordinate);
+      if (symmetric) ctx.restore();
+    });
     ctx.globalAlpha = 1;
+  }
+
+  // Edit modes mirror a low-opacity ghost of the traces and the path lines so
+  // symmetric patterns stay previewable while editing. Handles, labels, time,
+  // and annotations never redraw in the ghost.
+  private drawSymmetricGhost() {
+    const ctx = this.ctx;
+    const minTraceWidth = MIN_TRACE_WIDTH / this.view.zoom;
+    // The elements mode draws the traces at natural scale with no zoom
+    // compensation, so the ghost does too.
+    const minBladeLength =
+      this.scaleElements && this.mode !== "elements" ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
+    const minMarkSize = MIN_MARK_SIZE / this.view.zoom;
+    const minDrawIncrement = MIN_DRAW_INCREMENT / this.view.zoom;
+    // The ghost mirrors through the rink center, so the culling box mirrors too.
+    const viewport = this.mirrorViewport(this.getTraceViewport(minBladeLength));
+    const pathColor = this.mode === "elements" ? ELEMENTS_PATH_COLOR : undefined;
+    for (const sequence of this.sequences) {
+      if (sequence.path.curves.length === 0) continue;
+      ctx.globalAlpha = SYMMETRIC_GHOST_ALPHA;
+      this.drawMetres(() => {
+        ctx.save();
+        ctx.scale(-1, -1);
+        sequence.drawPath(ctx, PATH_WIDTH / this.view.zoom, 0 as PathCoordinate, undefined, pathColor);
+        sequence.drawTraces(
+          ctx,
+          minTraceWidth,
+          minBladeLength,
+          minMarkSize,
+          minDrawIncrement,
+          viewport,
+          this.sequenceMutated,
+        );
+        ctx.restore();
+      });
+      ctx.globalAlpha = 1;
+    }
   }
 
   // The time window the short draw range renders around the time cursor.

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import Button from "openvue/button";
+import Checkbox from "openvue/checkbox";
 import InputNumber from "openvue/inputnumber";
 import InputText from "openvue/inputtext";
 import Slider from "openvue/slider";
@@ -72,6 +73,14 @@ function onBackgroundSelected(event: Event) {
 function removeBackgroundImage() {
   store.setDiagramBackgroundImage("");
 }
+
+const diagramSymmetric = computed({
+  get: () => store.getDiagram().symmetric === true,
+  set: (value) => {
+    if (!isEditor.value) return;
+    store.setDiagramSymmetric(value);
+  },
+});
 </script>
 
 <template>
@@ -131,6 +140,10 @@ function removeBackgroundImage() {
         />
       </template>
       <input ref="backgroundImageInput" type="file" accept="image/*" hidden @change="onBackgroundSelected" />
+      <div class="diagram-sidebar__symmetric-checkbox">
+        <Checkbox v-model="diagramSymmetric" binary input-id="diagram-symmetric" />
+        <label for="diagram-symmetric">Symmetric</label>
+      </div>
     </template>
     <template v-else>
       <label class="diagram-sidebar__mode-label">Diagram name</label>
@@ -163,5 +176,11 @@ function removeBackgroundImage() {
   object-fit: cover;
   border-radius: 6px;
   border: 1px solid var(--p-content-border-color);
+}
+
+.diagram-sidebar__symmetric-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 </style>

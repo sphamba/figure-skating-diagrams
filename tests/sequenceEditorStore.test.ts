@@ -98,3 +98,19 @@ test("the background image opacity stays inside the 0-1 range", () => {
   store.setDiagramBackgroundImageOpacity(Number.NaN);
   expect(store.getDiagram().backgroundImageOpacity).toBe(0);
 });
+
+test("the symmetric flag persists to local storage and clears back", () => {
+  localStorage.clear();
+  setActivePinia(createPinia());
+  const store = useSequenceEditorStore();
+
+  store.setDiagramSymmetric(true);
+  expect(store.getDiagram().symmetric).toBe(true);
+  const stored = JSON.parse(localStorage.getItem("sequence-editor") as string) as { symmetric?: boolean };
+  expect(stored.symmetric).toBe(true);
+
+  store.setDiagramSymmetric(false);
+  expect(store.getDiagram().symmetric).toBe(false);
+  const cleared = JSON.parse(localStorage.getItem("sequence-editor") as string) as { symmetric?: boolean };
+  expect(cleared.symmetric).toBe(false);
+});

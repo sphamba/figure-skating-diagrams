@@ -33,6 +33,7 @@ export interface DiagramJSON {
   videoUrl?: string;
   backgroundImage?: string;
   backgroundImageOpacity?: number;
+  symmetric?: boolean;
   sequences: SequenceJSON[];
 }
 
@@ -44,6 +45,8 @@ export class Diagram {
   backgroundImage?: string;
   // 0-1 draw opacity of the background image; 1 replaces the plain rink fill entirely.
   backgroundImageOpacity?: number;
+  // True draws a second central-symmetric copy of every foot trace around the rink center.
+  symmetric?: boolean;
   sequences: Sequence[];
 
   constructor(name: string, sequences: Sequence[] = [], bpm?: number) {
@@ -68,6 +71,7 @@ export class Diagram {
       videoUrl: this.videoUrl,
       backgroundImage: this.backgroundImage,
       backgroundImageOpacity: this.backgroundImageOpacity,
+      symmetric: this.symmetric,
       sequences: this.sequences.map((sequence) => sequence.toJSON()),
     };
   }
@@ -81,6 +85,7 @@ export class Diagram {
     diagram.videoUrl = json.videoUrl;
     diagram.backgroundImage = json.backgroundImage;
     diagram.backgroundImageOpacity = json.backgroundImageOpacity;
+    diagram.symmetric = json.symmetric;
     return diagram;
   }
 }
