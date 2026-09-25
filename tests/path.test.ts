@@ -42,7 +42,7 @@ test("pickCurve returns null on an empty path", () => {
   expect(path.pickCurve(new Vector(0, 0), 1)).toBeNull();
 });
 
-test("removePoint keeps the surviving control points and drops the joint", () => {
+test("removePoint merges the curves around the joint on the cubic that splits into them", () => {
 	const path = new Path();
 	path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1, 1), new Vector(2, 2), new Vector(3, 3)));
 	path.addCurveEnd(new Curve(new Vector(3, 3), new Vector(5, 5), new Vector(7, 7), new Vector(8, 8)));
@@ -54,13 +54,40 @@ test("removePoint keeps the surviving control points and drops the joint", () =>
 	const merged = path.curves[0]!;
 	expect(merged.p0.x).toBeCloseTo(0, 10);
 	expect(merged.p0.y).toBeCloseTo(0, 10);
-	expect(merged.p1.x).toBeCloseTo(1, 10);
-	expect(merged.p1.y).toBeCloseTo(1, 10);
-	expect(merged.p2.x).toBeCloseTo(7, 10);
-	expect(merged.p2.y).toBeCloseTo(7, 10);
+	expect(merged.p1.x).toBeCloseTo(3, 10);
+	expect(merged.p1.y).toBeCloseTo(3, 10);
+	expect(merged.p2.x).toBeCloseTo(6.5, 10);
+	expect(merged.p2.y).toBeCloseTo(6.5, 10);
 	expect(merged.p3.x).toBeCloseTo(8, 10);
 	expect(merged.p3.y).toBeCloseTo(8, 10);
 	expect(path.curves.some((c) => c.p3 === joint)).toBe(false);
+});
+
+test("removePoint inverts a fresh split so the path returns to its initial control points", () => {
+	const path = new Path();
+	const original = new Curve(
+		new Vector(0, 0),
+		new Vector(0.5, 0.5),
+		new Vector(1.5, -0.5),
+		new Vector(2, 0),
+	);
+	path.addCurveEnd(original);
+
+	path.cut(0, original.getHalfLengthCoordinate());
+	expect(path.curves).toHaveLength(2);
+
+	path.removePoint(path.curves[0]!.p3);
+
+	expect(path.curves).toHaveLength(1);
+	const restored = path.curves[0]!;
+	expect(restored.p0.x).toBeCloseTo(0, 10);
+	expect(restored.p0.y).toBeCloseTo(0, 10);
+	expect(restored.p1.x).toBeCloseTo(0.5, 10);
+	expect(restored.p1.y).toBeCloseTo(0.5, 10);
+	expect(restored.p2.x).toBeCloseTo(1.5, 10);
+	expect(restored.p2.y).toBeCloseTo(-0.5, 10);
+	expect(restored.p3.x).toBeCloseTo(2, 10);
+	expect(restored.p3.y).toBeCloseTo(0, 10);
 });
 
 test("splitting a curve at its arc-length midpoint keeps the path shape", () => {

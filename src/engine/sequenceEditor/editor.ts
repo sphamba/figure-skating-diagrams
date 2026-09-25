@@ -4746,9 +4746,9 @@ export class Editor {
         curves[curveIndex + 1]!.p1 = curves[curveIndex + 1]!.p1.plus(delta);
       }
     } else if (pointKey === "p1" && curveIndex > 0) {
-      curves[curveIndex - 1]!.alignEnd(curve, curve.p1.minus(curve.p0).length());
+      curves[curveIndex - 1]!.alignEnd(curve);
     } else if (pointKey === "p2" && curveIndex < curves.length - 1) {
-      curves[curveIndex + 1]!.alignStart(curve, curve.p2.minus(curve.p3).length());
+      curves[curveIndex + 1]!.alignStart(curve);
     }
   }
 

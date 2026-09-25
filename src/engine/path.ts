@@ -238,7 +238,18 @@ export class Path {
   removePoint(point: Vector<2>) {
     const [curveBefore, curveAfter] = this.getCurvesAroundPoint(point);
 
-    const merged = new Curve(curveBefore.p0, curveBefore.p1, curveAfter.p2, curveAfter.p3);
+    // The cubic whose de Casteljau subdivision reproduces both curves exactly,
+    // so a fresh split merges back into the curve it came from. t projects the
+    // joint onto the handle axis; the clamp keeps degenerate joints finite.
+    const joint = curveBefore.p3;
+    const dx = curveAfter.p1.minus(curveBefore.p2);
+    const t = Math.min(Math.max(joint.minus(curveBefore.p2).dot(dx) / (dx.dot(dx) + 1e-30), 1e-9), 1 - 1e-9);
+    const merged = new Curve(
+      curveBefore.p0,
+      curveBefore.p0.plus(curveBefore.p1.minus(curveBefore.p0).times(1 / t)),
+      curveAfter.p2.minus(curveAfter.p3.times(t)).times(1 / (1 - t)),
+      curveAfter.p3,
+    );
 
     const curvesBefore = this.curves.slice(0, this.curves.indexOf(curveBefore));
     const curvesAfter = this.curves.slice(this.curves.indexOf(curveAfter) + 1);

@@ -197,15 +197,10 @@ test("Cut curve", () => {
 	const [newCurve1, newCurve2] = curve.cut(0.2 as Curvilinear);
 
 	const px = curve.getPosition(0.2 as Curvilinear);
-	const dx = curve.getDerivative(0.2 as Curvilinear).times(1 / 3);
 	const precision = 15; // decimal places
 
 	expect(newCurve1.p0.x).toBeCloseTo(p1.x, precision);
 	expect(newCurve1.p0.y).toBeCloseTo(p1.y, precision);
-	expect(newCurve1.p1.x).toBeCloseTo(p2.x, precision);
-	expect(newCurve1.p1.y).toBeCloseTo(p2.y, precision);
-	expect(newCurve2.p2.x).toBeCloseTo(p3.x, precision);
-	expect(newCurve2.p2.y).toBeCloseTo(p3.y, precision);
 	expect(newCurve2.p3.x).toBeCloseTo(p4.x, precision);
 	expect(newCurve2.p3.y).toBeCloseTo(p4.y, precision);
 
@@ -214,26 +209,47 @@ test("Cut curve", () => {
 	expect(newCurve2.p0.x).toBeCloseTo(px.x, precision);
 	expect(newCurve2.p0.y).toBeCloseTo(px.y, precision);
 
-	const common = Math.min(0.2, 0.8);
-	const handle1 = px.minus(dx.normalized().times(dx.length() * common));
-	const handle2 = px.plus(dx.normalized().times(dx.length() * common));
-	expect(newCurve1.p2.x).toBeCloseTo(handle1.x, precision);
-	expect(newCurve1.p2.y).toBeCloseTo(handle1.y, precision);
-	expect(newCurve2.p1.x).toBeCloseTo(handle2.x, precision);
-	expect(newCurve2.p1.y).toBeCloseTo(handle2.y, precision);
+	// de Casteljau subdivision points of the original at t
+	const lerp = (from: Vector<2>, to: Vector<2>): Vector<2> =>
+		from.plus(to.minus(from).times(0.2));
+	const b01 = lerp(p1, p2);
+	const b12 = lerp(p2, p3);
+	const b23 = lerp(p3, p4);
+	const b012 = lerp(b01, b12);
+	const b123 = lerp(b12, b23);
+	expect(newCurve1.p1.x).toBeCloseTo(b01.x, precision);
+	expect(newCurve1.p1.y).toBeCloseTo(b01.y, precision);
+	expect(newCurve1.p2.x).toBeCloseTo(b012.x, precision);
+	expect(newCurve1.p2.y).toBeCloseTo(b012.y, precision);
+	expect(newCurve2.p1.x).toBeCloseTo(b123.x, precision);
+	expect(newCurve2.p1.y).toBeCloseTo(b123.y, precision);
+	expect(newCurve2.p2.x).toBeCloseTo(b23.x, precision);
+	expect(newCurve2.p2.y).toBeCloseTo(b23.y, precision);
 
-	expect(newCurve1.p3.minus(newCurve1.p2).length()).toBeCloseTo(
-		newCurve2.p1.minus(newCurve2.p0).length(),
-		precision,
-	);
+	// joint handles stay aligned through the split point
+	const toIncoming = newCurve1.p3.minus(newCurve1.p2);
+	const toOutgoing = newCurve2.p1.minus(newCurve2.p0);
+	expect(toIncoming.x * toOutgoing.y - toIncoming.y * toOutgoing.x).toBeCloseTo(0, precision);
 
-	const derivativeScales = [
-		[curve.getDerivative(0 as Curvilinear), newCurve1.getDerivative(0 as Curvilinear)],
-		[curve.getDerivative(1 as Curvilinear), newCurve2.getDerivative(1 as Curvilinear)],
-	];
-	for (const [derivativeOriginal, derivativeNew] of derivativeScales) {
-		expect(derivativeOriginal.x).toBeCloseTo(derivativeNew.x, precision);
-		expect(derivativeOriginal.y).toBeCloseTo(derivativeNew.y, precision);
+	// both halves and the joint tangent reproduce the original curve
+	const jointDerivative = curve.getDerivative(0.2 as Curvilinear);
+	const leftDerivative = newCurve1.getDerivative(1 as Curvilinear);
+	expect(leftDerivative.x).toBeCloseTo(jointDerivative.x * 0.2, precision);
+	expect(leftDerivative.y).toBeCloseTo(jointDerivative.y * 0.2, precision);
+	const rightDerivative = newCurve2.getDerivative(0 as Curvilinear);
+	expect(rightDerivative.x).toBeCloseTo(jointDerivative.x * 0.8, precision);
+	expect(rightDerivative.y).toBeCloseTo(jointDerivative.y * 0.8, precision);
+	for (const t of [0, 0.05, 0.1, 0.15]) {
+		const original = curve.getPosition((t * 0.2) as Curvilinear);
+		const left = newCurve1.getPosition(t as Curvilinear);
+		expect(left.x).toBeCloseTo(original.x, precision);
+		expect(left.y).toBeCloseTo(original.y, precision);
+	}
+	for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+		const original = curve.getPosition((0.2 + 0.8 * t) as Curvilinear);
+		const right = newCurve2.getPosition(t as Curvilinear);
+		expect(right.x).toBeCloseTo(original.x, precision);
+		expect(right.y).toBeCloseTo(original.y, precision);
 	}
 });
 

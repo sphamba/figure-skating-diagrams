@@ -280,7 +280,7 @@ export class Curve {
     };
   }
 
-  alignStart(c: Curve, length?: number) {
+  alignStart(c: Curve) {
     if (this.p0 != c.p3) {
       this.p0 = c.p3;
     }
@@ -289,13 +289,13 @@ export class Curve {
     if (dir.lengthSquared() == 0) return;
     dir = dir.normalized();
 
-    const dist = length ?? this.p1.minus(this.p0).length();
+    const dist = this.p1.minus(this.p0).length();
     if (dist == 0) return;
 
     this.p1 = this.p0.plus(dir.times(dist));
   }
 
-  alignEnd(c: Curve, length?: number) {
+  alignEnd(c: Curve) {
     if (this.p3 != c.p0) {
       this.p3 = c.p0;
     }
@@ -304,7 +304,7 @@ export class Curve {
     if (dir.lengthSquared() == 0) return;
     dir = dir.normalized();
 
-    const dist = length ?? this.p3.minus(this.p2).length();
+    const dist = this.p3.minus(this.p2).length();
     if (dist == 0) return;
 
     this.p2 = this.p3.plus(dir.times(dist));
@@ -336,16 +336,16 @@ export class Curve {
   }
 
   cut(x: Curvilinear): [Curve, Curve] {
-    const px = this.getPosition(x);
+    // de Casteljau subdivision: both halves reproduce the original curve exactly
+    const lerp = (from: Vector<2>, to: Vector<2>): Vector<2> => from.plus(to.minus(from).times(x));
+    const b01 = lerp(this.p0, this.p1);
+    const b12 = lerp(this.p1, this.p2);
+    const b23 = lerp(this.p2, this.p3);
+    const b012 = lerp(b01, b12);
+    const b123 = lerp(b12, b23);
+    const px = lerp(b012, b123);
 
-    const dx = this.getDerivative(x).times(1 / 3);
-    const common = Math.min(x, 1 - x);
-    const handleLength = dx.length() * common;
-    const direction = dx.normalized();
-    const c2 = px.minus(direction.times(handleLength));
-    const c3 = px.plus(direction.times(handleLength));
-
-    return [new Curve(this.p0, this.p1, c2, px), new Curve(px, c3, this.p2, this.p3)];
+    return [new Curve(this.p0, b01, b012, px), new Curve(px, b123, b23, this.p3)];
   }
 }
 
