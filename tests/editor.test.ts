@@ -1680,7 +1680,10 @@ test("each edited sequence shows a synchronized time cursor for the same time", 
   editorRef(editor).mode = "view";
   const ctx = canvas.getContext() as unknown as Record<string, unknown>;
   const tips: { x: number; y: number }[] = [];
-  ctx.moveTo = (x: number, y: number) => tips.push({ x, y });
+  ctx.moveTo = (x: number, y: number) => {
+    const previous = tips[tips.length - 1];
+    if (!previous || previous.x !== x || previous.y !== y) tips.push({ x, y });
+  };
 
   editor.videoTimeSeconds = 1; // time 4 over the full path resolves to a quarter of the length
   editorRef(editor).drawVideoCursor();
@@ -1700,7 +1703,10 @@ test("a hidden sequence does not show or pick a time cursor", () => {
   editor.setHiddenSequences(new Set([second]));
   const ctx = canvas.getContext() as unknown as Record<string, unknown>;
   const tips: { x: number; y: number }[] = [];
-  ctx.moveTo = (x: number, y: number) => tips.push({ x, y });
+  ctx.moveTo = (x: number, y: number) => {
+    const previous = tips[tips.length - 1];
+    if (!previous || previous.x !== x || previous.y !== y) tips.push({ x, y });
+  };
 
   editor.videoTimeSeconds = 1;
   editorRef(editor).drawVideoCursor();
@@ -1729,7 +1735,10 @@ test("the time cursor takes its orientation from the interpolated hips keyframes
   }
   const ctx = canvas.getContext() as unknown as Record<string, unknown>;
   const tips: { x: number; y: number }[] = [];
-  ctx.moveTo = (x: number, y: number) => tips.push({ x, y });
+  ctx.moveTo = (x: number, y: number) => {
+    const previous = tips[tips.length - 1];
+    if (!previous || previous.x !== x || previous.y !== y) tips.push({ x, y });
+  };
 
   editor.videoTimeSeconds = 1; // time 4 over the full path resolves to a quarter of the length
   editorRef(editor).drawVideoCursor();
@@ -1793,7 +1802,10 @@ test("an out-of-range time draws and picks no time cursor, while a range-edge ti
   editorRef(editor).mode = "view";
   const ctx = canvas.getContext() as unknown as Record<string, unknown>;
   const tips: { x: number; y: number }[] = [];
-  ctx.moveTo = (x: number, y: number) => tips.push({ x, y });
+  ctx.moveTo = (x: number, y: number) => {
+    const previous = tips[tips.length - 1];
+    if (!previous || previous.x !== x || previous.y !== y) tips.push({ x, y });
+  };
 
   // Both sequences cover [0, 4] seconds, so 5 is beyond the range of each.
   editor.videoTimeSeconds = 5;
@@ -1839,7 +1851,10 @@ test("a sequence without time evolution shows and picks no time cursor", () => {
   editorRef(editor).mode = "view";
   const ctx = canvas.getContext() as unknown as Record<string, unknown>;
   const tips: { x: number; y: number }[] = [];
-  ctx.moveTo = (x: number, y: number) => tips.push({ x, y });
+  ctx.moveTo = (x: number, y: number) => {
+    const previous = tips[tips.length - 1];
+    if (!previous || previous.x !== x || previous.y !== y) tips.push({ x, y });
+  };
 
   editor.videoTimeSeconds = 0;
   editorRef(editor).drawVideoCursor();
@@ -1864,7 +1879,10 @@ test("a time within one edited sequence's range but outside another's shows a cu
   editorRef(editor).mode = "view";
   const ctx = canvas.getContext() as unknown as Record<string, unknown>;
   const tips: { x: number; y: number }[] = [];
-  ctx.moveTo = (x: number, y: number) => tips.push({ x, y });
+  ctx.moveTo = (x: number, y: number) => {
+    const previous = tips[tips.length - 1];
+    if (!previous || previous.x !== x || previous.y !== y) tips.push({ x, y });
+  };
 
   editor.videoTimeSeconds = 3; // inside the [0, 4] range of the first, beyond the [0, 2] range of the second
   editorRef(editor).drawVideoCursor();
@@ -2618,11 +2636,7 @@ test("Enter opens the timing dialog like the plus button on a provisional keyfra
   editorRef(editor).mode = "timing";
   editorRef(editor).draw();
   const calls: Array<[unknown, boolean, unknown]> = [];
-  editorRef(editor).onTimingKeyframeChangeRequest = (
-    received: unknown,
-    isProvisional: boolean,
-    previous: unknown,
-  ) => {
+  editorRef(editor).onTimingKeyframeChangeRequest = (received: unknown, isProvisional: boolean, previous: unknown) => {
     calls.push([received, isProvisional, previous]);
   };
   window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
@@ -2640,11 +2654,7 @@ test("Enter opens the timing dialog like the cog button on a selected keyframe",
   editorRef(editor).mode = "timing";
   editorRef(editor).draw();
   const calls: Array<[unknown, boolean, unknown]> = [];
-  editorRef(editor).onTimingKeyframeChangeRequest = (
-    keyframe: unknown,
-    isProvisional: boolean,
-    previous: unknown,
-  ) => {
+  editorRef(editor).onTimingKeyframeChangeRequest = (keyframe: unknown, isProvisional: boolean, previous: unknown) => {
     calls.push([keyframe, isProvisional, previous]);
   };
   window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));

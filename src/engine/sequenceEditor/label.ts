@@ -298,7 +298,7 @@ export function buttonDiscColor(color: string): string {
 }
 
 // Channels of a hex color, with 3-digit and 6-digit forms supported.
-function parseHexColor(color: string): [number, number, number] {
+export function parseHexColor(color: string): [number, number, number] {
   const digits = color.slice(1);
   if (digits.length === 3) {
     return digits.split("").map((digit) => parseInt(digit + digit, 16)) as [number, number, number];

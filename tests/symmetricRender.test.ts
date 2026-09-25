@@ -21,9 +21,7 @@ afterAll(() => {
 // `timed` adds timing keyframes, so a video time cursor draws on the path.
 function makeSequence(timed = false) {
   const path = makeStraightLengthOnePath();
-  path.curves = [
-    new Curve(new Vector(10, 0), new Vector(10 + 1 / 3, 0), new Vector(10 + 2 / 3, 0), new Vector(11, 0)),
-  ];
+  path.curves = [new Curve(new Vector(10, 0), new Vector(10 + 1 / 3, 0), new Vector(10 + 2 / 3, 0), new Vector(11, 0))];
   path.updateLength();
   const sequence = new Sequence(path);
   const glide = new LeftNormalForwardInsideGlide(0 as PathCoordinate, 1 as PathCoordinate);
@@ -86,7 +84,8 @@ function makeEditor(sequences?: Sequence[]) {
 // Every comparison runs inside one editor across two consecutive draws, so the
 // labels lingering from the construction draw (their exits never advance under
 // the stubbed frame) cancel out instead of polluting the stroke counts.
-const flips = (scaleArgs: number[][]) => scaleArgs.filter((args) => args[0] === FLIP_SCALE && args[1] === FLIP_SCALE).length;
+const flips = (scaleArgs: number[][]) =>
+  scaleArgs.filter((args) => args[0] === FLIP_SCALE && args[1] === FLIP_SCALE).length;
 const strokes = (calls: string[]) => calls.filter((call) => call === "stroke").length;
 const lineTos = (calls: string[]) => calls.filter((call) => call === "lineTo").length;
 const closePaths = (calls: string[]) => calls.filter((call) => call === "closePath").length;
@@ -209,16 +208,52 @@ test("every drawn time cursor gets a passive symmetric outline in the same shape
   const bareLineTos = lineTos(calls);
   const bareClosePaths = closePaths(calls);
 
-  // Exactly one extra stroke: the symmetric outline, while the original cursor
-  // keeps drawing with a fill instead of a stroke.
-  expect(cursorStrokes).toBe(bareStrokes + 1);
+  // Exactly two extra strokes: the symmetric half outlines, while the original
+  // cursor keeps drawing with two fills instead of strokes.
+  expect(cursorStrokes).toBe(bareStrokes + 2);
   // Exactly one extra flip: the cursor's own scale(-1, -1) wrapper.
   expect(cursorFlips).toBe(bareFlips + 1);
-  // The with-cursor draw carries the original 4-vertex shape and the mirrored
-  // outline with the same 4-vertex shape, so the lineTo delta is exactly two
-  // shapes (a straight-line outline would sit at +4) and the closePath delta
-  // is exactly two closed paths.
-  expect(cursorLineTos).toBe(bareLineTos + 6);
+  // The with-cursor draw carries the two filled half triangles and the two
+  // mirrored open polylines, so the lineTo delta is two lineTos per shape
+  // (four shapes, a straight-line outline would sit at +4) and the closePath
+  // delta is exactly two closed paths: only the filled halves close off,
+  // while the mirrored outlines draw open with no centerline.
+  expect(cursorLineTos).toBe(bareLineTos + 8);
   expect(cursorClosePaths).toBe(bareClosePaths + 2);
   editor.destroy();
+});
+
+test("every time cursor half carries the foot trace color of the sequence", () => {
+  const sequence = makeSequence(true);
+  sequence.traceColorL = "#123456";
+  sequence.traceColorR = "#abcdef";
+  const { editor, calls, scaleArgs } = makeEditor([sequence]);
+  editor.symmetric = true;
+  // The cursor draws for times inside the keyframe range: 1 s to 3 s at bpm 120.
+  editor.videoTimeSeconds = 1.5;
+  warmUp(editor, calls, scaleArgs);
+
+  const fills: string[] = [];
+  const styleStrokes: string[] = [];
+  Object.defineProperty(editor.ctx, "fillStyle", {
+    set: (value: string) => fills.push(String(value)),
+    get: () => fills[fills.length - 1] ?? "",
+  });
+  Object.defineProperty(editor.ctx, "strokeStyle", {
+    set: (value: string) => styleStrokes.push(String(value)),
+    get: () => styleStrokes[styleStrokes.length - 1] ?? "",
+  });
+  editor.draw();
+  editor.destroy();
+
+  // The left and right halves of the plain cursor fill in the trace colors,
+  // and the mirrored half outlines stroke in the same two colors.
+  const cursorFill = fills.filter((fill) => fill === "rgba(18, 52, 86, 0.2)").length;
+  const rightFill = fills.filter((fill) => fill === "rgba(171, 205, 239, 0.2)").length;
+  const leftStroke = styleStrokes.filter((stroke) => stroke === "rgba(18, 52, 86, 0.2)").length;
+  const rightStroke = styleStrokes.filter((stroke) => stroke === "rgba(171, 205, 239, 0.2)").length;
+  expect(cursorFill).toBe(1);
+  expect(rightFill).toBe(1);
+  expect(leftStroke).toBe(1);
+  expect(rightStroke).toBe(1);
 });

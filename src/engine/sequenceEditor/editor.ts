@@ -26,6 +26,7 @@ import {
   PlusButtonLabel,
   WhiteCircleLabel,
   WhitePillLabel,
+  parseHexColor,
 } from "./label.js";
 import { LabelTransitions, type LabelTransitionBuild, type LabelVariantKey } from "./labelTransition.js";
 import { isInteractiveKeyTarget } from "../../utils/keyboard.js";
@@ -101,7 +102,7 @@ const ZOOM_FACTOR = 1.005;
 
 const VIDEO_CURSOR_RADIUS = 0.25; // m, half of the 0.5 m cursor circumdiameter
 const VIDEO_CURSOR_MIN_SIZE = 50; // px, minimum on-screen circumdiameter when zoomed out
-const VIDEO_CURSOR_FILL = "rgba(68, 0, 0, 0.2)";
+const VIDEO_CURSOR_FILL_ALPHA = 0.2; // fill and stroke opacity of the cursor halves
 const VIDEO_CURSOR_REAR_DEPTH = 0.5; // rear corners behind as a fraction of the radius
 const VIDEO_CURSOR_WIDTH = 0.6; // arrowhead width as a fraction of the unthinned width
 const VIDEO_CURSOR_INSET = 0.25; // inset depth behind as a fraction of the radius
@@ -1028,23 +1029,21 @@ export class Editor {
       const geometry = this.getVideoCursorGeometry(sequence);
       if (!geometry) continue;
       this.drawMetres(() => {
-        const ctx = this.ctx;
         const vertices = this.videoCursorVertices(geometry);
-        ctx.fillStyle = VIDEO_CURSOR_FILL;
-        ctx.beginPath();
-        ctx.moveTo(vertices[0]!.x, -vertices[0]!.y);
-        for (const vertex of vertices.slice(1)) ctx.lineTo(vertex.x, -vertex.y);
-        ctx.closePath();
-        ctx.fill();
+        this.ctx.fillStyle = this.cursorStyle(sequence.traceColorL);
+        this.drawCursorHalf(vertices, 0, 1, 2, "fill");
+        this.ctx.fillStyle = this.cursorStyle(sequence.traceColorR);
+        this.drawCursorHalf(vertices, 0, 2, 3, "fill");
       });
     }
     this.drawSymmetricVideoCursor();
   }
 
   // The symmetric cursors mirror every drawn cursor through the rink center
-  // with the same shape as the original, closed with a 1.5px stroked line in
-  // the cursor fill color. The marks stay passive: hit testing and view
-  // tracking keep working on the real cursors only.
+  // with the same two-color half split, stroked along the outline edges in
+  // each foot trace color with the tip-to-inset centerline unstroked. The
+  // marks stay passive: hit testing and view tracking keep working on the
+  // real cursors only.
   private drawSymmetricVideoCursor() {
     if (!this.symmetric) return;
     const ctx = this.ctx;
@@ -1052,18 +1051,40 @@ export class Editor {
       const geometry = this.getVideoCursorGeometry(sequence);
       if (!geometry) continue;
       ctx.lineWidth = SYMMETRIC_VIDEO_CURSOR_LINE_WIDTH / this.view.zoom;
-      ctx.strokeStyle = VIDEO_CURSOR_FILL;
       this.drawMetres(() => {
         ctx.save();
         ctx.scale(-1, -1);
         const vertices = this.videoCursorVertices(geometry);
-        ctx.beginPath();
-        ctx.moveTo(vertices[0]!.x, -vertices[0]!.y);
-        for (const vertex of vertices.slice(1)) ctx.lineTo(vertex.x, -vertex.y);
-        ctx.closePath();
-        ctx.stroke();
+        ctx.strokeStyle = this.cursorStyle(sequence.traceColorL);
+        this.drawCursorHalf(vertices, 0, 1, 2, "stroke");
+        ctx.strokeStyle = this.cursorStyle(sequence.traceColorR);
+        this.drawCursorHalf(vertices, 0, 3, 2, "stroke");
         ctx.restore();
       });
+    }
+  }
+
+  // Fill or stroke style of a cursor half: the foot trace color at the cursor opacity.
+  private cursorStyle(color: string): string {
+    const [r, g, b] = parseHexColor(color);
+    return `rgba(${r}, ${g}, ${b}, ${VIDEO_CURSOR_FILL_ALPHA})`;
+  }
+
+  // One half of the cursor over the given vertex indices: the halves split
+  // along the tip-to-inset axis, so each side carries its foot trace color.
+  // A fill closes the half off; a stroke keeps only the two outline edges,
+  // so the shared tip-to-inset centerline stays unstroked.
+  private drawCursorHalf(vertices: Vector<2>[], first: number, second: number, third: number, mode: "fill" | "stroke") {
+    const ctx = this.ctx;
+    ctx.beginPath();
+    ctx.moveTo(vertices[first]!.x, -vertices[first]!.y);
+    ctx.lineTo(vertices[second]!.x, -vertices[second]!.y);
+    ctx.lineTo(vertices[third]!.x, -vertices[third]!.y);
+    if (mode === "fill") {
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      ctx.stroke();
     }
   }
 
