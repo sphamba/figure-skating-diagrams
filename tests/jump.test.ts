@@ -39,7 +39,7 @@ test("span scaling only moves the coordinates, the keyframe data stays unchanged
 	expect(scaled[3]!.data.contactPoint).toBe(1);
 	expect(scaled[3]!.data.toePick).toBe(true);
 	expect(scaled[4]!.data.position!.z).toBeCloseTo(0, 10);
-	expect(scaled[4]!.data.position!.y).toBeCloseTo(halfFeetSpacing, 10);
+	expect(scaled[4]!.data.position!.y).toBeUndefined();
 	expect(scaled[4]!.data.contactPoint).toBeCloseTo(0.5, 10);
 	expect(scaled[4]!.data.toePick).toBe(false);
 	// Only the 95% landing pick carries toePick true.
@@ -95,7 +95,7 @@ test("ToeLoop take-off foot: on ice at start, toe at 10%, airborne from 50%, pic
 	expect(right[4]!.coordinate).toBeCloseTo(end, 10);
 	expect(right[0]!.data.position!.z).toBeCloseTo(0, 10);
 	expect(right[0]!.data.contactPoint).toBeCloseTo(0.5, 10);
-	expect(right[0]!.data.position!.y).toBeCloseTo(halfFeetSpacing, 10);
+	expect(right[0]!.data.position!.y).toBeUndefined();
 	expect(right[1]!.data.contactPoint).toBe(1);
 	expect(right[2]!.data.position!.z).toBeCloseTo(offIceFootHeight, 10);
 	// The landing foot picks the toe at 95% before rolling to the full blade at 100%.
@@ -107,8 +107,8 @@ test("ToeLoop take-off foot: on ice at start, toe at 10%, airborne from 50%, pic
 	// ToeLoop lands on the same foot it took off from: back on ice at 100%, backward orientation,
 	// shifted outside from the centerline like every landing.
 	expect(right[4]!.data.position!.z).toBeCloseTo(0, 10);
-	expect(right[4]!.data.position!.x).toBeCloseTo(0, 10);
-	expect(right[4]!.data.position!.y).toBeCloseTo(halfFeetSpacing, 10);
+	expect(right[4]!.data.position!.x).toBeUndefined();
+	expect(right[4]!.data.position!.y).toBeUndefined();
 	expect(right[4]!.data.contactPoint).toBeCloseTo(0.5, 10);
 	expect(right[4]!.data.toePick).toBe(false);
 	// Only the 95% landing pick has toePick true.
@@ -126,8 +126,8 @@ test("Loop1 lands on its take-off foot like ToeLoop1", () => {
 	expect(right[3]!.data.contactPoint).toBe(1);
 	expect(right[3]!.data.toePick).toBe(true);
 	expect(right[4]!.data.position!.z).toBeCloseTo(0, 10);
-	expect(right[4]!.data.position!.x).toBeCloseTo(0, 10);
-	expect(right[4]!.data.position!.y).toBeCloseTo(halfFeetSpacing, 10);
+	expect(right[4]!.data.position!.x).toBeUndefined();
+	expect(right[4]!.data.position!.y).toBeUndefined();
 	expect(right[4]!.data.contactPoint).toBeCloseTo(0.5, 10);
 	expect(right[4]!.data.toePick).toBe(false);
 	// The left foot is the free leg and never lands for Loop1.
@@ -178,7 +178,7 @@ test("Salchow never picks a toe on its take-off foot and keeps the free foot off
 	expect(right[3]!.data.toePick).toBe(true);
 	// ... and is on ice at 100%, shifted outside from the centerline.
 	expect(right[4]!.data.position!.z).toBeCloseTo(0, 10);
-	expect(right[4]!.data.position!.y).toBeCloseTo(halfFeetSpacing, 10);
+	expect(right[4]!.data.position!.y).toBeUndefined();
 	// The left (take-off) foot stays off-ice at 95% and 100%.
 	expect(salchow.getLeftFootKeyframes()[3]!.data.position!.z).toBeCloseTo(offIceFootHeight, 10);
 	expect(salchow.getLeftFootKeyframes()[4]!.data.position!.z).toBeCloseTo(offIceFootHeight, 10);
@@ -195,8 +195,8 @@ test("Euler lands on the left foot on ice", () => {
 	expect(euler.getLeftFootKeyframes()[3]!.data.contactPoint).toBe(1);
 	expect(euler.getLeftFootKeyframes()[3]!.data.toePick).toBe(true);
 	expect(euler.getLeftFootKeyframes()[4]!.data.position!.z).toBeCloseTo(0, 10);
-	expect(euler.getLeftFootKeyframes()[4]!.data.position!.x).toBeCloseTo(0, 10);
-	expect(euler.getLeftFootKeyframes()[4]!.data.position!.y).toBeCloseTo(halfFeetSpacing, 10);
+	expect(euler.getLeftFootKeyframes()[4]!.data.position!.x).toBeUndefined();
+	expect(euler.getLeftFootKeyframes()[4]!.data.position!.y).toBeUndefined();
 	expect(euler.getLeftFootKeyframes()[4]!.data.contactPoint).toBeCloseTo(0.5, 10);
 	expect(euler.getRightFootKeyframes()[4]!.data.position!.z).toBeCloseTo(offIceFootHeight, 10);
 });
@@ -206,11 +206,11 @@ test("Axel entry flips the lateral side: forward take-off puts the take-off foot
 	// Axel takes off forward from the left foot: the take-off foot sits on the opposite side
 	// of the backward take-offs.
 	const left = axel.getLeftFootKeyframes();
-	expect(left[0]!.data.position!.y).toBeCloseTo(-halfFeetSpacing, 10);
+	expect(left[0]!.data.position!.y).toBeUndefined();
 	expect(left[0]!.data.position!.z).toBeCloseTo(0, 10);
 	// The free foot (right) sits on the opposite lateral side of the take-off foot.
 	const right = axel.getRightFootKeyframes();
-	expect(right[0]!.data.position!.y).toBeCloseTo(halfFeetSpacing, 10);
+	expect(right[0]!.data.position!.y).toBeUndefined();
 	expect(right[0]!.data.position!.z).toBeCloseTo(offIceFootHeight, 10);
 });
 
@@ -233,9 +233,15 @@ test("a left-handed jump mirrors the feet, the lateral shifts and the orientatio
 			const mirrored = mirroredKeyframes[index]!;
 			const ground = groundKeyframes[index]!;
 			expect(mirrored.coordinate).toBeCloseTo(ground.coordinate, 10);
-			expect(mirrored.data.position!.x).toBeCloseTo(ground.data.position!.x, 10);
-			expect(mirrored.data.position!.y).toBeCloseTo(-ground.data.position!.y, 10);
-			expect(mirrored.data.position!.z).toBeCloseTo(ground.data.position!.z, 10);
+			// Unset coordinates of partial positions stay unset.
+			expect(mirrored.data.position!.x).toEqual(ground.data.position!.x);
+			const y = ground.data.position!.y;
+			if (y === undefined) {
+				expect(mirrored.data.position!.y).toBeUndefined();
+			} else {
+				expect(mirrored.data.position!.y).toBeCloseTo(-y, 10);
+			}
+			expect(mirrored.data.position!.z).toEqual(ground.data.position!.z);
 			expect(mirrored.data.contactPoint).toBe(ground.data.contactPoint);
 			expect(mirrored.data.toePick).toBe(ground.data.toePick);
 			const mirroredOrientation = mirrored.data.orientation!;
@@ -250,7 +256,7 @@ test("a left-handed jump mirrors the feet, the lateral shifts and the orientatio
 	const takeOff = left.getLeftFootKeyframes();
 	expect(takeOff[3]!.data.position!.y).toBeCloseTo(-halfFeetSpacing, 10);
 	expect(takeOff[3]!.data.toePick).toBe(true);
-	expect(takeOff[4]!.data.position!.y).toBeCloseTo(-halfFeetSpacing, 10);
+	expect(takeOff[4]!.data.position!.y).toBeUndefined();
 	expect(takeOff[4]!.data.contactPoint).toBeCloseTo(0.5, 10);
 });
 

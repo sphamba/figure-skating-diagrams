@@ -2,6 +2,7 @@ import type { PathCoordinate } from "../coordinates.js";
 import type { FootKey } from "../sequence.js";
 import { EdgeTurn, turnSides, turnDirections, turnEdges } from "./oneFootTurn.js";
 import { FootKeyframe, type FootData } from "../keyframe.js";
+import { PartialVector } from "../vector.js";
 import { getQuaternionFromAngleAxis } from "../quaternion.js";
 import { Vector } from "../vector.js";
 import type { FootTurnFlags } from "./turn.js";
@@ -42,8 +43,10 @@ export abstract class Twizzle extends EdgeTurn {
         contactPoint = reverseEnd ? 1 - this.contactPointTurn : this.contactPointTurn;
       }
 
+      const edge = i === 0 || i === keyframeCount - 1;
       const keyframeData: FootData = {
-        position: new Vector<3>(0, 0, 0),
+        // Edge foot keys set only the contact height.
+        position: edge ? PartialVector.fromXYZ({ z: 0 }) : new Vector<3>(0, 0, 0),
         orientation: getQuaternionFromAngleAxis(angle),
         contactPoint: contactPoint,
         toePick: false,

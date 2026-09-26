@@ -172,8 +172,9 @@ test("A turn gives keyframes to the on-ice foot, the free foot and the hips", ()
   expect(free).toHaveLength(2);
   expect(free[0]!.coordinate).toBe(start);
   expect(free[1]!.coordinate).toBe(end);
-  expect(free[0]!.data.position!.x).toBe(0);
-  expect(free[0]!.data.position!.y).toBeCloseTo(-0.15, 5);
+  // Edge foot keys set only the height.
+  expect(free[0]!.data.position!.x).toBeUndefined();
+  expect(free[0]!.data.position!.y).toBeUndefined();
   expect(free[0]!.data.position!.z).toBeCloseTo(0.2, 5);
   expect(free[0]!.data.contactPoint).toBe(0.5);
   expect(turn.getHipsKeyframes().length).toBe(3);
@@ -184,10 +185,11 @@ test("The on-ice foot has no shift relative to the centerline at both ends", () 
   const loop = new LeftForwardInsideLoop("footL", 0.25 as PathCoordinate, 0.75 as PathCoordinate);
   for (const element of [turn, loop]) {
     const keyframes = element.getLeftFootKeyframes();
-    const first = keyframes[0]!.data.position!;
-    const last = keyframes[2]!.data.position!;
-    expect(first.y).toBe(0);
-    expect(last.y).toBe(0);
+    // Edge foot keys set only the height, so y is unset at both ends.
+    expect(keyframes[0]!.data.position!.y).toBeUndefined();
+    expect(keyframes[0]!.data.position!.z).toBe(0);
+    expect(keyframes[2]!.data.position!.y).toBeUndefined();
+    expect(keyframes[2]!.data.position!.z).toBe(0);
   }
 });
 

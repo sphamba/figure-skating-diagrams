@@ -72,8 +72,14 @@ test("A 1/2-turn twizzle has the same on-ice foot keyframes as a three-turn", ()
   expect(twizzleKeyframes).toHaveLength(3);
   for (let i = 0; i < 3; i++) {
     expect(twizzleKeyframes[i]!.coordinate).toBe([start, middle, end][i]);
-    expect(twizzleKeyframes[i]!.data.position!.x).toBe(0);
-    expect(twizzleKeyframes[i]!.data.position!.y).toBe(0);
+    // Edge foot keys set only the height.
+    if (i === 1) {
+      expect(twizzleKeyframes[i]!.data.position!.x).toBe(0);
+      expect(twizzleKeyframes[i]!.data.position!.y).toBe(0);
+    } else {
+      expect(twizzleKeyframes[i]!.data.position!.x).toBeUndefined();
+      expect(twizzleKeyframes[i]!.data.position!.y).toBeUndefined();
+    }
     expect(twizzleKeyframes[i]!.data.position!.z).toBe(0);
     expect(twizzleKeyframes[i]!.data.orientation!.real).toBeCloseTo(threeTurnKeyframes[i]!.data.orientation!.real, 10);
     expect(twizzleKeyframes[i]!.data.orientation!.vector.z).toBeCloseTo(

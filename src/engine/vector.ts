@@ -153,6 +153,21 @@ export class PartialVector<Size extends number = 3> {
     this.data[index] = value;
   }
 
+  get x(): number | undefined {
+    return this.data[0];
+  }
+
+  get y(): number | undefined {
+    return this.data[1];
+  }
+
+  get z(): number | undefined {
+    if (this.size < 3) {
+      throw new Error(`Cannot get z component of partial vector of size ${this.size}`);
+    }
+    return this.data[2];
+  }
+
   has(index: number): boolean {
     return this.data[index] !== undefined;
   }

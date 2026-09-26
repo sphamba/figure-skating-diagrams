@@ -3,6 +3,7 @@ import { Element } from "./element.js";
 import { type FootData, FootKeyframe, HipsKeyframe } from "../keyframe.js";
 import { offIceFootHeight } from "./glide.js";
 import { bladeLength } from "../constants.js";
+import { PartialVector } from "../vector.js";
 import { getQuaternionFromAngleAxis } from "../quaternion.js";
 import { Vector } from "../vector.js";
 import type { Quaternion } from "../quaternion.js";
@@ -167,7 +168,7 @@ export abstract class Spin extends Element {
     const onIce = footKey === this.onIceFoot;
     if (!onIce) {
       const restData: FootData = {
-        position: new Vector<3>(0, 0, offIceFootHeight),
+        position: PartialVector.fromXYZ({ z: offIceFootHeight }),
         orientation: getQuaternionFromAngleAxis(Math.PI),
         contactPoint: 0.5,
         toePick: false,
@@ -180,7 +181,7 @@ export abstract class Spin extends Element {
     }
     const orientation = this.onIceOrientation;
     const restData: FootData = {
-      position: new Vector<3>(0, 0, 0),
+      position: PartialVector.fromXYZ({ z: 0 }),
       orientation,
       contactPoint: 0.5,
       toePick: false,
@@ -188,6 +189,8 @@ export abstract class Spin extends Element {
     };
     const spinData: FootData = {
       ...restData,
+      // The middle keeps the full pose.
+      position: new Vector<3>(0, 0, 0),
       spinShift: this.shiftSign * halfBladeLength * scale,
       spins: (this.rightHanded ? 1 : -1) * this.spinRevolutions,
     };

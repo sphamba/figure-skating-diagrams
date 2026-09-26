@@ -2,6 +2,7 @@ import type { PathCoordinate } from "../coordinates.js";
 import { Element } from "./element.js";
 import { type FootData, FootKeyframe, HipsKeyframe } from "../keyframe.js";
 import { offIceFootHeight, halfFeetSpacing } from "./glide.js";
+import { PartialVector } from "../vector.js";
 import { getQuaternionFromAngleAxis } from "../quaternion.js";
 import { Vector } from "../vector.js";
 
@@ -102,15 +103,22 @@ export abstract class Jump extends Element {
     };
 
     let takeOffKeyframes: FootKeyframe[];
+    // Edge foot keys of an element set only the height of the position, so
+    // strokes and glides keep placing the lateral poses.
+    const edgeFootData = (source: FootData): FootData => ({
+      ...source,
+      position: PartialVector.fromXYZ({ z: (source.position as Vector<3>).z }),
+    });
     if (takeOff) {
       const endData = this.landFoot === this.takeOffFoot ? landedData : restDataOffIce;
+      const startData: FootData = {
+        position: new Vector<3>(0, -travelSign * spacing, 0),
+        orientation: getQuaternionFromAngleAxis(takeOffAngle),
+        contactPoint: 0.5,
+        toePick: false,
+      };
       takeOffKeyframes = [
-        new FootKeyframe(start, {
-          position: new Vector<3>(0, -travelSign * spacing, 0),
-          orientation: getQuaternionFromAngleAxis(takeOffAngle),
-          contactPoint: 0.5,
-          toePick: false,
-        }),
+        new FootKeyframe(start, edgeFootData(startData)),
         new FootKeyframe(atTakeOff, {
           position: new Vector<3>(-spacing, -travelSign * spacing, 0),
           orientation: getQuaternionFromAngleAxis(takeOffAngle + Math.PI / 4),
@@ -124,7 +132,7 @@ export abstract class Jump extends Element {
           toePick: false,
         }),
         new FootKeyframe(atLanding, this.landFoot === this.takeOffFoot ? landedPickData : restDataOffIce),
-        new FootKeyframe(end, endData),
+        new FootKeyframe(end, edgeFootData(endData)),
       ];
     } else {
       const restData: FootData = {
@@ -139,19 +147,25 @@ export abstract class Jump extends Element {
         contactPoint: 1,
         toePick: true,
       };
+      const lastData = this.landFoot === footKey ? landedData : restData;
       takeOffKeyframes = [
-        new FootKeyframe(start, restData),
+        new FootKeyframe(start, edgeFootData(restData)),
         new FootKeyframe(atTakeOff, this.config.toePick ? pickedData : restData),
         new FootKeyframe(atMiddle, restData),
         new FootKeyframe(atLanding, this.landFoot === footKey ? landedPickData : restData),
-        new FootKeyframe(end, this.landFoot === footKey ? landedData : restData),
+        new FootKeyframe(end, edgeFootData(lastData)),
       ];
     }
     if (!this.leftHanded) return takeOffKeyframes;
     return takeOffKeyframes.map((keyframe) => {
-      // The positions above use complete vectors.
-      const position = (keyframe.data.position as Vector<3>).copy();
-      position.y = -position.y;
+      // The mirror flips the y coordinate of complete and partial positions.
+      const source = keyframe.data.position!;
+      const y = source instanceof PartialVector ? source.get(1) : source.y;
+      const position =
+        source instanceof PartialVector
+          ? new PartialVector<3>(source.get(0), y === undefined ? undefined : -y, source.get(2))
+          : ((source as Vector<3>).copy() as Vector<3>);
+      if (position instanceof Vector) position.y = -position.y;
       return new FootKeyframe(keyframe.coordinate, {
         position,
         orientation: keyframe.data.orientation!.copy().conjugate(),

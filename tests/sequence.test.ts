@@ -138,7 +138,13 @@ test("replaceElement swaps an element in place and rebuilds its keyframes", () =
   const turn = new LeftForwardOutsideThreeTurn("footL", start, end, true, true);
   sequence.addElement(turn);
 
-  expect(sequence.keyframes.footL.every((kf) => kf.data.position!.y === 0)).toBe(true);
+  // Edge foot keys set only the height, so y is either 0 or unset.
+  expect(
+    sequence.keyframes.footL.every((kf) => {
+      const y = kf.data.position!.y;
+      return y === undefined || y === 0;
+    }),
+  ).toBe(true);
 
   const loop = new LeftForwardOutsideLoop("footL", start, end, true, true);
   sequence.replaceElement(turn, loop);

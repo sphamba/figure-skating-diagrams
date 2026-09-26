@@ -2,6 +2,7 @@ import type { PathCoordinate } from "../coordinates.js";
 import { halfFeetSpacing, offIceFootHeight } from "./glide.js";
 import { turnDirections, turnSides } from "./oneFootTurn.js";
 import { FootKeyframe, type FootData, HipsKeyframe } from "../keyframe.js";
+import { PartialVector } from "../vector.js";
 import { getQuaternionFromAngleAxis } from "../quaternion.js";
 import { Vector } from "../vector.js";
 import { FootTurn } from "./turn.js";
@@ -16,6 +17,15 @@ export const turnOpenness = [
 
 export abstract class TwoFeetTurn extends FootTurn {
   readonly closed: boolean;
+
+  // Edge foot keys of an element set only the height of the position, so
+  // strokes and glides keep placing the lateral poses.
+  private edgeFootData(source: FootData): FootData {
+    return {
+      ...source,
+      position: PartialVector.fromXYZ({ z: (source.position as Vector<3>).z }),
+    };
+  }
 
   constructor(footKey: FootKey, flags: TwoFeetTurnFlags, start: PathCoordinate, end: PathCoordinate) {
     super(footKey, { left: flags.left, forward: flags.forward, inside: false }, start, end);
@@ -96,7 +106,8 @@ export abstract class TwoFeetTurn extends FootTurn {
       toePick: false,
     };
     const coordinates = [start, middle, end];
-    const data = [onIceData, midData, freeFootData];
+    // Edge foot keys set only the contact height.
+    const data = [this.edgeFootData(onIceData), midData, this.edgeFootData(freeFootData)];
     return coordinates.map((coordinate, index) => {
       return new FootKeyframe(
         coordinate,
@@ -133,7 +144,8 @@ export abstract class TwoFeetTurn extends FootTurn {
       toePick: false,
     };
     const coordinates = [start, middle, end];
-    const data = [freeFootData, midData, onIceData];
+    // Edge foot keys set only the contact height.
+    const data = [this.edgeFootData(freeFootData), midData, this.edgeFootData(onIceData)];
     return coordinates.map((coordinate, index) => {
       return new FootKeyframe(
         coordinate,

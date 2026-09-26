@@ -85,8 +85,14 @@ test("a right-handed left-foot inside spin shifts the on-ice foot to +y and sets
 	expect(left[2].coordinate).toBe(end);
 	for (const index of [0, 1, 2]) {
 		const kf = left[index];
-		expect(kf.data.position!.x).toBe(0);
-		expect(kf.data.position!.y).toBe(0);
+		// Edge foot keys set only the height.
+		if (index === 1) {
+			expect(kf.data.position!.x).toBe(0);
+			expect(kf.data.position!.y).toBe(0);
+		} else {
+			expect(kf.data.position!.x).toBeUndefined();
+			expect(kf.data.position!.y).toBeUndefined();
+		}
 		expect(kf.data.position!.z).toBe(0);
 	}
 	expect(kfSpins(left[1])).toBe(1);
@@ -97,8 +103,8 @@ test("a right-handed left-foot inside spin shifts the on-ice foot to +y and sets
 	const right = instance.getRightFootKeyframes();
 	expect(right).toHaveLength(2);
 	expect(kfSpins(right[0])).toBe(0);
-	expect(right[0].data.position!.x).toBe(0);
-	expect(right[0].data.position!.y).toBe(0);
+	expect(right[0].data.position!.x).toBeUndefined();
+	expect(right[0].data.position!.y).toBeUndefined();
 	expect(right[0].data.position!.z).toBeCloseTo(offIceFootHeight, 10);
 });
 

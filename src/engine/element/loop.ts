@@ -1,6 +1,7 @@
 import { bladeLength } from "../constants.js";
 import type { PathCoordinate } from "../coordinates.js";
 import { FootKeyframe, type FootData } from "../keyframe.js";
+import { PartialVector } from "../vector.js";
 import { getQuaternionFromAngleAxis } from "../quaternion.js";
 import { Vector } from "../vector.js";
 import { defineOneFootTurnKinds, OneFootTurn } from "./oneFootTurn.js";
@@ -35,10 +36,11 @@ export abstract class Loop extends OneFootTurn {
       (pathCoordinateShift) => (pathCoordinate + pathCoordinateShift) as PathCoordinate,
     );
     const contactPoints = [0.5, this.contactPointTurn, 0.5];
+    // Edge foot keys set only the contact height.
     const positions = [
-      new Vector<3>(0, 0, 0),
+      PartialVector.fromXYZ({ z: 0 }),
       new Vector<3>((0.5 - this.contactPointTurn) * bladeLength, lateralShift, 0),
-      new Vector<3>(0, 0, 0),
+      PartialVector.fromXYZ({ z: 0 }),
     ];
 
     const keyframes: FootKeyframe[] = [];

@@ -1,6 +1,7 @@
 import type { PathCoordinate } from "../coordinates.js";
-import { halfFeetSpacing, offIceFootHeight } from "./glide.js";
+import { offIceFootHeight } from "./glide.js";
 import { type FootData, FootKeyframe, HipsKeyframe } from "../keyframe.js";
+import { PartialVector } from "../vector.js";
 import { getQuaternionFromAngleAxis } from "../quaternion.js";
 import { Vector } from "../vector.js";
 import { FootTurn, type FootTurnFlags } from "./turn.js";
@@ -51,11 +52,15 @@ export abstract class OneFootTurn extends FootTurn {
       : this.createFreeFootKeyframes(start, end, lateralScale);
   }
 
-  protected createFreeFootKeyframes(start: PathCoordinate, end: PathCoordinate, lateralScale?: number): FootKeyframe[] {
-    const scale = lateralScale ?? 1;
-    const side = (this.footKey === "footL" ? -halfFeetSpacing : halfFeetSpacing) * scale;
+  protected createFreeFootKeyframes(
+    start: PathCoordinate,
+    end: PathCoordinate,
+    _lateralScale?: number,
+  ): FootKeyframe[] {
+    // Edge foot keys set only the height: the lateral pose comes from the
+    // interpolation of the neighboring keys.
     const data: FootData = {
-      position: new Vector<3>(0, side, offIceFootHeight),
+      position: PartialVector.fromXYZ({ z: offIceFootHeight }),
       orientation: getQuaternionFromAngleAxis(this.forward ? 0 : Math.PI),
       contactPoint: 0.5,
       toePick: false,
@@ -139,7 +144,8 @@ export abstract class EdgeTurn extends OneFootTurn {
       const contactPoint = i == 1 ? this.contactPointTurn : 0.5;
 
       const keyframeData = {
-        position: new Vector<3>(0, 0, 0),
+        // Edge foot keys set only the contact height.
+        position: i === 1 ? new Vector<3>(0, 0, 0) : PartialVector.fromXYZ({ z: 0 }),
         orientation: getQuaternionFromAngleAxis(angle),
         contactPoint: contactPoint,
         toePick: false,

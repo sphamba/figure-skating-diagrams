@@ -24,7 +24,7 @@ export const PILL_SIZE_FACTOR = 1.2;
 // Scale and screen padding of the smaller-font labels, e.g. the timing labels:
 // the pill hugs the smaller text, including the circle labels.
 export const PILL_SIZE_FACTOR_SMALL = 1.1;
-export const PILL_PADDING_SMALL = 3; // px
+export const PILL_PADDING_SMALL = 4; // px
 // Minimum background radius of a circle label.
 export const CIRCLE_LABEL_MIN_RADIUS = 6; // px
 // Extra collision radius beyond the background, screen px, so labels keep a

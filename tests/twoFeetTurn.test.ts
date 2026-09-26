@@ -76,11 +76,14 @@ test("A left forward open mohawk places both feet on the path line at the midpoi
   expect(footA[2]!.coordinate).toBe(end);
 
   // Start: foot A on ice, foot B off ice
+  // Edge foot keys set only the height.
   const onIce = footA[0]!.data.position!;
-  expect(onIce.x).toBe(0);
-  expect(onIce.y).toBe(0);
+  expect(onIce.x).toBeUndefined();
+  expect(onIce.y).toBeUndefined();
   expect(onIce.z).toBe(0);
   const freeFoot = footB[0]!.data.position!;
+  expect(freeFoot.x).toBeUndefined();
+  expect(freeFoot.y).toBeUndefined();
   expect(freeFoot.z).toBeCloseTo(offIceFootHeight, 5);
   expect(footB[0]!.data.orientation!.angle).toBeCloseTo(0, 10);
 
@@ -98,9 +101,10 @@ test("A left forward open mohawk places both feet on the path line at the midpoi
 
   // End: foot A off ice, foot B on ice pointing backward
   expect(footA[2]!.data.position!.z).toBeCloseTo(offIceFootHeight, 5);
+  // Edge foot keys set only the height.
   const footBEnd = footB[2]!.data.position!;
-  expect(footBEnd.x).toBe(0);
-  expect(footBEnd.y).toBe(0);
+  expect(footBEnd.x).toBeUndefined();
+  expect(footBEnd.y).toBeUndefined();
   expect(footBEnd.z).toBe(0);
   expect(footB[2]!.data.orientation!.angle).toBeCloseTo(Math.PI, 10);
 
