@@ -7,16 +7,20 @@ import {
   ACTION_BUTTON_RADIUS,
   ACTION_BUTTON_WEIGHT,
   buttonDiscColor,
+  CIRCLE_LABEL_MIN_RADIUS,
   CogButtonLabel,
   LABEL_ANCHOR_LIMIT,
   LABEL_COLLISION_PADDING,
+  LABEL_FONT_SIZE_SMALL,
   LabelLayer,
   MinusButtonLabel,
   PILL_BACKDROP_PADDING,
   PILL_COLOR,
   PILL_CONNECTOR_BASE,
   PILL_PADDING,
+  PILL_PADDING_SMALL,
   PILL_SIZE_FACTOR,
+  PILL_SIZE_FACTOR_SMALL,
   PillLabel,
   PlusButtonLabel,
   WhiteCircleLabel,
@@ -342,13 +346,62 @@ describe("CanvasLabel collision", () => {
     expect(second.y).toBeCloseTo(0, 9);
   });
 
-  test("WhiteCircleLabel degenerates to a full disc in its collision shape", () => {
-    const label = new WhiteCircleLabel("a", new Vector(0, 0), new Vector(0, 1), ZOOM);
+  test("a smaller-font pill grows by the small scale and padding", () => {
+    const label = new PillLabel("a", new Vector(0, 0), null, ZOOM, {
+      fontSizePx: LABEL_FONT_SIZE_SMALL,
+    });
     label.measure(stubCtx());
-    const pad = (2 * CANVAS_SCALE) / ZOOM;
-    const radius = Math.max(Math.hypot(40, 10) / 2 + pad, (10 * CANVAS_SCALE) / ZOOM);
+    const capsule = label.getCollisionCapsule();
+    const pad = (PILL_PADDING_SMALL * CANVAS_SCALE) / ZOOM;
+    const halfA = 20 * PILL_SIZE_FACTOR_SMALL + pad;
+    const halfB = 5 * PILL_SIZE_FACTOR_SMALL + pad;
+    expect(capsule.radius).toBeCloseTo(halfB + (LABEL_COLLISION_PADDING * CANVAS_SCALE) / ZOOM, 9);
+    expect(capsule.x0).toBeCloseTo(-(halfA - halfB), 9);
+    expect(capsule.x1).toBeCloseTo(halfA - halfB, 9);
+  });
+
+  test("WhiteCircleLabel degenerates to a full disc in its collision shape", () => {
+    const label = new WhiteCircleLabel("a", new Vector(0, 0), new Vector(0, 1), ZOOM, {
+      fontSizePx: LABEL_FONT_SIZE_SMALL,
+    });
+    label.measure(stubCtx());
+    const pad = (PILL_PADDING_SMALL * CANVAS_SCALE) / ZOOM;
+    const radius = Math.max(
+      (Math.hypot(40, 10) / 2) * PILL_SIZE_FACTOR_SMALL + pad,
+      (CIRCLE_LABEL_MIN_RADIUS * CANVAS_SCALE) / ZOOM,
+    );
     const capsule = label.getCollisionCapsule();
     expect(capsule.radius).toBeCloseTo(radius + (LABEL_COLLISION_PADDING * CANVAS_SCALE) / ZOOM, 9);
+    expect(capsule.x0).toBeCloseTo(capsule.x1, 9);
+  });
+
+  test("a narrow-number circle label keeps one radius, so the backdrop stays a circle", () => {
+    // The digit 1 measures much wider than tall would be an oval: the extent
+    // must come from one radius, not the per-axis pill extents.
+    const tracked = stubCtx() as unknown as CanvasRenderingContext2DSized & Record<string, unknown>;
+    tracked.measureText = (text: string) =>
+      text === ""
+        ? { width: 0, actualBoundingBoxAscent: 0, actualBoundingBoxDescent: 0 }
+        : { width: 4, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 2 };
+    const radii: number[] = [];
+    const previousArc = tracked.arc as unknown as (...args: number[]) => void;
+    tracked.arc = (...args: number[]) => {
+      radii.push(args[2]);
+      previousArc?.(...args);
+    };
+
+    const label = new WhiteCircleLabel("1", new Vector(0, 0), new Vector(0, 1), ZOOM, {
+      fontSizePx: LABEL_FONT_SIZE_SMALL,
+    });
+    label.measure(tracked);
+    label.draw(tracked);
+
+    // One radius from the text diagonal: neither the per-axis width nor height.
+    const expected = (Math.hypot(4, 10) / 2) * PILL_SIZE_FACTOR_SMALL + (PILL_PADDING_SMALL * CANVAS_SCALE) / ZOOM;
+    expect(radii[0]).toBeCloseTo(expected, 9);
+    const capsule = label.getCollisionCapsule();
+    expect(capsule.radius).toBeCloseTo(expected + (LABEL_COLLISION_PADDING * CANVAS_SCALE) / ZOOM, 9);
+    // Zero straight segment: the background half extents stay equal, a disc.
     expect(capsule.x0).toBeCloseTo(capsule.x1, 9);
   });
 });

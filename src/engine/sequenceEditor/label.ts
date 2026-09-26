@@ -21,10 +21,12 @@ export const PILL_BACKDROP_PADDING = 1; // px
 export const PILL_CONNECTOR_BASE = 8; // px
 // Pill backgrounds are 20% larger than the text.
 export const PILL_SIZE_FACTOR = 1.2;
-// Screen padding between the text and a circle background.
-const CIRCLE_LABEL_PADDING = 2; // px
+// Scale and screen padding of the smaller-font labels, e.g. the timing labels:
+// the pill hugs the smaller text, including the circle labels.
+export const PILL_SIZE_FACTOR_SMALL = 1.1;
+export const PILL_PADDING_SMALL = 3; // px
 // Minimum background radius of a circle label.
-const CIRCLE_LABEL_MIN_RADIUS = 10; // px
+export const CIRCLE_LABEL_MIN_RADIUS = 6; // px
 // Extra collision radius beyond the background, screen px, so labels keep a
 // small gap when resolved.
 export const LABEL_COLLISION_PADDING = 5; // px
@@ -127,6 +129,9 @@ export abstract class CanvasLabel {
   // and under the pill foreground.
   protected readonly connector: boolean;
   protected readonly rotation: number;
+  // Screen padding of the pill background, from the font size.
+  protected readonly pillScaleFactor: number;
+  protected readonly pillPaddingPx: number;
   // Home position (supposed location) and resolved position, canvas units.
   protected homeX = 0;
   protected homeY = 0;
@@ -151,6 +156,11 @@ export abstract class CanvasLabel {
     this.connector = options.connector ?? false;
     this.rotation = options.rotation ?? 0;
     this.backgroundAlpha = options.backgroundAlpha ?? PILL_OPACITY;
+    // The smaller-font labels, including the circle labels, grow their pill by
+    // the small scale and padding instead of the full-size ones.
+    const smallFont = this.fontSizePx === LABEL_FONT_SIZE_SMALL;
+    this.pillScaleFactor = smallFont ? PILL_SIZE_FACTOR_SMALL : PILL_SIZE_FACTOR;
+    this.pillPaddingPx = smallFont ? PILL_PADDING_SMALL : PILL_PADDING;
     this.zoom = zoom;
     this.anchorX = point.x * CANVAS_SCALE;
     this.anchorY = -point.y * CANVAS_SCALE;
@@ -189,12 +199,12 @@ export abstract class CanvasLabel {
   // Half extents of the background in canvas units, for positioning and collision.
   protected abstract computeExtents(): { a: number; b: number };
 
-  // Half extents of a pill background, 20% larger than the text plus padding.
+  // Half extents of a pill background: the text grown by the scale, plus padding.
   protected pillExtents(): { a: number; b: number } {
-    const pad = backgroundPadding(this.zoom, PILL_PADDING);
+    const pad = backgroundPadding(this.zoom, this.pillPaddingPx);
     return {
-      a: (this.textWidth / 2) * PILL_SIZE_FACTOR + pad,
-      b: (this.textHeight / 2) * PILL_SIZE_FACTOR + pad,
+      a: (this.textWidth / 2) * this.pillScaleFactor + pad,
+      b: (this.textHeight / 2) * this.pillScaleFactor + pad,
     };
   }
 
@@ -480,9 +490,11 @@ export class WhitePillLabel extends CanvasLabel {
 // White circle background, as used by timing beat labels.
 export class WhiteCircleLabel extends CanvasLabel {
   protected computeExtents(): { a: number; b: number } {
-    const pad = backgroundPadding(this.zoom, CIRCLE_LABEL_PADDING);
+    // One radius from the text diagonal, not the per-axis pill extents, so a
+    // narrow number keeps a circle instead of an oval.
+    const pad = backgroundPadding(this.zoom, this.pillPaddingPx);
     const radius = Math.max(
-      Math.hypot(this.textWidth, this.textHeight) / 2 + pad,
+      (Math.hypot(this.textWidth, this.textHeight) / 2) * this.pillScaleFactor + pad,
       (CIRCLE_LABEL_MIN_RADIUS * CANVAS_SCALE) / this.zoom,
     );
     return { a: radius, b: radius };
