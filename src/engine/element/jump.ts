@@ -149,7 +149,8 @@ export abstract class Jump extends Element {
     }
     if (!this.leftHanded) return takeOffKeyframes;
     return takeOffKeyframes.map((keyframe) => {
-      const position = keyframe.data.position!.copy();
+      // The positions above use complete vectors.
+      const position = (keyframe.data.position as Vector<3>).copy();
       position.y = -position.y;
       return new FootKeyframe(keyframe.coordinate, {
         position,
@@ -208,7 +209,7 @@ export abstract class Jump extends Element {
     return keyframes.map(
       (keyframe) =>
         new HipsKeyframe(keyframe.coordinate, {
-          position: keyframe.data.position!.copy(),
+          position: (keyframe.data.position as Vector<3>).copy(),
           orientation: keyframe.data.orientation!.copy().conjugate(),
         }),
     );

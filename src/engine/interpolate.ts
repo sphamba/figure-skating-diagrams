@@ -1,7 +1,10 @@
 import { Vector } from "./vector.js";
+import type { PartialVector } from "./vector.js";
 import { Quaternion } from "./quaternion.js";
 
-export type Interpolable = number | Vector<number> | Quaternion;
+// PartialVector is part of keyframe data only: the engine interpolates
+// single coordinates of it, never whole instances.
+export type Interpolable = number | Vector<number> | Quaternion | PartialVector<number>;
 
 export function interpolate(a: number, b: number, s: number): number;
 export function interpolate(a: Vector<number>, b: Vector<number>, s: number): Vector<number>;

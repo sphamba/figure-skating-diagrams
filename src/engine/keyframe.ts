@@ -1,7 +1,7 @@
 import type { Interpolable } from "./interpolate.js";
 import type { PathCoordinate, Time } from "./coordinates.js";
 import { Quaternion } from "./quaternion.js";
-import { Vector } from "./vector.js";
+import { PartialVector, Vector } from "./vector.js";
 
 export type Transition = "linear" | "smooth";
 type KeyframeData = { [key: string]: Interpolable | boolean };
@@ -11,7 +11,7 @@ export type TimeData = {
 };
 
 export type PositionAndOrientation3D = {
-  position?: Vector<3>;
+  position?: Vector<3> | PartialVector<3>;
   orientation?: Quaternion;
 };
 
@@ -29,12 +29,28 @@ interface QuaternionJSON {
   real: number;
   vector: VectorJSON;
 }
+// Unset coordinates serialize as null, so a vector with every coordinate set is
+// tellable from a partial one.
+interface PartialVectorJSON {
+  data: Array<number | null>;
+}
+type PositionJSON = VectorJSON | PartialVectorJSON;
+
+// Full and partial positions share one parse: every coordinate set gives a
+// Vector, a null coordinate gives a PartialVector. Unset coordinates of a
+// partial vector keep the array length, so trailing coordinates stay unset.
+function parsePositionJSON(json: PositionJSON): Vector<3> | PartialVector<3> {
+  if (json.data.every((value) => value !== null)) {
+    return new Vector<3>(...(json.data as number[]));
+  }
+  return new PartialVector<3>(...json.data.map((value) => (value === null ? undefined : value)));
+}
 
 export interface FootKeyframeJSON {
   kind: "FootKeyframe";
   coordinate: PathCoordinate;
   data: {
-    position?: VectorJSON;
+    position?: PositionJSON;
     orientation?: QuaternionJSON;
     contactPoint?: number;
     toePick?: boolean;
@@ -48,7 +64,7 @@ export interface FootKeyframeJSON {
 export interface HipsKeyframeJSON {
   kind: "HipsKeyframe";
   coordinate: PathCoordinate;
-  data: { position?: VectorJSON; orientation?: QuaternionJSON };
+  data: { position?: PositionJSON; orientation?: QuaternionJSON };
   transitionIn: Transition;
   transitionOut: Transition;
 }
@@ -110,11 +126,12 @@ export class FootKeyframe extends Keyframe<FootData, PathCoordinate> {
 
   static fromJSON(json: FootKeyframeJSON): FootKeyframe {
     const data: FootData = {};
-    if (json.data?.position) data.position = Vector.fromJSON(json.data.position) as Vector<3>;
+    if (json.data?.position) data.position = parsePositionJSON(json.data.position);
     if (json.data?.orientation) data.orientation = Quaternion.fromJSON(json.data.orientation);
     if (json.data?.contactPoint !== undefined) data.contactPoint = json.data.contactPoint;
     data.toePick = json.data?.toePick ?? false;
-    data.spins = 0;
+    if (json.data?.spins !== undefined) data.spins = json.data.spins;
+    if (json.data?.spinShift !== undefined) data.spinShift = json.data.spinShift;
     return new FootKeyframe(json.coordinate as PathCoordinate, data, json.transitionIn, json.transitionOut);
   }
 }
@@ -135,7 +152,7 @@ export class HipsKeyframe extends Keyframe<PositionAndOrientation3D, PathCoordin
 
   static fromJSON(json: HipsKeyframeJSON): HipsKeyframe {
     const data: PositionAndOrientation3D = {};
-    if (json.data?.position) data.position = Vector.fromJSON(json.data.position) as Vector<3>;
+    if (json.data?.position) data.position = parsePositionJSON(json.data.position);
     if (json.data?.orientation) data.orientation = Quaternion.fromJSON(json.data.orientation);
     return new HipsKeyframe(json.coordinate as PathCoordinate, data, json.transitionIn, json.transitionOut);
   }

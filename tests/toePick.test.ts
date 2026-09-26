@@ -6,6 +6,9 @@ import { Sequence, traceWidth, markSize } from "../src/engine/sequence";
 import type { PathCoordinate } from "../src/engine/coordinates";
 import type { CanvasRenderingContext2DSized } from "../src/engine/rinkCanvas";
 import { Vector } from "../src/engine/vector";
+import { PartialVector } from "../src/engine/vector";
+import { FootKeyframe } from "../src/engine/keyframe";
+import { getQuaternionFromAngleAxis } from "../src/engine/quaternion";
 import { jumpConstructorsByType, Jump } from "../src/engine/element/jump";
 import { bladeLength, maxBladeLength } from "../src/engine/constants";
 
@@ -135,12 +138,43 @@ test("cross size keeps the minimum mark size and freezes with the blade scaling"
 test("mark line thickness follows the trace thickness with the minimum clamp", () => {
   const sequence = toeLoopSequence();
   const clamped = makeCtx();
-  sequence.drawFootTrace(
-    clamped.ctx,
-    "footR",
-    0 as PathCoordinate,
-    sequence.path.length as PathCoordinate,
-    0.01,
-  );
+  sequence.drawFootTrace(clamped.ctx, "footR", 0 as PathCoordinate, sequence.path.length as PathCoordinate, 0.01);
   expect(clamped.ctx.lineWidth).toBeCloseTo(Math.max(traceWidth, 0.01), 10);
+});
+
+test("a partial position of a toe-pick keyframe completes from the interpolated position", () => {
+  const path = new Path();
+  path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(5 / 3, 0), new Vector(10 / 3, 0), new Vector(5, 0)));
+  const sequence = new Sequence(path);
+  sequence.keyframes.footL.push(
+    new FootKeyframe(0 as PathCoordinate, {
+      position: new Vector<3>(0, 1, 0),
+      orientation: getQuaternionFromAngleAxis(Math.PI),
+      contactPoint: 1,
+      toePick: false,
+    }),
+    new FootKeyframe(1 as PathCoordinate, {
+      // Only z is set: x and y of the mark come from the interpolated position.
+      position: PartialVector.fromXYZ({ z: 0 }),
+      orientation: getQuaternionFromAngleAxis(Math.PI),
+      contactPoint: 1,
+      toePick: true,
+    }),
+    new FootKeyframe(2 as PathCoordinate, {
+      position: new Vector<3>(0, 1, 0),
+      orientation: getQuaternionFromAngleAxis(Math.PI),
+      contactPoint: 1,
+      toePick: false,
+    }),
+  );
+  const { ctx, strokes } = makeCtx();
+  sequence.drawFootTrace(ctx, "footL", 0 as PathCoordinate, sequence.path.length as PathCoordinate);
+  const marks = strokes.slice(-2);
+  expect(marks).toHaveLength(2);
+  // The cross center of the first mark stroke, so the half diagonal cancels.
+  const [a, b] = marks[0] as unknown as [{ x: number; y: number }, { x: number; y: number }];
+  const center = { x: (a.x + b.x) / 2, y: -((a.y + b.y) / 2) };
+  const relativeX = (1 - 0.5) * bladeLength;
+  expect(center.x).toBeCloseTo((1 as number) - relativeX, 10);
+  expect(center.y).toBeCloseTo(-1, 10);
 });

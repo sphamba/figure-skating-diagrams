@@ -115,7 +115,7 @@ export abstract class Spin extends Element {
     return keyframes.map(
       (keyframe) =>
         new HipsKeyframe(keyframe.coordinate, {
-          position: keyframe.data.position!.copy(),
+          position: (keyframe.data.position as Vector<3>).copy(),
           orientation: keyframe.data.orientation!.copy().conjugate(),
         }),
     );

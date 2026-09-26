@@ -130,6 +130,53 @@ export class Vector<Size extends number> {
   }
 }
 
+// A vector with optional coordinates: only the defined coordinates take part
+// in an interpolation. Every coordinate that no keyframe defines contributes 0.
+export class PartialVector<Size extends number = 3> {
+  data: Array<number | undefined>;
+  readonly size: Size;
+
+  constructor(...coordinates: Array<number | undefined>) {
+    this.data = [...coordinates];
+    this.size = this.data.length as Size;
+  }
+
+  static fromXYZ(coordinates: { x?: number; y?: number; z?: number }): PartialVector<3> {
+    return new PartialVector(coordinates.x, coordinates.y, coordinates.z);
+  }
+
+  get(index: number): number | undefined {
+    return this.data[index];
+  }
+
+  set(index: number, value: number): void {
+    this.data[index] = value;
+  }
+
+  has(index: number): boolean {
+    return this.data[index] !== undefined;
+  }
+
+  isComplete(): boolean {
+    return this.data.every((value) => value !== undefined);
+  }
+
+  // A full vector with the defined coordinates, where a fallback vector fills
+  // the unset ones before the last value falls back to 0.
+  complete(fallback?: Vector<Size>): Vector<Size> {
+    const args = this.data.map((value, index) => value ?? fallback?.data[index] ?? 0);
+    return new Vector<Size>(...args);
+  }
+
+  toJSON(): { data: Array<number | null> } {
+    return { data: this.data.map((value) => (value === undefined ? null : value === 0 ? 0 : value)) };
+  }
+
+  static fromJSON(json: { data: Array<number | null> }): PartialVector<number> {
+    return new PartialVector(...json.data.map((value) => (value === null ? undefined : value)));
+  }
+}
+
 export function getUnitVectorFromAngle(angle: number): Vector<2> {
   return new Vector<2>(Math.cos(angle), Math.sin(angle));
 }

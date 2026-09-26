@@ -13,7 +13,7 @@ import type { CanvasRenderingContext2DSized } from "./rinkCanvas.js";
 import { changeElementType } from "./element/turnTypes.js";
 import { computeSpanScales } from "./element/spanScaling.js";
 import type { FootTurnJSON } from "./element/turn.js";
-import { Vector } from "./vector.js";
+import { PartialVector, Vector } from "./vector.js";
 
 type SequenceKeyframes = {
   footL: FootKeyframe[];
@@ -78,6 +78,16 @@ function boundaryCoordinates(
   if (startElementIsZeroSize) return [Math.min(end, start), start];
   const middle = (end + start) / 2;
   return [middle, middle + boundaryDelta];
+}
+
+// One coordinate of a keyframe position: a complete Vector defines every
+// coordinate, a PartialVector only the entries that are not undefined.
+function getPositionCoordinateValue(
+  position: Vector<3> | PartialVector<3> | undefined,
+  index: number,
+): number | undefined {
+  if (position === undefined) return undefined;
+  return position.data[index];
 }
 
 export class Sequence {
@@ -695,9 +705,16 @@ export class Sequence {
     for (const keyframe of toePickKeyframes) {
       const data = keyframe.data;
       if (data.position === undefined || data.orientation === undefined || data.contactPoint === undefined) continue;
+      // Coordinates the keyframe does not set come from the interpolated
+      // position at this coordinate: set coordinates stay exact, because the
+      // interpolation reads the keyframe own values there.
+      const position =
+        data.position instanceof PartialVector
+          ? data.position.complete(this.getInterpolatedPosition(footKey, keyframe.coordinate) as Vector<3>)
+          : data.position;
       const pathOrientation = this.getPathOrientation(keyframe.coordinate);
       const pathPosition = this.path.getPosition(keyframe.coordinate);
-      let contactRelativePosition = data.position.copy();
+      let contactRelativePosition = position.copy();
       contactRelativePosition.x += (data.contactPoint - 0.5) * drawBladeLength;
       const footOrientation = data.orientation.times(pathOrientation);
       contactRelativePosition = contactRelativePosition.rotate(footOrientation);
@@ -778,30 +795,36 @@ export class Sequence {
       list.filter((keyframe) => keyframe.data[property] !== undefined);
     const filteredContact = byProperty(drawable, "contactPoint");
     const filteredOrientation = byProperty(drawable, "orientation");
-    const filteredPosition = byProperty(drawable, "position");
+    const positionIndexes = [0, 1, 2];
+    const byPositionCoordinate = (list: FootKeyframe[], index: number) =>
+      list.filter((keyframe) => getPositionCoordinateValue(keyframe.data.position, index) !== undefined);
+    const positionCoordinateLists = positionIndexes.map((index) => byPositionCoordinate(drawable, index));
+    const positionFallbacks = hasFallback
+      ? positionIndexes.map((index) => byPositionCoordinate(defaultKeyframes, index))
+      : undefined;
     const fallbackContact = hasFallback ? byProperty(defaultKeyframes, "contactPoint") : undefined;
     const fallbackOrientation = hasFallback ? byProperty(defaultKeyframes, "orientation") : undefined;
-    const fallbackPosition = hasFallback ? byProperty(defaultKeyframes, "position") : undefined;
+    const interpolatePosition = (coordinate: number) => {
+      const coordinates = positionIndexes.map((index) => {
+        const filtered = positionCoordinateLists[index]!;
+        const fallback = positionFallbacks?.[index];
+        return this.getInterpolatedPositionCoordinateInList(index, coordinate, filtered, fallback) ?? 0;
+      });
+      return new Vector<3>(coordinates[0]!, coordinates[1]!, coordinates[2]!);
+    };
     const interpolateProperty = (property: keyof FootData, coordinate: number) => {
-      const filtered =
-        property === "contactPoint"
-          ? filteredContact
-          : property === "orientation"
-            ? filteredOrientation
-            : filteredPosition;
-      const fallback =
-        property === "contactPoint"
-          ? fallbackContact
-          : property === "orientation"
-            ? fallbackOrientation
-            : fallbackPosition;
+      if (property === "position") {
+        return interpolatePosition(coordinate);
+      }
+      const filtered = property === "contactPoint" ? filteredContact : filteredOrientation;
+      const fallback = property === "contactPoint" ? fallbackContact : fallbackOrientation;
       return this.getInterpolatedValueInFilteredList(property, coordinate, filtered, fallback) as number;
     };
 
     const maxSquaredSegmentLength = segmentThreshold ** 2 * step * step;
 
     const computeContactData = (pathCoordinate: PathCoordinate) => {
-      const contactPoint = interpolateProperty("contactPoint", pathCoordinate);
+      const contactPoint = interpolateProperty("contactPoint", pathCoordinate) as number;
       const footRelativeOrientation = interpolateProperty("orientation", pathCoordinate) as unknown as Quaternion;
       const pathOrientation = this.getPathOrientation(pathCoordinate);
       const pathPosition = this.path.getPosition(pathCoordinate);
@@ -1078,9 +1101,9 @@ export class Sequence {
     if (filtered.length === 0 && list !== this.keyframes[partKey]) {
       list = this.keyframes[partKey] as KeyframeType[];
       filtered = list.filter((keyframe) => keyframe.data[property as keyof typeof keyframe.data] !== undefined);
-      if (filtered.length === 0) {
-        throw new Error(`No keyframe data for property: ${String(property)}`);
-      }
+    }
+    if (filtered.length === 0) {
+      throw new Error(`No keyframe data for property: ${String(property)}`);
     }
 
     let keyframeAfter = filtered.find((keyframe) => keyframe.coordinate > coordinate);
@@ -1126,6 +1149,65 @@ export class Sequence {
     );
   }
 
+  // Interpolation of one position coordinate from a list already filtered by
+  // that coordinate's presence. The filtered-versus-fallback choice matches the
+  // property-interpolated variant above.
+  private getInterpolatedPositionCoordinateInList<KF extends FootKeyframe | HipsKeyframe>(
+    index: number,
+    coordinate: number,
+    filtered: KF[],
+    fallback?: KF[],
+  ): number | undefined {
+    const list = filtered.length > 0 || fallback === undefined ? filtered : fallback;
+    if (list.length === 0) return undefined;
+    const cut = Math.min(upperBoundCoordinate(list, coordinate), list.length - 1);
+    const keyframeAfter = list[cut]!;
+    const keyframeBefore = list[Math.max(0, cut - 1)]!;
+    const coordinateDelta = keyframeAfter.coordinate - keyframeBefore.coordinate;
+    const relative =
+      coordinateDelta === 0 ? 0 : Math.max(0, Math.min(1, (coordinate - keyframeBefore.coordinate) / coordinateDelta));
+    const eased = getEasedTime(keyframeBefore, keyframeAfter, relative);
+    return interpolate(
+      getPositionCoordinateValue(keyframeBefore.data.position, index) as number,
+      getPositionCoordinateValue(keyframeAfter.data.position, index) as number,
+      eased,
+    );
+  }
+
+  // The interpolated position as a complete Vector. Each coordinate interpolates
+  // only over the keyframes whose position defines that coordinate, so a
+  // coordinate that a keyframe omits follows its own defining keyframes. A
+  // coordinate that no keyframe defines contributes 0.
+  private getInterpolatedPosition(
+    partKey: FootOrHipsKey,
+    coordinate: number,
+    keyframes?: Array<FootKeyframe | HipsKeyframe>,
+  ): Vector<3> {
+    const coordinates: number[] = [];
+    for (let index = 0; index < 3; index++) {
+      coordinates.push(this.getInterpolatedPositionCoordinate(partKey, index, coordinate, keyframes));
+    }
+    return new Vector<3>(coordinates[0]!, coordinates[1]!, coordinates[2]!);
+  }
+
+  private getInterpolatedPositionCoordinate(
+    partKey: FootOrHipsKey,
+    index: number,
+    coordinate: number,
+    keyframes: Array<FootKeyframe | HipsKeyframe> = this.keyframes[partKey] as unknown as Array<
+      FootKeyframe | HipsKeyframe
+    >,
+  ): number {
+    const list = keyframes;
+    let filtered = list.filter((keyframe) => getPositionCoordinateValue(keyframe.data.position, index) !== undefined);
+    if (filtered.length === 0 && keyframes !== this.keyframes[partKey]) {
+      filtered = (this.keyframes[partKey] as unknown as Array<FootKeyframe | HipsKeyframe>).filter(
+        (keyframe) => getPositionCoordinateValue(keyframe.data.position, index) !== undefined,
+      );
+    }
+    return (this.getInterpolatedPositionCoordinateInList(index, coordinate, filtered) ?? 0) as number;
+  }
+
   getInterpolatedValue<
     Key extends FootOrHipsKey,
     KeyframeType extends SequenceKeyframes[Key][number],
@@ -1137,6 +1219,10 @@ export class Sequence {
     coordinate: KeyframeType["coordinate"],
     keyframes?: KeyframeType[],
   ): Interpolable {
+    if (property === "position") {
+      const list = keyframes as unknown as Array<FootKeyframe | HipsKeyframe> | undefined;
+      return this.getInterpolatedPosition(partKey, coordinate as number, list) as Interpolable;
+    }
     const [keyframeBefore, keyframeAfter, relative] = this.getKeyframesAround(partKey, property, coordinate, keyframes);
     const beforeValue = keyframeBefore.data[property as keyof typeof keyframeBefore.data];
     const afterValue = keyframeAfter.data[property as keyof typeof keyframeAfter.data];
