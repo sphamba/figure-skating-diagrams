@@ -13,7 +13,7 @@ import { canvasFontReady } from "../font.js";
 import { createDefaultFootTurn, isJumpType } from "../element/turnTypes.js";
 import { TimingKeyframe } from "../keyframe.js";
 import { Sequence, DEFAULT_BPM, hasTimeEvolution, sequenceTimeRange } from "../sequence.js";
-import { checkSequenceCurvatures, isStrokeElement } from "./curvatureWarning.js";
+import { checkSequenceCurvatures, isGlideElement, isStrokeElement } from "./curvatureWarning.js";
 import {
   ACTION_BUTTON_HIT_RADIUS,
   ACTION_BUTTON_RADIUS,
@@ -1554,7 +1554,7 @@ export class Editor {
     return u < range[0] || u > range[1];
   }
 
-  // Hides when the name label anchor lies outside the drawing range: stroke
+  // Hides when the name label anchor lies outside the drawing range: glide
   // names anchor later than their span, other names at the span midpoint.
   private elementNameHidden(sequence: Sequence, element: Element): boolean {
     if (this.mode !== "view") return false;
@@ -2292,11 +2292,13 @@ export class Editor {
     return this.getLabelGeometryAt(path, this.elementLabelAnchor(sequence, element));
   }
 
-  // The path coordinate the name label sits on: stroke names anchor later,
-  // between the stroke end and the next element start; other names anchor at
-  // the span midpoint.
+  // The path coordinate the name label sits on: glide and stroke names anchor
+  // later, between the element end and the next element start; other names
+  // anchor at the span midpoint.
   private elementLabelAnchor(sequence: Sequence, element: Element): PathCoordinate {
-    return isStrokeElement(element) ? this.getStrokeLabelAnchor(sequence, element) : this.getSpanMidpoint(element);
+    return isGlideElement(element) || isStrokeElement(element)
+      ? this.getGlideLabelAnchor(sequence, element)
+      : this.getSpanMidpoint(element);
   }
 
   private getLabelGeometryAt(path: Path, u: PathCoordinate): { point: Vector<2>; outside: Vector<2> } {
@@ -2312,12 +2314,12 @@ export class Editor {
     return ((lo + hi) / 2) as PathCoordinate;
   }
 
-  private getStrokeLabelAnchor(sequence: Sequence, element: DynamicGlide): PathCoordinate {
+  private getGlideLabelAnchor(sequence: Sequence, element: Element): PathCoordinate {
     const path = sequence.path;
-    const strokeEnd = Math.max(element.start as number, element.end as number);
+    const elementEnd = Math.max(element.start as number, element.end as number);
     const next = this.nextElementAfter(sequence, element);
     const nextStart = next ? Math.min(next.start as number, next.end as number) : path.length;
-    const anchor = Math.max(0, Math.min(path.length, (strokeEnd + nextStart) / 2));
+    const anchor = Math.max(0, Math.min(path.length, (elementEnd + nextStart) / 2));
     return anchor as PathCoordinate;
   }
 

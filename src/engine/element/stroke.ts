@@ -129,7 +129,7 @@ for (const [side, left] of glideSides) {
         }
         glideKindChoices.push({
           type,
-          label: `${side} ${strokeLabel} ${direction.toLowerCase()} ${edge === "neither" ? "" : edge + " "}glide`,
+          label: `${side} ${strokeLabel} ${direction.toLowerCase()} ${edge === "neither" ? "" : edge + " "}stroke`,
         });
       }
     }

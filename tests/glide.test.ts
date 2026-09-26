@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 import type { DynamicGlide } from "../src/engine/element/stroke.js";
 import "../src/engine/element/stroke.js";
 import { glideConstructorsByType, glideKindChoices } from "../src/engine/element/glide.js";
+import { elementFullName } from "../src/engine/element/fullName.js";
 
 const start = 0;
 const end = 2;
@@ -137,6 +138,42 @@ test("an ina bauer offsets the front foot halfFeetSpacing and the back foot 0.4 
 	const mirrored = glide("InaBauerRightFrontGlide");
 	expectData(expectAt(mirrored.getRightFootKeyframes() as unknown as Kf[], 0, start), 0.15, 0.15, 0);
 	expectData(expectAt(mirrored.getLeftFootKeyframes() as unknown as Kf[], 0, start), -0.15, 0.4, 0);
+});
+
+test("a static glide starts the free foot on the ice beside the gliding foot and lifts it at the end", () => {
+	const g = glide("LeftForwardInsideGlide");
+
+	const left = g.getLeftFootKeyframes();
+	expect(left).toHaveLength(2);
+	expectData(expectAt(left as unknown as Kf[], 0, start), 0, 0, 0);
+	expectData(expectAt(left as unknown as Kf[], 1, end), 0, 0, 0);
+
+	const right = g.getRightFootKeyframes();
+	expect(right).toHaveLength(2);
+	expectData(expectAt(right as unknown as Kf[], 0, start), 0, -SPACING, 0);
+	expectData(expectAt(right as unknown as Kf[], 1, end), 0, -SPACING, 0.2);
+});
+
+test("a two-feet static glide keeps both feet on the ice at halfFeetSpacing", () => {
+	const g = glide("BothForwardGlide");
+
+	const left = g.getLeftFootKeyframes();
+	expect(left).toHaveLength(2);
+	expectData(expectAt(left as unknown as Kf[], 0, start), 0, SPACING, 0);
+	expectData(expectAt(left as unknown as Kf[], 1, end), 0, SPACING, 0);
+
+	const right = g.getRightFootKeyframes();
+	expect(right).toHaveLength(2);
+	expectData(expectAt(right as unknown as Kf[], 0, start), 0, -SPACING, 0);
+	expectData(expectAt(right as unknown as Kf[], 1, end), 0, -SPACING, 0);
+});
+
+test("stroke full names end in stroke and static glide full names end in glide", () => {
+	expect(elementFullName(glide("LeftNormalForwardInsideGlide"))).toBe("Left normal forward inside stroke");
+	expect(elementFullName(glide("RightCrossedBackBackwardOutsideGlide"))).toBe("Right crossed back backward outside stroke");
+	expect(elementFullName(glide("RightNormalBackwardGlide"))).toBe("Right normal backward stroke");
+	expect(elementFullName(glide("LeftForwardInsideGlide"))).toBe("Left forward inside glide");
+	expect(elementFullName(glide("BothBackwardGlide"))).toBe("Two-feet backward glide");
 });
 
 test("glide types round-trip through JSON", () => {

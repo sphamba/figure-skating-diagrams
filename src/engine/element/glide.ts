@@ -101,7 +101,9 @@ export abstract class Glide extends Element {
       contactPoint: 0.5,
       toePick: false,
     };
-    return [new FootKeyframe(start, data, "smooth", "smooth"), new FootKeyframe(end, data, "smooth", "smooth")];
+    // The free foot starts on the ice beside the gliding foot and lifts off at the element end.
+    const startData = onIce ? data : { ...data, position: new Vector<3>(0, lateral, 0) };
+    return [new FootKeyframe(start, startData, "smooth", "smooth"), new FootKeyframe(end, data, "smooth", "smooth")];
   }
 }
 

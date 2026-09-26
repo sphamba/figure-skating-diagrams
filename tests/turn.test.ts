@@ -155,7 +155,9 @@ test("A glide round-trips and keeps its pose keyframes", () => {
   expect(onIce.position!.z).toBeCloseTo(0, 5);
   const free = glide.getRightFootKeyframes()[0]!.data;
   expect(free.position!.y).toBeCloseTo(-0.15, 5);
-  expect(free.position!.z).toBeCloseTo(0.2, 5);
+  expect(free.position!.z).toBeCloseTo(0, 5);
+  const freeEnd = glide.getRightFootKeyframes()[1]!.data;
+  expect(freeEnd.position!.z).toBeCloseTo(0.2, 5);
   const both = changeElementType("BothBackwardGlide", { type: "LeftForwardGlide", start, end });
   expect(both.toJSON().type).toBe("BothBackwardGlide");
 });

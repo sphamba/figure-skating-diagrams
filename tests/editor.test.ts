@@ -972,7 +972,32 @@ test("a curvature sign change draws XS for forward crossed strokes and replaces 
   editor.destroy();
 });
 
-test("a glide label keeps the span midpoint anchor", () => {
+test("a glide label anchors between the glide end and the following element start", () => {
+  const { editor } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(4 / 3, 0), new Vector(5 / 3, 0), new Vector(2, 0)));
+
+  const glide = new LeftForwardOutsideGlide(0.2 as PathCoordinate, 0.6 as PathCoordinate);
+  const following = new LeftForwardOutsideGlide(1.2 as PathCoordinate, 1.6 as PathCoordinate);
+  sequence.addElement(glide);
+  sequence.addElement(following);
+  editor.draw();
+
+  const geometry = editorRef(editor).getElementLabelGeometry(sequence, glide);
+  const anchorU = ((glide.end as number) + (following.start as number)) / 2;
+  const expected = path.getPosition(anchorU as PathCoordinate);
+  expect(geometry.point.x).toBeCloseTo(expected.x, 9);
+  expect(geometry.point.y).toBeCloseTo(expected.y, 9);
+
+  const spanMid = path.getPosition((((glide.start as number) + (glide.end as number)) / 2) as PathCoordinate);
+  expect(geometry.point.x).not.toBeCloseTo(spanMid.x, 3);
+
+  editor.destroy();
+});
+
+test("a glide with no following element anchors its label at the path end", () => {
   const { editor } = makeEditor();
   editorRef(editor).mode = "elements";
   const sequence = editor.getSequences()[0];
@@ -982,9 +1007,11 @@ test("a glide label keeps the span midpoint anchor", () => {
   editor.draw();
 
   const geometry = editorRef(editor).getElementLabelGeometry(sequence, glide);
-  const mid = path.getPosition(0.4 as PathCoordinate);
-  expect(geometry.point.x).toBeCloseTo(mid.x, 9);
-  expect(geometry.point.y).toBeCloseTo(mid.y, 9);
+  // The path end substitutes for the following element start in the midpoint.
+  const anchorU = ((glide.end as number) + path.length) / 2;
+  const expected = path.getPosition(anchorU as PathCoordinate);
+  expect(geometry.point.x).toBeCloseTo(expected.x, 9);
+  expect(geometry.point.y).toBeCloseTo(expected.y, 9);
 
   editor.destroy();
 });
