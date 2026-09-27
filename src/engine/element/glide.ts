@@ -2,6 +2,7 @@ import type { PathCoordinate } from "../coordinates.js";
 import { Element } from "./element.js";
 import { type FootData, FootKeyframe, HipsKeyframe } from "../keyframe.js";
 import { getQuaternionFromAngleAxis } from "../quaternion.js";
+import { PartialVector } from "../vector.js";
 import { Vector } from "../vector.js";
 
 export const offIceFootHeight = 0.2; // metres
@@ -9,6 +10,15 @@ export const halfFeetSpacing = 0.15; // metres
 export const feetSpacing = 2 * halfFeetSpacing; // metres
 export const spreadEagleSeparation = 0.6; // metres
 export const bauerBackShift = 0.4; // metres
+
+// The ending foot key of a glide or stroke sets only the height: the lateral
+// pose carries into the next element through the interpolation.
+export function endingFootData(source: FootData): FootData {
+  return {
+    ...source,
+    position: PartialVector.fromXYZ({ z: (source.position as Vector<3>).z }),
+  };
+}
 
 export interface GlideJSON {
   type: string;
@@ -103,7 +113,10 @@ export abstract class Glide extends Element {
     };
     // The free foot starts on the ice beside the gliding foot and lifts off at the element end.
     const startData = onIce ? data : { ...data, position: new Vector<3>(0, lateral, 0) };
-    return [new FootKeyframe(start, startData, "smooth", "smooth"), new FootKeyframe(end, data, "smooth", "smooth")];
+    return [
+      new FootKeyframe(start, startData, "smooth", "smooth"),
+      new FootKeyframe(end, endingFootData(data), "smooth", "smooth"),
+    ];
   }
 }
 
@@ -246,7 +259,7 @@ export class TwoFeetPoseGlide extends Glide {
     };
     return [
       new FootKeyframe(this.start, data, "smooth", "smooth"),
-      new FootKeyframe(this.end, data, "smooth", "smooth"),
+      new FootKeyframe(this.end, endingFootData(data), "smooth", "smooth"),
     ];
   }
 }

@@ -11,6 +11,7 @@ import {
   offIceFootHeight,
 } from "./glide.js";
 import type { GlideConstructor } from "./glide.js";
+import { endingFootData } from "./glide.js";
 import { type FootData, FootKeyframe } from "../keyframe.js";
 import { getQuaternionFromAngleAxis } from "../quaternion.js";
 import { Vector } from "../vector.js";
@@ -71,15 +72,21 @@ export abstract class DynamicGlide extends Glide {
       const centered = onIceData(new Vector<3>(0, 0, 0));
       return [
         new FootKeyframe(start, centered, "smooth", "smooth"),
-        new FootKeyframe(t95, centered, "linear", "linear"),
-        new FootKeyframe(end, centered, "linear", "linear"),
+        // The gliding foot stays on ice: its 95% key sets nothing.
+        new FootKeyframe(t95, {}, "linear", "linear"),
+        new FootKeyframe(end, endingFootData(centered), "linear", "linear"),
       ];
     }
     const doubleSide = side * 2;
     return [
       new FootKeyframe(start, onIceData(new Vector<3>(0, side, 0)), "smooth", "smooth"),
       new FootKeyframe(t95, onIceData(new Vector<3>(offset, doubleSide, 0)), "linear", "linear"),
-      new FootKeyframe(end, onIceData(new Vector<3>(offset, doubleSide, offIceFootHeight)), "linear", "linear"),
+      new FootKeyframe(
+        end,
+        endingFootData(onIceData(new Vector<3>(offset, doubleSide, offIceFootHeight))),
+        "linear",
+        "linear",
+      ),
     ];
   }
 

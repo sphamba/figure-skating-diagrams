@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 import type { DynamicGlide } from "../src/engine/element/stroke.js";
 import "../src/engine/element/stroke.js";
 import { glideConstructorsByType, glideKindChoices } from "../src/engine/element/glide.js";
+import type { FootKeyframe } from "../src/engine/keyframe.js";
 import { elementFullName } from "../src/engine/element/fullName.js";
 
 const start = 0;
@@ -11,11 +12,18 @@ const T95 = 1.9;
 const SPACING = 0.15;
 const FREE_OFFSET = 0.4;
 
-type Kf = { coordinate: number; data: { position?: { x: number; y: number; z: number } } };
+type Kf = { coordinate: number; data: FootKeyframe["data"] };
 
 function expectData(kf: Kf, x: number, y: number, z: number) {
 	expect(kf.data.position!.x).toBeCloseTo(x, 10);
 	expect(kf.data.position!.y).toBeCloseTo(y, 10);
+	expect(kf.data.position!.z).toBeCloseTo(z, 10);
+}
+
+// The ending foot key sets only the height.
+function expectHeight(kf: Kf, z: number) {
+	expect(kf.data.position!.x).toBeUndefined();
+	expect(kf.data.position!.y).toBeUndefined();
 	expect(kf.data.position!.z).toBeCloseTo(z, 10);
 }
 
@@ -36,7 +44,7 @@ test("glide registry lists all static and dynamic glide kinds", () => {
 	expect(Object.keys(glideConstructorsByType)).toContain("LeftCrossedBackForwardInsideGlide");
 });
 
-	test("a normal forward left glide starts on two feet and lifts the right foot at the end", () => {
+test("a normal forward left glide starts on two feet and lifts the right foot at the end", () => {
 	const g = glide("LeftNormalForwardInsideGlide");
 
 	const hips = g.getHipsKeyframes();
@@ -47,14 +55,18 @@ test("glide registry lists all static and dynamic glide kinds", () => {
 	const left = g.getLeftFootKeyframes();
 	expect(left).toHaveLength(3);
 	expectData(expectAt(left as unknown as Kf[], 0, start), 0, 0, 0);
-	expectData(expectAt(left as unknown as Kf[], 1, T95), 0, 0, 0);
-	expectData(expectAt(left as unknown as Kf[], 2, end), 0, 0, 0);
+	// The gliding foot stays on ice: its 95% key sets nothing.
+	const gliding95 = expectAt(left as unknown as Kf[], 1, T95);
+	expect(gliding95.data.position).toBeUndefined();
+	expect(gliding95.data.orientation).toBeUndefined();
+	expect(gliding95.data.contactPoint).toBeUndefined();
+	expectHeight(expectAt(left as unknown as Kf[], 2, end), 0);
 
 	const right = g.getRightFootKeyframes();
 	expect(right).toHaveLength(3);
 	expectData(expectAt(right as unknown as Kf[], 0, start), 0, -SPACING, 0);
 	expectData(expectAt(right as unknown as Kf[], 1, T95), -FREE_OFFSET, -2 * SPACING, 0);
-	expectData(expectAt(right as unknown as Kf[], 2, end), -FREE_OFFSET, -2 * SPACING, 0.2);
+	expectHeight(expectAt(right as unknown as Kf[], 2, end), 0.2);
 });
 
 test("a crossed forward glide swaps the sides of the centerline", () => {
@@ -62,8 +74,8 @@ test("a crossed forward glide swaps the sides of the centerline", () => {
 
 	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 0, start), 0, 0, 0);
 	expectData(expectAt(g.getLeftFootKeyframes() as unknown as Kf[], 0, start), 0, -SPACING, 0);
-	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 2, end), 0, 0, 0);
-	expectData(expectAt(g.getLeftFootKeyframes() as unknown as Kf[], 2, end), -FREE_OFFSET, -2 * SPACING, 0.2);
+	expectHeight(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 2, end), 0);
+	expectHeight(expectAt(g.getLeftFootKeyframes() as unknown as Kf[], 2, end), 0.2);
 });
 
 test("a normal backwards glide keeps the keyframe side, the foot orientation mirrors it", () => {
@@ -74,7 +86,7 @@ test("a normal backwards glide keeps the keyframe side, the foot orientation mir
 	// keyframes match a forward normal glide, with the longitudinal offset flipped.
 	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 0, start), 0, -SPACING, 0);
 	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 1, T95), FREE_OFFSET, -2 * SPACING, 0);
-	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 2, end), FREE_OFFSET, -2 * SPACING, 0.2);
+	expectHeight(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 2, end), 0.2);
 
 	const hips = g.getHipsKeyframes();
 	expect(hips).toHaveLength(1);
@@ -89,7 +101,7 @@ test("a crossed backwards glide swaps the sides like a crossed forward one", () 
 	expectData(expectAt(g.getLeftFootKeyframes() as unknown as Kf[], 0, start), 0, 0, 0);
 	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 0, start), 0, SPACING, 0);
 	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 1, T95), FREE_OFFSET, 2 * SPACING, 0);
-	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 2, end), FREE_OFFSET, 2 * SPACING, 0.2);
+	expectHeight(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 2, end), 0.2);
 });
 
 test("a crossed back glide has the same geometry as a crossed one", () => {
@@ -120,7 +132,7 @@ test("a spread eagle keeps both feet on the centerline, 0.6 m apart, and mirrors
 	const left = g.getLeftFootKeyframes();
 	expect(left).toHaveLength(2);
 	expectData(expectAt(left as unknown as Kf[], 0, start), 0.3, 0, 0);
-	expectData(expectAt(left as unknown as Kf[], 1, end), 0.3, 0, 0);
+	expectHeight(expectAt(left as unknown as Kf[], 1, end), 0);
 	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 0, start), -0.3, 0, 0);
 
 	const mirrored = glide("SpreadEagleRightFrontGlide");
@@ -133,7 +145,7 @@ test("an ina bauer offsets the front foot halfFeetSpacing and the back foot 0.4 
 
 	expectData(expectAt(g.getLeftFootKeyframes() as unknown as Kf[], 0, start), 0.15, -0.15, 0);
 	expectData(expectAt(g.getRightFootKeyframes() as unknown as Kf[], 0, start), -0.15, -0.4, 0);
-	expectData(expectAt(g.getLeftFootKeyframes() as unknown as Kf[], 1, end), 0.15, -0.15, 0);
+	expectHeight(expectAt(g.getLeftFootKeyframes() as unknown as Kf[], 1, end), 0);
 
 	const mirrored = glide("InaBauerRightFrontGlide");
 	expectData(expectAt(mirrored.getRightFootKeyframes() as unknown as Kf[], 0, start), 0.15, 0.15, 0);
@@ -146,12 +158,12 @@ test("a static glide starts the free foot on the ice beside the gliding foot and
 	const left = g.getLeftFootKeyframes();
 	expect(left).toHaveLength(2);
 	expectData(expectAt(left as unknown as Kf[], 0, start), 0, 0, 0);
-	expectData(expectAt(left as unknown as Kf[], 1, end), 0, 0, 0);
+	expectHeight(expectAt(left as unknown as Kf[], 1, end), 0);
 
 	const right = g.getRightFootKeyframes();
 	expect(right).toHaveLength(2);
 	expectData(expectAt(right as unknown as Kf[], 0, start), 0, -SPACING, 0);
-	expectData(expectAt(right as unknown as Kf[], 1, end), 0, -SPACING, 0.2);
+	expectHeight(expectAt(right as unknown as Kf[], 1, end), 0.2);
 });
 
 test("a two-feet static glide keeps both feet on the ice at halfFeetSpacing", () => {
@@ -160,12 +172,12 @@ test("a two-feet static glide keeps both feet on the ice at halfFeetSpacing", ()
 	const left = g.getLeftFootKeyframes();
 	expect(left).toHaveLength(2);
 	expectData(expectAt(left as unknown as Kf[], 0, start), 0, SPACING, 0);
-	expectData(expectAt(left as unknown as Kf[], 1, end), 0, SPACING, 0);
+	expectHeight(expectAt(left as unknown as Kf[], 1, end), 0);
 
 	const right = g.getRightFootKeyframes();
 	expect(right).toHaveLength(2);
 	expectData(expectAt(right as unknown as Kf[], 0, start), 0, -SPACING, 0);
-	expectData(expectAt(right as unknown as Kf[], 1, end), 0, -SPACING, 0);
+	expectHeight(expectAt(right as unknown as Kf[], 1, end), 0);
 });
 
 test("stroke full names end in stroke and static glide full names end in glide", () => {
