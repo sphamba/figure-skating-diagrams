@@ -11,8 +11,10 @@ import { LENGTH, WIDTH, CORNER_RADIUS } from "../rink.js";
 import type { CanvasRenderingContext2DSized } from "../rinkCanvas.js";
 import { canvasFontReady } from "../font.js";
 import { createDefaultFootTurn, isJumpType } from "../element/turnTypes.js";
+import { OneFootTurn } from "../element/oneFootTurn.js";
+import { Choctaw } from "../element/choctaw.js";
 import { TimingKeyframe } from "../keyframe.js";
-import { Sequence, DEFAULT_BPM, hasTimeEvolution, sequenceTimeRange } from "../sequence.js";
+import { Sequence, DEFAULT_BPM, getOppositeFootKey, hasTimeEvolution, sequenceTimeRange } from "../sequence.js";
 import { checkSequenceCurvatures, isGlideElement, isStrokeElement } from "./curvatureWarning.js";
 import {
   ACTION_BUTTON_HIT_RADIUS,
@@ -2289,7 +2291,42 @@ export class Editor {
   ): { point: Vector<2>; outside: Vector<2> } | null {
     const path = sequence.path;
     if (path.curves.length === 0) return null;
-    return this.getLabelGeometryAt(path, this.elementLabelAnchor(sequence, element));
+    const u = this.elementLabelAnchor(sequence, element);
+    const geometry = this.getLabelGeometryAt(path, u);
+    const footAnchor = this.footTraceLabelAnchor(sequence, element, u, geometry);
+    return footAnchor ? { point: footAnchor, outside: geometry.outside } : geometry;
+  }
+
+  // The tail of a turn name label crosses the foot trace when the trace runs
+  // off the centerline on the label side: the anchor moves to the trace
+  // position there, so the tail starts at the trace. The trace position shifts
+  // with the zoom span scaling, like the drawn traces. A choctaw swaps its feet
+  // at its middle: the drawn trace jumps from the entry foot to the exit foot
+  // there, so the check reads each foot just before and just after the middle.
+  private footTraceLabelAnchor(
+    sequence: Sequence,
+    element: Element,
+    u: PathCoordinate,
+    geometry: { point: Vector<2>; outside: Vector<2> },
+  ): Vector<2> | null {
+    if (!(element instanceof OneFootTurn) && !(element instanceof Choctaw)) return null;
+    const minBladeLength =
+      this.scaleElements && this.mode !== "elements" ? MIN_BLADE_LENGTH / this.view.zoom : undefined;
+    const feet = [element.footKey, getOppositeFootKey(element.footKey)];
+    const [lo, hi] = this.getDisplayedSpan(sequence, element);
+    // A tiny fraction of the displayed span: big enough to leave the middle
+    // keyframe, small enough to stay inside the turn span.
+    const delta = ((hi as number) - (lo as number)) * 0.01;
+    const offsets = element instanceof Choctaw ? [-delta, delta] : [0];
+    for (const offset of offsets) {
+      const checked = (u + offset) as PathCoordinate;
+      for (const footKey of feet) {
+        const position = sequence.getFootTraceContactPosition(footKey, checked, minBladeLength);
+        if (!position) continue;
+        if (position.minus(geometry.point).dot(geometry.outside) > 0) return position;
+      }
+    }
+    return null;
   }
 
   // The path coordinate the name label sits on: glide and stroke names anchor

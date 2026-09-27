@@ -1073,6 +1073,41 @@ export class Sequence {
     return getQuaternionFromAngleAxis(pathAngle);
   }
 
+  // The drawn contact position of a foot blade on the ice at a path coordinate:
+  // the same construction the trace drawing uses, so it matches the trace
+  // polyline. The drawn keyframes and blade length depend on minBladeLength,
+  // so the position shifts with the zoom span scaling. Null when the foot has
+  // no trace data or rests off the ice at the coordinate, where the trace
+  // drawing emits no segments.
+  getFootTraceContactPosition(
+    footKey: FootKey,
+    pathCoordinate: PathCoordinate,
+    minBladeLength?: number,
+  ): Vector<2> | null {
+    const keyframes =
+      minBladeLength === undefined
+        ? this.keyframes[footKey]
+        : this.getDrawFootKeyframes(footKey, this.getBladeLengthScale(minBladeLength));
+    const hasData = (property: keyof FootData) =>
+      this.keyframes[footKey].some((keyframe) => keyframe.data[property] !== undefined);
+    if (!hasData("position") || !hasData("orientation") || !hasData("contactPoint")) {
+      return null;
+    }
+    const relativePosition = this.getInterpolatedValue(footKey, "position", pathCoordinate, keyframes) as Vector<3>;
+    const relativeOrientation = this.getInterpolatedValue(
+      footKey,
+      "orientation",
+      pathCoordinate,
+      keyframes,
+    ) as Quaternion;
+    const contactPoint = this.getInterpolatedValue(footKey, "contactPoint", pathCoordinate, keyframes) as number;
+    const contactRelative = relativePosition.copy();
+    contactRelative.x += (contactPoint - 0.5) * this.getDrawBladeLength(minBladeLength);
+    const rotated = contactRelative.rotate(relativeOrientation.times(this.getPathOrientation(pathCoordinate)));
+    if (rotated.z > 0) return null;
+    return this.path.getPosition(pathCoordinate).plus(rotated as unknown as Vector<2>);
+  }
+
   getWorldForwardDirection(partKey: FootOrHipsKey, pathCoordinate: PathCoordinate): Vector<3> {
     const orientation = this.getInterpolatedValue(partKey, "orientation", pathCoordinate) as Quaternion;
     return getRelativeForwardDirection(orientation).rotate(this.getPathOrientation(pathCoordinate));

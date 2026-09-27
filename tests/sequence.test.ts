@@ -7,6 +7,7 @@ import { FootKeyframe, TimingKeyframe } from "../src/engine/keyframe";
 import { Path } from "../src/engine/path";
 import { Quaternion } from "../src/engine/quaternion";
 import { LeftForwardOutsideThreeTurn } from "../src/engine/element/threeTurn";
+import { LeftForwardOpenChoctaw } from "../src/engine/element/choctaw";
 import { LeftForwardOutsideLoop } from "../src/engine/element/loop";
 import { Sequence, defaultTraceColorL, defaultTraceColorR } from "../src/engine/sequence";
 import { Vector } from "../src/engine/vector";
@@ -337,4 +338,60 @@ test("removeAnnotation drops the annotation", () => {
 
   expect(sequence.annotations).toHaveLength(0);
   expect(sequence.toJSON().annotations).toEqual([]);
+});
+
+test("getFootTraceContactPosition builds the drawn trace contact point on the ice", () => {
+  const path = makeStraightLengthOnePath();
+  const sequence = new Sequence(path);
+  sequence.addElement(new LeftForwardOutsideThreeTurn("footL", 0.2 as PathCoordinate, 0.6 as PathCoordinate));
+
+  const mid = path.getPosition(0.4 as PathCoordinate);
+  // The blade turns left of travel with the contact point at the toe, so the
+  // trace swings half a blade length left of the path.
+  const contact = sequence.getFootTraceContactPosition("footL", 0.4 as PathCoordinate);
+  expect(contact).not.toBeNull();
+  expect(contact!.x).toBeCloseTo(mid.x, 9);
+  expect(contact!.y).toBeCloseTo(mid.y + 0.125, 9);
+});
+
+test("getFootTraceContactPosition follows the zoom span scaling through minBladeLength", () => {
+  const path = makeStraightLengthOnePath();
+  const sequence = new Sequence(path);
+  sequence.addElement(new LeftForwardOutsideThreeTurn("footL", 0.2 as PathCoordinate, 0.6 as PathCoordinate));
+
+  const mid = path.getPosition(0.4 as PathCoordinate);
+  // A small minBladeLength draws a 1 m blade, so the toe contact offset grows
+  // from 0.125 m to 0.5 m.
+  const scaled = sequence.getFootTraceContactPosition("footL", 0.4 as PathCoordinate, 1.0);
+  expect(scaled).not.toBeNull();
+  expect(scaled!.x).toBeCloseTo(mid.x, 9);
+  expect(scaled!.y).toBeCloseTo(mid.y + 0.5, 9);
+});
+
+test("getFootTraceContactPosition returns null when the foot rests off the ice", () => {
+  const path = makeStraightLengthOnePath();
+  const sequence = new Sequence(path);
+  sequence.addElement(new LeftForwardOutsideThreeTurn("footL", 0.2 as PathCoordinate, 0.6 as PathCoordinate));
+
+  expect(sequence.getFootTraceContactPosition("footR", 0.4 as PathCoordinate)).toBeNull();
+});
+
+test("getFootTraceContactPosition returns null without foot keyframe data", () => {
+  const sequence = new Sequence(makeStraightLengthOnePath());
+
+  expect(sequence.getFootTraceContactPosition("footL", 0.5 as PathCoordinate)).toBeNull();
+});
+
+test("getFootTraceContactPosition places the choctaw feet on opposite sides at the midpoint", () => {
+  const path = makeStraightLengthOnePath();
+  const sequence = new Sequence(path);
+  sequence.addElement(new LeftForwardOpenChoctaw("footL", 0.2 as PathCoordinate, 0.6 as PathCoordinate));
+
+  const mid = path.getPosition(0.4 as PathCoordinate);
+  const entry = sequence.getFootTraceContactPosition("footL", 0.4 as PathCoordinate);
+  const exit = sequence.getFootTraceContactPosition("footR", 0.4 as PathCoordinate);
+  expect(entry).not.toBeNull();
+  expect(exit).not.toBeNull();
+  expect(entry!.y).toBeCloseTo(mid.y + 0.15, 9);
+  expect(exit!.y).toBeCloseTo(mid.y - 0.15, 9);
 });

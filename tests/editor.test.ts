@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { CANVAS_SCALE } from "../src/engine/constants";
+import { bladeLength, CANVAS_SCALE } from "../src/engine/constants";
 import { Curve } from "../src/engine/curve";
 import type { Curvilinear } from "../src/engine/curve";
 import { Path } from "../src/engine/path";
@@ -7,15 +7,16 @@ import { Sequence } from "../src/engine/sequence";
 import type { PathCoordinate } from "../src/engine/coordinates";
 import { Vector } from "../src/engine/vector";
 import { LABEL_FONT_SIZE, PILL_PADDING, PILL_SIZE_FACTOR } from "../src/engine/sequenceEditor/label";
-import { LeftForwardOutsideThreeTurn } from "../src/engine/element/threeTurn";
+import { LeftForwardOutsideThreeTurn, LeftForwardInsideThreeTurn } from "../src/engine/element/threeTurn";
+import { LeftForwardOpenChoctaw } from "../src/engine/element/choctaw";
 import { glideConstructorsByType, LeftForwardOutsideGlide } from "../src/engine/element/glide";
 import { jumpConstructorsByType } from "../src/engine/element/jump";
 import type { Element } from "../src/engine/element/element";
 import { LeftNormalForwardInsideGlide } from "../src/engine/element/stroke";
 import { HipsKeyframe, TimingKeyframe } from "../src/engine/keyframe";
-import { getQuaternionFromAngleAxis } from "../src/engine/quaternion";
+import { getQuaternionFromAngleAxis, Quaternion } from "../src/engine/quaternion";
 import { Annotation } from "../src/engine/annotation";
-import { createStubCanvas, makeNoopContext, makeStraightLengthOnePath } from "./helpers";
+import { createStubCanvas, makeNoopContext, makeStraightLengthOnePath, getArcCurve } from "./helpers";
 
 const makeStraightPath = makeStraightLengthOnePath;
 
@@ -2744,5 +2745,156 @@ test("a repeated Enter dispatch adds only one item", () => {
   expect(sequence.path.curves.length).toBe(before + 1);
   window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", repeat: true }));
   expect(sequence.path.curves.length).toBe(before + 1);
+  editor.destroy();
+});
+
+function makeCirclePath(): Path {
+  const radius = 3;
+  const path = new Path();
+  path.addCurveEnd(getArcCurve(new Vector(0, 0), radius, Math.PI / 2, Math.PI / 2 + (Math.PI * 2) / 3));
+  path.addCurveEnd(
+    getArcCurve(new Vector(0, 0), radius, Math.PI / 2 + (Math.PI * 2) / 3, Math.PI / 2 + (Math.PI * 4) / 3),
+  );
+  path.addCurveEnd(getArcCurve(new Vector(0, 0), radius, Math.PI / 2 + (Math.PI * 4) / 3, Math.PI / 2 + Math.PI * 2));
+  return path;
+}
+
+function labelFrameAt(path: Path, u: PathCoordinate): { point: Vector<2>; outside: Vector<2> } {
+  const [curve, curvilinear] = path.getCurveAndCurvilinearCoord(u);
+  const point = curve.getPosition(curvilinear);
+  const tangent = curve.getDerivative(curvilinear).normalized();
+  const sign = curve.getCurvature(curvilinear) > 0 ? -1 : 1;
+  return { point, outside: tangent.getOrthogonal().times(sign) };
+}
+
+// The drawn trace contact point of a foot blade on the ice at natural scale:
+// the same construction the trace drawing uses, so the tests pin the check to
+// the drawn trace geometry. Null when the foot rests off the ice.
+function footContactAt(sequence: Sequence, footKey: "footL" | "footR", u: PathCoordinate): Vector<2> | null {
+  const relative = sequence.getInterpolatedValue(footKey, "position", u) as Vector<3>;
+  const orientation = sequence.getInterpolatedValue(footKey, "orientation", u);
+  const contactPoint = sequence.getInterpolatedValue(footKey, "contactPoint", u) as number;
+  const contactRelative = relative.copy();
+  contactRelative.x += (contactPoint - 0.5) * bladeLength;
+  const rotated = contactRelative.rotate((orientation as Quaternion).times(sequence.getPathOrientation(u)));
+  if (rotated.z > 0) return null;
+  return sequence.path.getPosition(u).plus(rotated as unknown as Vector<2>);
+}
+
+test("a left forward inside three turn anchors its label tail at the foot trace on the label side", () => {
+  const { editor } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const sequence = editor.getSequences()[0];
+  const path = makeCirclePath();
+  sequence.path = path;
+
+  const u1 = (path.length * 0.3) as PathCoordinate;
+  const turn = new LeftForwardInsideThreeTurn("footL", u1, (u1 + 1.0) as PathCoordinate);
+  sequence.addElement(turn);
+  editor.draw();
+
+  const geometry = editorRef(editor).getElementLabelGeometry(sequence, turn);
+  const frame = labelFrameAt(path, (u1 + 0.5) as PathCoordinate);
+  // The on-ice blade turns through the midpoint with the contact point at the
+  // toe, so the trace swings half a blade length to the outside of the curve.
+  expect(geometry.point.x).toBeCloseTo(frame.point.x + frame.outside.x * 0.125, 9);
+  expect(geometry.point.y).toBeCloseTo(frame.point.y + frame.outside.y * 0.125, 9);
+  expect(geometry.outside.x).toBeCloseTo(frame.outside.x, 9);
+  expect(geometry.outside.y).toBeCloseTo(frame.outside.y, 9);
+
+  editor.destroy();
+});
+
+test("a left forward open choctaw anchors its label tail at the exit foot trace on the label side", () => {
+  const { editor } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const sequence = editor.getSequences()[0];
+  const path = makeCirclePath();
+  sequence.path = path;
+
+  const u2 = (path.length * 0.7) as PathCoordinate;
+  const choctaw = new LeftForwardOpenChoctaw("footL", (u2 - 0.5) as PathCoordinate, u2);
+  sequence.addElement(choctaw);
+  editor.draw();
+
+  const geometry = editorRef(editor).getElementLabelGeometry(sequence, choctaw);
+  // The check reads the exit foot just after the middle: the trace sides, not
+  // the discontinuity point. The check delta is 1% of the displayed span.
+  const mid = (u2 - 0.25) as PathCoordinate;
+  const delta = ((choctaw.end - choctaw.start) * 0.01) as PathCoordinate;
+  const expected = footContactAt(sequence, "footR", (mid + delta) as PathCoordinate);
+  expect(expected).not.toBeNull();
+  expect(geometry.point.x).toBeCloseTo(expected!.x, 9);
+  expect(geometry.point.y).toBeCloseTo(expected!.y, 9);
+
+  editor.destroy();
+});
+
+test("a choctaw collision check reads the trace sides, not the middle discontinuity", () => {
+  const { editor } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const sequence = editor.getSequences()[0];
+  const path = makeCirclePath();
+  sequence.path = path;
+
+  const u2 = (path.length * 0.7) as PathCoordinate;
+  const choctaw = new LeftForwardOpenChoctaw("footL", (u2 - 0.5) as PathCoordinate, u2);
+  sequence.addElement(choctaw);
+  editor.draw();
+
+  const geometry = editorRef(editor).getElementLabelGeometry(sequence, choctaw);
+  const mid = (u2 - 0.25) as PathCoordinate;
+  const delta = ((choctaw.end - choctaw.start) * 0.01) as PathCoordinate;
+  const afterMiddle = footContactAt(sequence, "footR", (mid + delta) as PathCoordinate);
+  const atMiddle = footContactAt(sequence, "footR", mid);
+  expect(afterMiddle).not.toBeNull();
+  expect(atMiddle).not.toBeNull();
+  // The anchor sits on the exit foot trace past the middle, not at the
+  // discontinuity point: the two positions differ by more than the precision.
+  expect(geometry.point.x).toBeCloseTo(afterMiddle!.x, 9);
+  expect(geometry.point.y).toBeCloseTo(afterMiddle!.y, 9);
+  expect(Math.abs(geometry.point.x - atMiddle!.x)).toBeGreaterThan(1e-6);
+
+  editor.destroy();
+});
+
+test("a turn keeps the centerline anchor when the trace stays on the opposite side", () => {
+  const { editor } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const sequence = editor.getSequences()[0];
+  const path = makeCirclePath();
+  sequence.path = path;
+
+  const u1 = (path.length * 0.3) as PathCoordinate;
+  const turn = new LeftForwardOutsideThreeTurn("footL", u1, (u1 + 1.0) as PathCoordinate);
+  sequence.addElement(turn);
+  editor.draw();
+
+  const geometry = editorRef(editor).getElementLabelGeometry(sequence, turn);
+  const frame = labelFrameAt(path, (u1 + 0.5) as PathCoordinate);
+  expect(geometry.point.x).toBeCloseTo(frame.point.x, 9);
+  expect(geometry.point.y).toBeCloseTo(frame.point.y, 9);
+
+  editor.destroy();
+});
+
+test("a stroke keeps the centerline label anchor on a curved path", () => {
+  const { editor } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const sequence = editor.getSequences()[0];
+  const path = makeCirclePath();
+  sequence.path = path;
+
+  const u1 = (path.length * 0.3) as PathCoordinate;
+  const stroke = new LeftNormalForwardInsideGlide(u1, (u1 + 0.4) as PathCoordinate);
+  sequence.addElement(stroke);
+  editor.draw();
+
+  const geometry = editorRef(editor).getElementLabelGeometry(sequence, stroke);
+  const anchorU = ((stroke.end as number) + path.length) / 2;
+  const expected = path.getPosition(anchorU as PathCoordinate);
+  expect(geometry.point.x).toBeCloseTo(expected.x, 9);
+  expect(geometry.point.y).toBeCloseTo(expected.y, 9);
+
   editor.destroy();
 });
