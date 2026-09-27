@@ -47,6 +47,9 @@ import { TwoFeetTurn } from "@/engine/element/twoFeetTurn";
 import type { Element } from "@/engine/element/element";
 import { earliestTimeKeyframeSeconds, fullTimeExtentSeconds } from "@/engine/diagram";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
+import { storeToRefs } from "pinia";
+import UndoRedoButtons from "@/components/UndoRedoButtons.vue";
+import { useUndoRedoKeys } from "@/composables/useUndoRedoKeys";
 import { useMediaQuery } from "@/composables/useMediaQuery";
 import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
 import { usePlaybackKeyToggle } from "@/composables/usePlaybackKeyToggle";
@@ -530,6 +533,9 @@ const sharedHelpItems: HelpItem[] = [
   { keys: ["one finger"], descriptions: ["same as a left click"] },
   { keys: ["two fingers"], descriptions: ["pinch to zoom and drag to move the view"] },
   { keys: ["space"], descriptions: ["toggle the playback"] },
+  { keys: ["ctrl", "z"], descriptions: ["undo the last change"] },
+  { keys: ["ctrl", "y"], descriptions: ["redo the last undone change"] },
+  { keys: ["ctrl", "shift", "z"], descriptions: ["redo the last undone change"] },
   { keys: ["left arrow"], descriptions: ["move the time cursor back one video frame or 1/30 second"] },
   { keys: ["right arrow"], descriptions: ["move the time cursor forward one video frame or 1/30 second"] },
 ];
@@ -661,6 +667,7 @@ watch(elementsPane, (pane) => {
 onBeforeUnmount(() => paneObserver?.disconnect());
 
 const store = useSequenceEditorStore();
+const { canUndo, canRedo } = storeToRefs(store);
 
 const sequences = computed(() => store.getSequences());
 const activeSequence = computed(() => store.getActiveSequence());
@@ -1163,6 +1170,12 @@ watch(editMode, (mode) => {
 // The mode letters stay off while a modal dialog is open.
 useEditorModeKeys(editMode, () => !(elementChangeOpen.value || timingKeyframeOpen.value || annotationOpen.value));
 useTimeCursorKeys(stepTimeCursor, () => !(elementChangeOpen.value || timingKeyframeOpen.value || annotationOpen.value));
+const canApplyHistory = () => !(elementChangeOpen.value || timingKeyframeOpen.value || annotationOpen.value);
+useUndoRedoKeys(
+  () => store.undo(),
+  () => store.redo(),
+  canApplyHistory,
+);
 // A finger tap emulates a mouse enter, so the tab tooltips must stay off while the touch is recent.
 useTooltipTouchGuard();
 watch(
@@ -1709,6 +1722,7 @@ function closeElementChange() {
             <div class="editor-view__canvas-area">
               <canvas ref="canvasRef" class="editor-view__canvas-element"></canvas>
               <TrackingButton :active="isTracking" :mode="trackingStage" @toggle="toggleTracking" />
+              <UndoRedoButtons :can-undo="canUndo" :can-redo="canRedo" @undo="store.undo()" @redo="store.redo()" />
               <TimeSyncPane
                 v-if="editMode === 'view'"
                 ref="elementsPane"

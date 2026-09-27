@@ -80,7 +80,7 @@ function confirmDelete(sequence: Sequence, event: Event) {
   confirm.require({
     group: "diagram-sidebar-delete",
     target: event.currentTarget as HTMLElement,
-    message: `Delete "${sequence.name}"? This cannot be undone.`,
+    message: `Delete "${sequence.name}"?`,
     icon: "pi pi-exclamation-triangle",
     rejectLabel: "Cancel",
     acceptLabel: "Delete",

@@ -1,6 +1,7 @@
 import { ref, shallowRef, triggerRef } from "vue";
 import { defineStore } from "pinia";
 import { BothForwardGlide } from "@/engine/element/glide";
+import { applyParts, EditHistory, type EditStep } from "@/engine/sequenceEditor/editHistory";
 import { DEFAULT_START_ELEMENT_LENGTH } from "@/engine/sequenceEditor/editor";
 import { Curve } from "@/engine/curve";
 import { Diagram, type DiagramJSON } from "@/engine/diagram";
@@ -44,12 +45,28 @@ function loadStoredDiagram(): Diagram {
   }
 }
 
+const HISTORY_KEY = "sequence-editor-history";
+
 export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
   const diagram = shallowRef<Diagram>(loadStoredDiagram());
   const shortDrawRange = ref(false);
   const activeSequence = shallowRef<Sequence | null>(diagram.value.sequences[0] ?? null);
   const hiddenSequences = shallowRef<Set<Sequence>>(new Set());
   const jsonBaseline = ref<string>(JSON.stringify(diagram.value.toJSON(), null, 2));
+  const history = new EditHistory({ storage: localStorage, storageKey: HISTORY_KEY });
+  const canUndo = ref(false);
+  const canRedo = ref(false);
+  let applyingHistory = false;
+
+  function syncHistoryState() {
+    canUndo.value = history.canUndo;
+    canRedo.value = history.canRedo;
+  }
+
+  if (!history.rehydrate(JSON.stringify(diagram.value.toJSON()))) {
+    history.reset(JSON.stringify(diagram.value.toJSON()));
+  }
+  syncHistoryState();
 
   function getDiagram(): Diagram {
     return diagram.value;
@@ -137,27 +154,27 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     if (footKey === "footL") sequence.traceColorL = color;
     else sequence.traceColorR = color;
     triggerRef(diagram);
-    saveToStorage();
+    saveToStorage(true);
   }
 
   function setDiagramName(name: string) {
     const trimmed = name.trim();
     if (trimmed) diagram.value.name = trimmed;
     triggerRef(diagram);
-    saveToStorage();
+    saveToStorage(true);
   }
 
   function setDiagramBpm(bpm: number | undefined) {
     if (bpm !== undefined && (!Number.isFinite(bpm) || bpm <= 0)) return;
     diagram.value.bpm = bpm;
     triggerRef(diagram);
-    saveToStorage();
+    saveToStorage(true);
   }
 
   function setDiagramVideoUrl(videoUrl: string) {
     diagram.value.videoUrl = videoUrl.trim() !== "" ? videoUrl : undefined;
     triggerRef(diagram);
-    saveToStorage();
+    saveToStorage(true);
   }
 
   // The image travels as a base64 data URL, so it fits inside the stored and exported json.
@@ -172,7 +189,7 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     if (!Number.isFinite(value)) return;
     diagram.value.backgroundImageOpacity = Math.min(1, Math.max(0, value));
     triggerRef(diagram);
-    saveToStorage();
+    saveToStorage(true);
   }
 
   function setDiagramSymmetric(value: boolean) {
@@ -181,13 +198,68 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     saveToStorage();
   }
 
-  function saveToStorage() {
+  function saveToStorage(allowCoalesce = false) {
+    const json = JSON.stringify(diagram.value.toJSON());
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(diagram.value.toJSON()));
+      localStorage.setItem(STORAGE_KEY, json);
     } catch (error) {
       console.error("Could not store the diagram:", error);
     }
     triggerRef(diagram);
+    if (applyingHistory) return;
+    // A deliberate action (canvas gesture, dialog OK, button click) is one
+    // step and never merges. Only continuous inputs such as typed text, the
+    // slider and the color picker coalesce inside the window.
+    history.commit(json, allowCoalesce);
+    syncHistoryState();
+  }
+
+  // Applies a recorded step and rebuilds the sequences array reference, so the
+  // EditorView sequences watch fires and the canvas editor replaces its sequences.
+  function applyHistoryStep(step: EditStep, state: "previous" | "next") {
+    applyingHistory = true;
+    try {
+      const target = diagram.value;
+      const active = activeSequence.value;
+      const activeIndex = active === null ? -1 : target.sequences.indexOf(active);
+      const hiddenIndices = [...hiddenSequences.value]
+        .map((sequence) => target.sequences.indexOf(sequence))
+        .filter((index) => index >= 0);
+      const listChanges = step.parts.some((part) => part.kind === "sequences");
+      const touchesSequences = step.parts.some((part) => part.kind !== "diagram");
+      // The copy must happen before the apply: applyParts assigns members of
+      // the current array, and a held reference (the canvas editor sequences,
+      // the view member compare) must never see the rebuild in place, or the
+      // identity compare misses the change and the canvas stays stale.
+      if (touchesSequences) target.sequences = [...target.sequences];
+      applyParts(target, step.parts, state);
+      if (listChanges) hiddenSequences.value = new Set();
+      else
+        hiddenSequences.value = new Set(
+          hiddenIndices.map((index) => target.sequences[index]).filter((s): s is Sequence => Boolean(s)),
+        );
+      if (activeIndex >= 0 && activeIndex < target.sequences.length)
+        activeSequence.value = target.sequences[activeIndex]!;
+      else activeSequence.value = target.sequences[0] ?? null;
+      saveToStorage();
+    } finally {
+      applyingHistory = false;
+    }
+    syncHistoryState();
+  }
+
+  function undo(): string | null {
+    const step = history.undo();
+    if (!step) return null;
+    applyHistoryStep(step, "previous");
+    return step.label;
+  }
+
+  function redo(): string | null {
+    const step = history.redo();
+    if (!step) return null;
+    applyHistoryStep(step, "next");
+    return step.label;
   }
 
   function loadFromJSON(json: DiagramJSON) {
@@ -196,8 +268,16 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     diagram.value = next;
     activeSequence.value = next.sequences[0] ?? null;
     hiddenSequences.value = new Set();
-    triggerRef(diagram);
-    saveToStorage();
+    // The load itself is not an edit, so the recording stays off until the
+    // reset primes the baseline with the loaded state.
+    applyingHistory = true;
+    try {
+      saveToStorage();
+    } finally {
+      applyingHistory = false;
+    }
+    history.reset(JSON.stringify(diagram.value.toJSON()));
+    syncHistoryState();
     markSaved();
   }
 
@@ -222,8 +302,14 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     diagram.value = next;
     activeSequence.value = next.sequences[0] ?? null;
     hiddenSequences.value = new Set();
-    triggerRef(diagram);
-    saveToStorage();
+    applyingHistory = true;
+    try {
+      saveToStorage();
+    } finally {
+      applyingHistory = false;
+    }
+    history.reset(JSON.stringify(diagram.value.toJSON()));
+    syncHistoryState();
     markSaved();
   }
 
@@ -256,5 +342,9 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     markSaved,
     isUnsaved,
     clear,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   };
 });

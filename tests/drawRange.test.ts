@@ -67,7 +67,7 @@ test("the short draw range renders partial beziers and keeps transforms balanced
 
 test("the short draw range draws fewer trace samples than the full extent", async () => {
   const { readFileSync } = await import("fs");
-  const path = "./public/diagrams/moves-in-the-field/pre_preliminary_4.json";
+  const path = "./public/diagrams/moves-in-the-field/04_pre_preliminary_4.json";
   const json = JSON.parse(readFileSync(path, "utf-8")) as DiagramJSON;
   const diagram = Diagram.fromJSON(json);
   const sequence = diagram.sequences[0]!;
