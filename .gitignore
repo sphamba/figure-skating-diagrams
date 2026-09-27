@@ -1,3 +1,6 @@
+# Vite PWA dev service worker
+dev-dist
+
 # Logs
 logs
 *.log

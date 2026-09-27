@@ -3,7 +3,7 @@ import { fileURLToPath, URL } from 'node:url'
 
 import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import vueDevTools from 'vite-plugin-vue-devtools'
+import { VitePWA } from 'vite-plugin-pwa'
 
 type DiagramTreeFile = { name: string; path: string }
 type DiagramTreeFolder = { name: string; files: DiagramTreeFile[]; folders: DiagramTreeFolder[] }
@@ -50,8 +50,42 @@ export default defineConfig({
   base: process.env.GITHUB_ACTIONS ? "/figure-skating-diagrams/" : "/",
   plugins: [
     vue(),
-    vueDevTools(),
     diagramTreePlugin(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      manifest: {
+        name: 'Figure Skating Diagrams',
+        short_name: 'Skating Diagrams',
+        description:
+          'Draw and animate step and pattern diagrams for figure skating, then open them offline.',
+        theme_color: '#0ea5e9',
+        background_color: '#ffffff',
+        display: 'standalone',
+        icons: [
+          {
+            src: 'pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+        ],
+      },
+      workbox: {
+        // Precache the app shell, fonts, and every bundled diagram JSON.
+        globPatterns: ['**/*.{js,css,html,svg,png,webp,ico,woff,woff2,json}'],
+      },
+      // The glob patterns already cover the manifest icons.
+      includeManifestIcons: false,
+      devOptions: {
+        enabled: true,
+      },
+    }),
   ],
   resolve: {
     alias: {
