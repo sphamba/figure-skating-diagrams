@@ -396,14 +396,14 @@
         },
         {
           "type": "LeftForwardInsideThreeTurn",
-          "start": 58.254799960778925,
-          "end": 59.06054185332611,
+          "start": 58.30937141274163,
+          "end": 59.115111610608594,
           "shortName": "LFI3"
         },
         {
           "type": "LeftBackwardOutsideThreeTurn",
-          "start": 64.07913775940396,
-          "end": 64.88496304963012,
+          "start": 63.88190067462822,
+          "end": 64.68773487135513,
           "shortName": "LBO3"
         },
         {
