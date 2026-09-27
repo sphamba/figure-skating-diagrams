@@ -209,17 +209,17 @@ const twoFeetTurnStepCounts: { [group: string]: number } = {
 };
 
 const twizzleTurnsLevelOptions = [
-  { label: "1/2 turn", value: "0.5" },
+  { label: "½ turn", value: "0.5" },
   { label: "1 turn", value: "1" },
-  { label: "1-1/2 turns", value: "1.5" },
+  { label: "1½ turns", value: "1.5" },
   { label: "2 turns", value: "2" },
-  { label: "2-1/2 turns", value: "2.5" },
+  { label: "2½ turns", value: "2.5" },
   { label: "3 turns", value: "3" },
-  { label: "3-1/2 turns", value: "3.5" },
+  { label: "3½ turns", value: "3.5" },
   { label: "4 turns", value: "4" },
-  { label: "4-1/2 turns", value: "4.5" },
+  { label: "4½ turns", value: "4.5" },
   { label: "5 turns", value: "5" },
-  { label: "5-1/2 turns", value: "5.5" },
+  { label: "5½ turns", value: "5.5" },
 ];
 
 const turnLevelOptionsByGroup: { [group: string]: { label: string; value: string }[][] } = {

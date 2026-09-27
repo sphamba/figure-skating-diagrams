@@ -75,15 +75,15 @@ function turnsNumeral(turns: number): string {
   const whole = Math.trunc(turns);
   const half = turns - whole === 0.5;
   if (whole === 0) {
-    return "1/2";
+    return "½";
   }
-  return half ? `${whole}-1/2` : `${whole}`;
+  return half ? `${whole}½` : `${whole}`;
 }
 
 function turnsShortSuffix(turns: number): string {
   const numeral = turnsNumeral(turns);
   const half = !Number.isInteger(turns);
-  return half ? `${numeral} TW` : `${numeral}TW`;
+  return half ? `${numeral} Tw` : `${numeral}Tw`;
 }
 
 export const twizzleKindChoices: { type: string; label: string }[] = [];

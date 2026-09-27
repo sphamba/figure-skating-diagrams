@@ -12,15 +12,15 @@ function makeTwizzle(type: string, start = 0.25, end = 0.75) {
 }
 
 test.each([
-  ["LeftForwardInsideTwizzle1.5", "LFI 1-1/2 TW"],
-  ["LeftForwardInsideTwizzle2", "LFI 2TW"],
-  ["LeftForwardInsideTwizzle0.5", "LFI 1/2 TW"],
-  ["LeftForwardInsideTwizzle5", "LFI 5TW"],
-  ["LeftForwardInsideTwizzle4.5", "LFI 4-1/2 TW"],
-  ["LeftForwardInsideTwizzle1", "LFI 1TW"],
-  ["LeftForwardInsideTwizzle5.5", "LFI 5-1/2 TW"],
-  ["RightBackwardOutsideTwizzle2.5", "RBO 2-1/2 TW"],
-  ["RightForwardInsideTwizzle0.5", "RFI 1/2 TW"],
+  ["LeftForwardInsideTwizzle1.5", "LFI 1½ Tw"],
+  ["LeftForwardInsideTwizzle2", "LFI 2Tw"],
+  ["LeftForwardInsideTwizzle0.5", "LFI ½ Tw"],
+  ["LeftForwardInsideTwizzle5", "LFI 5Tw"],
+  ["LeftForwardInsideTwizzle4.5", "LFI 4½ Tw"],
+  ["LeftForwardInsideTwizzle1", "LFI 1Tw"],
+  ["LeftForwardInsideTwizzle5.5", "LFI 5½ Tw"],
+  ["RightBackwardOutsideTwizzle2.5", "RBO 2½ Tw"],
+  ["RightForwardInsideTwizzle0.5", "RFI ½ Tw"],
 ])("A %s twizzle instantiates with the right type and short name", (type, shortName) => {
   const twizzle = makeTwizzle(type);
 
