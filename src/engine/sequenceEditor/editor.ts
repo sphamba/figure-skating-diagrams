@@ -178,6 +178,10 @@ type JointDeletionSnapshot = MoveSnapshot & {
   jointOldCount: number;
 };
 
+// Owners whose appear and disappear transitions the editor tracks.
+type TransitionOwner = Element | Annotation | TimingKeyframe;
+type TransitionOwnerPair = { from: TransitionOwner; to: TransitionOwner };
+
 export class Editor {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2DSized;
@@ -415,10 +419,79 @@ export class Editor {
   }
 
   setSequences(sequences: Sequence[]) {
+    this.remapTransitionOwners(sequences);
     this.sequences = sequences;
     this.sequenceMutated = false;
     this.clearEditingState();
     this.draw();
+  }
+
+  // Pairs rebuilt owners with their previous instances, so an undo or redo
+  // keeps the transition states of labels that remain or just move and the
+  // labels never restart their appear animation. Replaced sequences pair by
+  // index; owners within one sequence pair by equal position, then by index.
+  private remapTransitionOwners(next: Sequence[]) {
+    const previous = this.sequences;
+    const previousSet = new Set(previous);
+    const oldReplaced: Sequence[] = [];
+    const newReplaced: Sequence[] = [];
+    for (const sequence of previous) {
+      if (!next.includes(sequence)) oldReplaced.push(sequence);
+    }
+    for (const sequence of next) {
+      if (!previousSet.has(sequence)) newReplaced.push(sequence);
+    }
+    const count = Math.min(oldReplaced.length, newReplaced.length);
+    if (count === 0) return;
+    const pairs: TransitionOwnerPair[] = [];
+    for (let index = 0; index < count; index++) {
+      this.pairSequenceOwners(oldReplaced[index]!, newReplaced[index]!, pairs);
+    }
+    this.transitions.remapOwners(pairs);
+  }
+
+  private pairSequenceOwners(previous: Sequence, next: Sequence, pairs: TransitionOwnerPair[]) {
+    this.pairOwnersByPosition(previous.elements, next.elements, pairs, (owner) => `${owner.start}:${owner.end}`);
+    this.pairOwnersByPosition(previous.annotations, next.annotations, pairs, (owner) => `${owner.start}:${owner.end}`);
+    this.pairOwnersByPosition(
+      previous.keyframes.time,
+      next.keyframes.time,
+      pairs,
+      (owner) => `${owner.pathCoordinate}`,
+    );
+  }
+
+  // Pairs owners of one kind by equal position, then the leftovers by order,
+  // so a moved owner still transfers its state and a genuinely new one starts
+  // hidden and fades in.
+  private pairOwnersByPosition<T extends TransitionOwner>(
+    previous: readonly T[],
+    next: readonly T[],
+    pairs: TransitionOwnerPair[],
+    position: (owner: T) => string,
+  ): void {
+    const buckets = new Map<string, T[]>();
+    for (const owner of previous) {
+      const key = position(owner);
+      const bucket = buckets.get(key);
+      if (bucket) bucket.push(owner);
+      else buckets.set(key, [owner]);
+    }
+    const matched = new Set<T>();
+    const kept = new Set<T>();
+    for (const owner of next) {
+      const match = buckets.get(position(owner))?.shift();
+      if (!match) continue;
+      matched.add(match);
+      kept.add(owner);
+      pairs.push({ from: match, to: owner });
+    }
+    const previousLeft = previous.filter((owner) => !matched.has(owner));
+    const nextLeft = next.filter((owner) => !kept.has(owner));
+    const count = Math.min(previousLeft.length, nextLeft.length);
+    for (let index = 0; index < count; index++) {
+      pairs.push({ from: previousLeft[index]!, to: nextLeft[index]! });
+    }
   }
 
   private clearEditingState() {

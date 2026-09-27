@@ -1,8 +1,10 @@
 import { expect, test } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
-import { createStubCanvas, makeNoopContext } from "./helpers";
+import { createStubCanvas, makeNoopContext, makeStraightLengthOnePath } from "./helpers";
 import { Editor } from "../src/engine/sequenceEditor/editor";
 import { Sequence } from "../src/engine/sequence";
+import { LeftForwardInsideGlide, LeftForwardOutsideGlide } from "../src/engine/element/glide";
+import type { PathCoordinate } from "../src/engine/coordinates";
 import { useSequenceEditorStore } from "../src/stores/sequenceEditor";
 
 function makeEditor() {
@@ -178,6 +180,58 @@ test("rapid store input commits merge while canvas edits stay separate", () => {
   expect(store.undo()).not.toBeNull();
   sync();
   expect((editor.getSequences()[0] as Sequence).path.curves[0]!.p0.x).toBeCloseTo(-2.5, 6);
+
+  editor.destroy();
+});
+
+function makeLabelEditor() {
+  const ctx: Record<string, unknown> = { ...makeNoopContext() };
+  const canvas = createStubCanvas(ctx);
+  const editor = new Editor(canvas, [], {});
+  editor.mode = "view";
+  const drawn: string[] = [];
+  ctx.fillText = (text: string) => {
+    drawn.push(String(text));
+  };
+  return { editor, drawn };
+}
+
+test("an undo-style rebuild keeps element labels settled through setSequences", () => {
+  const { editor, drawn } = makeLabelEditor();
+  const sequence = new Sequence(makeStraightLengthOnePath());
+  sequence.addElement(new LeftForwardOutsideGlide(0.2 as PathCoordinate, 0.6 as PathCoordinate));
+  editor.setSequences([sequence]);
+  editor.draw();
+  editor.finishLabelTransitions();
+  editor.draw();
+  expect(drawn).toContain("LFO");
+
+  // The undo applies Sequence.fromJSON, so every owner is a new object.
+  drawn.length = 0;
+  editor.setSequences([Sequence.fromJSON(sequence.toJSON())]);
+  editor.draw();
+  expect(drawn).toContain("LFO");
+
+  // A label that just moves keeps its state too.
+  drawn.length = 0;
+  const moved = Sequence.fromJSON(sequence.toJSON());
+  const element = moved.elements[0]!;
+  element.start = 0.3 as PathCoordinate;
+  element.end = 0.7 as PathCoordinate;
+  editor.setSequences([moved]);
+  editor.draw();
+  expect(drawn).toContain("LFO");
+
+  // A genuinely new label starts hidden and fades in.
+  drawn.length = 0;
+  const withExtra = Sequence.fromJSON(sequence.toJSON());
+  withExtra.addElement(new LeftForwardInsideGlide(0.7 as PathCoordinate, 0.9 as PathCoordinate));
+  editor.setSequences([withExtra]);
+  editor.draw();
+  expect(drawn).not.toContain("LFI");
+  editor.finishLabelTransitions();
+  editor.draw();
+  expect(drawn).toContain("LFI");
 
   editor.destroy();
 });

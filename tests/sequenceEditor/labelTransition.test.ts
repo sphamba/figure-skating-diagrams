@@ -47,10 +47,12 @@ const stubCtx = (): CanvasRenderingContext2DSized => {
 // Zoom 100: the stub metrics measure to a pill of half width 26.5 and half height 8.5.
 const ZOOM = 100;
 
-const makeBuild = (tracking: { count: number }): LabelTransitionBuild => () => {
-  tracking.count++;
-  return new PillLabel("x", new Vector(0, 0), null, ZOOM);
-};
+const makeBuild =
+  (tracking: { count: number }): LabelTransitionBuild =>
+  () => {
+    tracking.count++;
+    return new PillLabel("x", new Vector(0, 0), null, ZOOM);
+  };
 
 const capturingLayer = (): { layer: LabelLayer; labels: CanvasLabel[] } => {
   const labels: CanvasLabel[] = [];
@@ -62,7 +64,10 @@ const capturingLayer = (): { layer: LabelLayer; labels: CanvasLabel[] } => {
 
 /* The anchor and the label sit on the canvas y axis, so the connector triangle
  * is the only drawn path whose points share the anchor x of zero. */
-const connectorApexes = (tracked: { moveTo: (x: number, y: number) => void; lineTo: (x: number, y: number) => void }) => {
+const connectorApexes = (tracked: {
+  moveTo: (x: number, y: number) => void;
+  lineTo: (x: number, y: number) => void;
+}) => {
   const points: Array<{ x: number; y: number }> = [];
   const push = points.push.bind(points);
   tracked.moveTo = (x, y) => {
@@ -267,6 +272,60 @@ describe("LabelTransitions", () => {
     labels.length = 0;
     transitions.collectExit({ add: () => {} } as unknown as LabelLayer);
     expect(labels).toHaveLength(0);
+  });
+
+  test("remapOwners moves the state of a replaced owner to its rebuilt instance", () => {
+    const transitions = new LabelTransitions();
+    transitions.beginFrame();
+    const previous = {};
+    const rebuilt = {};
+    const build = makeBuild({ count: 0 });
+    transitions.touch(previous, "name", build);
+
+    settle(transitions, previous, build, 0, LABEL_ENTER_MS);
+
+    transitions.remapOwners([{ from: previous, to: rebuilt }]);
+    transitions.beginFrame();
+    expect(transitions.touch(rebuilt, "name", build)).toEqual({ container: 1, connector: 1, text: 1 });
+    // The state moved, so the previous owner starts fresh instead of exiting.
+    expect(transitions.touch(previous, "name", build)).toEqual({ container: 0, connector: 0, text: 0 });
+  });
+
+  test("remapOwners keeps a mid-enter state so the appear animation continues", () => {
+    const transitions = new LabelTransitions();
+    transitions.beginFrame();
+    const previous = {};
+    const rebuilt = {};
+    const build = makeBuild({ count: 0 });
+    transitions.touch(previous, "name", build);
+
+    settle(transitions, previous, build, 0, LABEL_ENTER_MS / 8);
+    const before = transitions.touch(previous, "name", build);
+    expect(before.container).toBeGreaterThan(0);
+    expect(before.container).toBeLessThan(1);
+
+    transitions.remapOwners([{ from: previous, to: rebuilt }]);
+    transitions.beginFrame();
+    const after = transitions.touch(rebuilt, "name", build);
+    expect(after.container).toBeCloseTo(before.container, 6);
+    expect(after.container).toBeLessThan(1);
+  });
+
+  test("remapOwners leaves a rebuilt owner that already runs its own state", () => {
+    const transitions = new LabelTransitions();
+    transitions.beginFrame();
+    const previous = {};
+    const rebuilt = {};
+    const build = makeBuild({ count: 0 });
+    transitions.touch(previous, "name", build);
+    transitions.touch(rebuilt, "name", build);
+
+    settle(transitions, previous, build, 0, LABEL_ENTER_MS);
+    settle(transitions, rebuilt, build, 0, LABEL_ENTER_MS);
+
+    transitions.remapOwners([{ from: previous, to: rebuilt }]);
+    transitions.beginFrame();
+    expect(transitions.touch(rebuilt, "name", build)).toEqual({ container: 1, connector: 1, text: 1 });
   });
 
   test("animating is true while a transition runs and false once settled", () => {

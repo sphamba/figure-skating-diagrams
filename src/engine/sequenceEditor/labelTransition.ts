@@ -82,6 +82,18 @@ export class LabelTransitions {
     return this.progress(state.raw, false);
   }
 
+  // Moves the states of replaced owners to their rebuilt instances, so an undo
+  // or redo keeps the labels that remain or just move from restarting. Owners
+  // without a rebuilt counterpart keep their state and exit through collectExit.
+  remapOwners(pairs: Iterable<{ from: object; to: object }>): void {
+    for (const { from, to } of pairs) {
+      const states = this.states.get(from);
+      if (!states || this.states.has(to)) continue;
+      this.states.delete(from);
+      this.states.set(to, states);
+    }
+  }
+
   // Collects the labels that left this frame: they shrink along the exit part
   // of the timeline until it completes, then their state drops. The shrink
   // measures from the observed disappearance, so an idle gap never skips it.
