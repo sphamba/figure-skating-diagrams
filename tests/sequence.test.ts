@@ -7,6 +7,7 @@ import { FootKeyframe, TimingKeyframe } from "../src/engine/keyframe";
 import { Path } from "../src/engine/path";
 import { Quaternion } from "../src/engine/quaternion";
 import { LeftForwardOutsideThreeTurn } from "../src/engine/element/threeTurn";
+import { spinConstructorsByType, type Spin } from "../src/engine/element/spin";
 import { LeftForwardOpenChoctaw } from "../src/engine/element/choctaw";
 import { LeftForwardOutsideLoop } from "../src/engine/element/loop";
 import { Sequence, defaultTraceColorL, defaultTraceColorR } from "../src/engine/sequence";
@@ -35,9 +36,9 @@ test("Clock clamps outside the defined range", () => {
   const sequence = new Sequence(makeStraightLengthOnePath());
   sequence.addKeyframe("time", new TimingKeyframe(1 as PathCoordinate, "time", 2));
 
-  expect(sequence.getTimeFromPathCoordinate((-0.5) as PathCoordinate)).toBeCloseTo(0);
+  expect(sequence.getTimeFromPathCoordinate(-0.5 as PathCoordinate)).toBeCloseTo(0);
   expect(sequence.getTimeFromPathCoordinate(5 as PathCoordinate)).toBeCloseTo(2);
-  expect(sequence.getPathCoordinateFromTime((-0.3) as Time)).toBeCloseTo(0);
+  expect(sequence.getPathCoordinateFromTime(-0.3 as Time)).toBeCloseTo(0);
   expect(sequence.getPathCoordinateFromTime(3 as Time)).toBeCloseTo(1);
 });
 
@@ -251,7 +252,9 @@ test("Timing keyframes round-trip through JSON", () => {
 
   const loaded = Sequence.fromJSON(JSON.parse(JSON.stringify(sequence.toJSON())));
   expect(loaded.keyframes.time).toHaveLength(3);
-  const time = loaded.keyframes.time.find((keyframe) => keyframe.kind === "time" && (keyframe.pathCoordinate as number) > 0);
+  const time = loaded.keyframes.time.find(
+    (keyframe) => keyframe.kind === "time" && (keyframe.pathCoordinate as number) > 0,
+  );
   const beats = loaded.keyframes.time.find((keyframe) => keyframe.kind === "beats");
   expect(time?.pathCoordinate).toBeCloseTo(0.5);
   expect(time?.value).toBeCloseTo(1.5);
@@ -394,4 +397,41 @@ test("getFootTraceContactPosition places the choctaw feet on opposite sides at t
   expect(exit).not.toBeNull();
   expect(entry!.y).toBeCloseTo(mid.y + 0.15, 9);
   expect(exit!.y).toBeCloseTo(mid.y - 0.15, 9);
+});
+
+test("mirroring a sequence mirrors the path and swaps the element sides", () => {
+  const path = new Path();
+  path.addCurveEnd(new Curve(new Vector(0, 1), new Vector(1, 2), new Vector(2, -1), new Vector(3, -2)));
+  const sequence = new Sequence(path);
+  const turn = new LeftForwardOutsideThreeTurn("footL", 0 as PathCoordinate, 1.5 as PathCoordinate);
+  const spin = new spinConstructorsByType["LeftInsideSpin"]!(1.5 as PathCoordinate, 3 as PathCoordinate);
+  sequence.addElement(turn);
+  sequence.addElement(spin);
+  const pathBefore = path.curves[0]!.toJSON();
+
+  sequence.mirrorHorizontal();
+  // The bounding box spans x in [0, 3], so the mirror line sits at x = 1.5.
+  expect(sequence.path.curves[0]!.p0.x).toBeCloseTo(3, 10);
+  expect(sequence.path.curves[0]!.p0.y).toBeCloseTo(1, 10);
+  expect(sequence.elements[0]!.type).toBe("RightForwardOutsideThreeTurn");
+  expect(sequence.elements[1]!.type).toBe("RightInsideSpin");
+  expect((sequence.elements[1] as Spin).leftHanded).toBe(true);
+  // The elements keep their span in the path.
+  expect(sequence.elements[0]!.start).toBe(turn.start);
+  expect(sequence.elements[0]!.end).toBe(turn.end);
+  expect(sequence.elements[1]!.start).toBe(spin.start);
+  expect(sequence.elements[1]!.end).toBe(spin.end);
+
+  sequence.mirrorVertical();
+  // The bounding box spans y in [-2, 2], so the mirror line sits at y = 0.
+  expect(sequence.path.curves[0]!.p0.y).toBeCloseTo(-1, 10);
+  expect(sequence.elements[0]!.type).toBe("LeftForwardOutsideThreeTurn");
+  expect(sequence.elements[1]!.type).toBe("LeftInsideSpin");
+  expect((sequence.elements[1] as Spin).leftHanded).toBe(false);
+
+  sequence.mirrorVertical();
+  sequence.mirrorHorizontal();
+  expect(sequence.path.curves[0]!.toJSON()).toEqual(pathBefore);
+  expect(sequence.elements[0]!.type).toBe("LeftForwardOutsideThreeTurn");
+  expect(sequence.elements[1]!.type).toBe("LeftInsideSpin");
 });

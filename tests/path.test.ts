@@ -43,132 +43,122 @@ test("pickCurve returns null on an empty path", () => {
 });
 
 test("removePoint merges the curves around the joint on the cubic that splits into them", () => {
-	const path = new Path();
-	path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1, 1), new Vector(2, 2), new Vector(3, 3)));
-	path.addCurveEnd(new Curve(new Vector(3, 3), new Vector(5, 5), new Vector(7, 7), new Vector(8, 8)));
+  const path = new Path();
+  path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1, 1), new Vector(2, 2), new Vector(3, 3)));
+  path.addCurveEnd(new Curve(new Vector(3, 3), new Vector(5, 5), new Vector(7, 7), new Vector(8, 8)));
 
-	const joint = path.curves[0].p3;
-	path.removePoint(joint);
+  const joint = path.curves[0].p3;
+  path.removePoint(joint);
 
-	expect(path.curves).toHaveLength(1);
-	const merged = path.curves[0]!;
-	expect(merged.p0.x).toBeCloseTo(0, 10);
-	expect(merged.p0.y).toBeCloseTo(0, 10);
-	expect(merged.p1.x).toBeCloseTo(3, 10);
-	expect(merged.p1.y).toBeCloseTo(3, 10);
-	expect(merged.p2.x).toBeCloseTo(6.5, 10);
-	expect(merged.p2.y).toBeCloseTo(6.5, 10);
-	expect(merged.p3.x).toBeCloseTo(8, 10);
-	expect(merged.p3.y).toBeCloseTo(8, 10);
-	expect(path.curves.some((c) => c.p3 === joint)).toBe(false);
+  expect(path.curves).toHaveLength(1);
+  const merged = path.curves[0]!;
+  expect(merged.p0.x).toBeCloseTo(0, 10);
+  expect(merged.p0.y).toBeCloseTo(0, 10);
+  expect(merged.p1.x).toBeCloseTo(3, 10);
+  expect(merged.p1.y).toBeCloseTo(3, 10);
+  expect(merged.p2.x).toBeCloseTo(6.5, 10);
+  expect(merged.p2.y).toBeCloseTo(6.5, 10);
+  expect(merged.p3.x).toBeCloseTo(8, 10);
+  expect(merged.p3.y).toBeCloseTo(8, 10);
+  expect(path.curves.some((c) => c.p3 === joint)).toBe(false);
 });
 
 test("removePoint inverts a fresh split so the path returns to its initial control points", () => {
-	const path = new Path();
-	const original = new Curve(
-		new Vector(0, 0),
-		new Vector(0.5, 0.5),
-		new Vector(1.5, -0.5),
-		new Vector(2, 0),
-	);
-	path.addCurveEnd(original);
+  const path = new Path();
+  const original = new Curve(new Vector(0, 0), new Vector(0.5, 0.5), new Vector(1.5, -0.5), new Vector(2, 0));
+  path.addCurveEnd(original);
 
-	path.cut(0, original.getHalfLengthCoordinate());
-	expect(path.curves).toHaveLength(2);
+  path.cut(0, original.getHalfLengthCoordinate());
+  expect(path.curves).toHaveLength(2);
 
-	path.removePoint(path.curves[0]!.p3);
+  path.removePoint(path.curves[0]!.p3);
 
-	expect(path.curves).toHaveLength(1);
-	const restored = path.curves[0]!;
-	expect(restored.p0.x).toBeCloseTo(0, 10);
-	expect(restored.p0.y).toBeCloseTo(0, 10);
-	expect(restored.p1.x).toBeCloseTo(0.5, 10);
-	expect(restored.p1.y).toBeCloseTo(0.5, 10);
-	expect(restored.p2.x).toBeCloseTo(1.5, 10);
-	expect(restored.p2.y).toBeCloseTo(-0.5, 10);
-	expect(restored.p3.x).toBeCloseTo(2, 10);
-	expect(restored.p3.y).toBeCloseTo(0, 10);
+  expect(path.curves).toHaveLength(1);
+  const restored = path.curves[0]!;
+  expect(restored.p0.x).toBeCloseTo(0, 10);
+  expect(restored.p0.y).toBeCloseTo(0, 10);
+  expect(restored.p1.x).toBeCloseTo(0.5, 10);
+  expect(restored.p1.y).toBeCloseTo(0.5, 10);
+  expect(restored.p2.x).toBeCloseTo(1.5, 10);
+  expect(restored.p2.y).toBeCloseTo(-0.5, 10);
+  expect(restored.p3.x).toBeCloseTo(2, 10);
+  expect(restored.p3.y).toBeCloseTo(0, 10);
 });
 
 test("splitting a curve at its arc-length midpoint keeps the path shape", () => {
-	const path = new Path();
-	const original = new Curve(
-		new Vector(0, 0),
-		new Vector(0.5, 0.5),
-		new Vector(1.5, -0.5),
-		new Vector(2, 0),
-	);
-	path.addCurveEnd(original);
+  const path = new Path();
+  const original = new Curve(new Vector(0, 0), new Vector(0.5, 0.5), new Vector(1.5, -0.5), new Vector(2, 0));
+  path.addCurveEnd(original);
 
-	const mid = original.getHalfLengthCoordinate();
-	const expectedPoint = original.getPosition(mid);
-	path.cut(0, mid);
+  const mid = original.getHalfLengthCoordinate();
+  const expectedPoint = original.getPosition(mid);
+  path.cut(0, mid);
 
-	expect(path.curves).toHaveLength(2);
+  expect(path.curves).toHaveLength(2);
 
-	const joint = path.curves[0]!.p3;
-	expect(joint.x).toBeCloseTo(expectedPoint.x, 10);
-	expect(joint.y).toBeCloseTo(expectedPoint.y, 10);
+  const joint = path.curves[0]!.p3;
+  expect(joint.x).toBeCloseTo(expectedPoint.x, 10);
+  expect(joint.y).toBeCloseTo(expectedPoint.y, 10);
 
-	expect(path.curves[0]!.p0.x).toBeCloseTo(0, 10);
-	expect(path.curves[1]!.p3.x).toBeCloseTo(2, 10);
+  expect(path.curves[0]!.p0.x).toBeCloseTo(0, 10);
+  expect(path.curves[1]!.p3.x).toBeCloseTo(2, 10);
 
-	expect(path.curves[1]!.p0).toBe(joint);
+  expect(path.curves[1]!.p0).toBe(joint);
 
-	const arcToJoint = integrateArcLength(original, 0, mid);
-	const arcAfterJoint = integrateArcLength(original, mid, 1);
-	expect(arcToJoint).toBeCloseTo(arcAfterJoint, 2);
+  const arcToJoint = integrateArcLength(original, 0, mid);
+  const arcAfterJoint = integrateArcLength(original, mid, 1);
+  expect(arcToJoint).toBeCloseTo(arcAfterJoint, 2);
 });
 
 test("removeEndCurve and removeStartCurve shorten the path at the ends", () => {
-	const path = new Path();
-	path.addCurveEnd(horizontalCurve(0));
-	path.addCurveEnd(horizontalCurve(1));
-	path.addCurveEnd(horizontalCurve(2));
-	expect(path.curves).toHaveLength(3);
+  const path = new Path();
+  path.addCurveEnd(horizontalCurve(0));
+  path.addCurveEnd(horizontalCurve(1));
+  path.addCurveEnd(horizontalCurve(2));
+  expect(path.curves).toHaveLength(3);
 
-	const first = path.curves[0]!;
-	const last = path.curves[2]!;
+  const first = path.curves[0]!;
+  const last = path.curves[2]!;
 
-	path.removeEndCurve();
-	expect(path.curves).toHaveLength(2);
-	expect(path.curves[path.curves.length - 1]).not.toBe(last);
+  path.removeEndCurve();
+  expect(path.curves).toHaveLength(2);
+  expect(path.curves[path.curves.length - 1]).not.toBe(last);
 
-	path.removeStartCurve();
-	expect(path.curves).toHaveLength(1);
-	expect(path.curves[0]).not.toBe(first);
+  path.removeStartCurve();
+  expect(path.curves).toHaveLength(1);
+  expect(path.curves[0]).not.toBe(first);
 });
 
 test("an element traced along the path keeps its length across curves of very different lengths", () => {
-	const path = new Path();
-	path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(2, 8), new Vector(6, -8), new Vector(8, 0)));
-	path.addCurveEnd(new Curve(new Vector(8, 0), new Vector(8.1, 0.3), new Vector(8.2, -0.3), new Vector(8.3, 0)));
-	path.addCurveEnd(new Curve(new Vector(8.3, 0), new Vector(13.3, 0), new Vector(18.3, 0), new Vector(23.3, 0)));
+  const path = new Path();
+  path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(2, 8), new Vector(6, -8), new Vector(8, 0)));
+  path.addCurveEnd(new Curve(new Vector(8, 0), new Vector(8.1, 0.3), new Vector(8.2, -0.3), new Vector(8.3, 0)));
+  path.addCurveEnd(new Curve(new Vector(8.3, 0), new Vector(13.3, 0), new Vector(18.3, 0), new Vector(23.3, 0)));
 
-	const [c0, c1] = path.curves.map((curve) => curve.length);
-	expect(c1).toBeLessThan(c0 / 10);
+  const [c0, c1] = path.curves.map((curve) => curve.length);
+  expect(c1).toBeLessThan(c0 / 10);
 
-	const span = 5;
-	const increment = 0.02;
-	const drawnLength = (start: number) => {
-		const points: Vector<2>[] = [];
-		for (let u = start; u <= start + span; u += increment) {
-			points.push(path.getPosition(u as PathCoordinate));
-		}
-		let length = 0;
-		for (let i = 0; i < points.length - 1; i++) length += points[i]!.minus(points[i + 1]!).length();
-		return length;
-	};
+  const span = 5;
+  const increment = 0.02;
+  const drawnLength = (start: number) => {
+    const points: Vector<2>[] = [];
+    for (let u = start; u <= start + span; u += increment) {
+      points.push(path.getPosition(u as PathCoordinate));
+    }
+    let length = 0;
+    for (let i = 0; i < points.length - 1; i++) length += points[i]!.minus(points[i + 1]!).length();
+    return length;
+  };
 
-	let min = Infinity;
-	let max = -Infinity;
-	for (let start = 0; start + span < path.length - 1e-9; start += 0.5) {
-		const length = drawnLength(start);
-		min = Math.min(min, length);
-		max = Math.max(max, length);
-	}
-	expect(min).toBeGreaterThan(span * 0.995);
-	expect(max).toBeLessThan(span * 1.005);
+  let min = Infinity;
+  let max = -Infinity;
+  for (let start = 0; start + span < path.length - 1e-9; start += 0.5) {
+    const length = drawnLength(start);
+    min = Math.min(min, length);
+    max = Math.max(max, length);
+  }
+  expect(min).toBeGreaterThan(span * 0.995);
+  expect(max).toBeLessThan(span * 1.005);
 });
 
 test("drawRange draws the covered sub-curves with native bezier primitives", () => {
@@ -190,7 +180,7 @@ test("drawRange draws the covered sub-curves with native bezier primitives", () 
     stroke: () => {},
   } as unknown as CanvasRenderingContext2DSized;
 
-  const bound = path.getCurveAndCurvilinearCoord(path.length / 4 as PathCoordinate);
+  const bound = path.getCurveAndCurvilinearCoord((path.length / 4) as PathCoordinate);
   const uStart = bound[0].length / 2;
   const uEnd = path.curves[0]!.length + path.curves[1]!.length;
 
@@ -233,52 +223,172 @@ test("drawRange sub-bezier endpoints land exactly on the path", () => {
 });
 
 test("arcLengthBetween is additive and moveAlongByArcLength lands at that length", () => {
-	const curve = new Curve(new Vector(0, 0), new Vector(0.5, 0), new Vector(5, 4), new Vector(50, 0));
-	const path = new Path();
-	path.curves.push(curve);
-	path.updateLength();
+  const curve = new Curve(new Vector(0, 0), new Vector(0.5, 0), new Vector(5, 4), new Vector(50, 0));
+  const path = new Path();
+  path.curves.push(curve);
+  path.updateLength();
 
-	const a = (path.length * 0.2) as PathCoordinate;
-	const b = (path.length * 0.5) as PathCoordinate;
-	const c = (path.length * 0.8) as PathCoordinate;
+  const a = (path.length * 0.2) as PathCoordinate;
+  const b = (path.length * 0.5) as PathCoordinate;
+  const c = (path.length * 0.8) as PathCoordinate;
 
-	expect(path.arcLengthBetween(a, b) + path.arcLengthBetween(b, c)).toBeCloseTo(path.arcLengthBetween(a, c), 6);
+  expect(path.arcLengthBetween(a, b) + path.arcLengthBetween(b, c)).toBeCloseTo(path.arcLengthBetween(a, c), 6);
 
-	const d = 3;
-	const bFromA = path.moveAlongByArcLength(a, d);
-	expect(path.arcLengthBetween(a, bFromA)).toBeCloseTo(d, 6);
-	const aFromB = path.moveAlongByArcLength(b, -d);
-	expect(path.arcLengthBetween(aFromB, b)).toBeCloseTo(d, 6);
+  const d = 3;
+  const bFromA = path.moveAlongByArcLength(a, d);
+  expect(path.arcLengthBetween(a, bFromA)).toBeCloseTo(d, 6);
+  const aFromB = path.moveAlongByArcLength(b, -d);
+  expect(path.arcLengthBetween(aFromB, b)).toBeCloseTo(d, 6);
 });
 
 test("moveAlongByArcLength clamps at the path ends", () => {
-	const path = new Path();
-	path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
-	expect(path.moveAlongByArcLength(0.1 as PathCoordinate, -10)).toBe(0 as PathCoordinate);
-	expect(path.moveAlongByArcLength(0.9 as PathCoordinate, 10)).toBe(path.length as PathCoordinate);
+  const path = new Path();
+  path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
+  expect(path.moveAlongByArcLength(0.1 as PathCoordinate, -10)).toBe(0 as PathCoordinate);
+  expect(path.moveAlongByArcLength(0.9 as PathCoordinate, 10)).toBe(path.length as PathCoordinate);
 });
 
 test("Path.fromJSON reconnects the joints of serialized curves", () => {
-	const path = new Path();
-	path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
-	path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(1 + 1 / 3, 0), new Vector(1 + 2 / 3, 0), new Vector(2, 0)));
+  const path = new Path();
+  path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
+  path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(1 + 1 / 3, 0), new Vector(1 + 2 / 3, 0), new Vector(2, 0)));
 
-	const reloaded = Path.fromJSON(path.toJSON());
+  const reloaded = Path.fromJSON(path.toJSON());
 
-	for (let i = 1; i < reloaded.curves.length; i++) {
-		expect(reloaded.curves[i]!.p0).toBe(reloaded.curves[i - 1]!.p3);
-	}
-	reloaded.curves[1]!.p0.x = 5;
-	expect(reloaded.curves[0]!.p3.x).toBe(5);
+  for (let i = 1; i < reloaded.curves.length; i++) {
+    expect(reloaded.curves[i]!.p0).toBe(reloaded.curves[i - 1]!.p3);
+  }
+  reloaded.curves[1]!.p0.x = 5;
+  expect(reloaded.curves[0]!.p3.x).toBe(5);
 });
 
 test("structurally unequal joint coordinates stay separate objects", () => {
-	const path = new Path();
-	path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
-	const json = path.toJSON();
-	json.curves.push({ p0: [2, 0], p1: [2 + 1 / 3, 0], p2: [2 + 2 / 3, 0], p3: [3, 0] });
+  const path = new Path();
+  path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
+  const json = path.toJSON();
+  json.curves.push({ p0: [2, 0], p1: [2 + 1 / 3, 0], p2: [2 + 2 / 3, 0], p3: [3, 0] });
 
-	const reloaded = Path.fromJSON(json);
-	expect(reloaded.curves[1]!.p0).not.toBe(reloaded.curves[0]!.p3);
-	expect(reloaded.curves[1]!.p0.x).toBe(2);
+  const reloaded = Path.fromJSON(json);
+  expect(reloaded.curves[1]!.p0).not.toBe(reloaded.curves[0]!.p3);
+  expect(reloaded.curves[1]!.p0.x).toBe(2);
+});
+
+function twoCurvePath(): Path {
+  const path = new Path();
+  path.addCurveEnd(new Curve(new Vector(-1, 0), new Vector(0, 1), new Vector(1, -1), new Vector(2, 0)));
+  path.addCurveEnd(new Curve(new Vector(2, 0), new Vector(3, 1), new Vector(4, -0.5), new Vector(5, 0)));
+  return path;
+}
+
+function controlPoints(path: Path): Vector<2>[] {
+  return path.curves.flatMap((curve) => [curve.p0, curve.p1, curve.p2, curve.p3]);
+}
+
+function expectPointsEqual(actual: Vector<2>[], expected: Vector<2>[]) {
+  expect(actual).toHaveLength(expected.length);
+  for (let index = 0; index < expected.length; index++) {
+    expect(actual[index]!.x).toBeCloseTo(expected[index]!.x, 10);
+    expect(actual[index]!.y).toBeCloseTo(expected[index]!.y, 10);
+  }
+}
+
+test("getBoundingBox spans the control points of every curve", () => {
+  const path = twoCurvePath();
+
+  const box = path.getBoundingBox();
+  expect(box.minX).toBeCloseTo(-1, 10);
+  expect(box.maxX).toBeCloseTo(5, 10);
+  expect(box.minY).toBeCloseTo(-1, 10);
+  expect(box.maxY).toBeCloseTo(1, 10);
+});
+
+test("getBoundingBox is the zero rect on an empty path", () => {
+  const path = new Path();
+  expect(path.getBoundingBox()).toEqual({ minX: 0, maxX: 0, minY: 0, maxY: 0 });
+});
+
+test("mirrorHorizontal mirrors every control point x through the bounding box center", () => {
+  const path = twoCurvePath();
+  const lengths = path.curves.map((curve) => curve.length);
+
+  path.mirrorHorizontal();
+
+  // The bounding box spans x in [-1, 5], so the center line sits at x = 2.
+  expectPointsEqual(controlPoints(path), [
+    new Vector(5, 0),
+    new Vector(4, 1),
+    new Vector(3, -1),
+    new Vector(2, 0),
+    new Vector(2, 0),
+    new Vector(1, 1),
+    new Vector(0, -0.5),
+    new Vector(-1, 0),
+  ]);
+
+  // The mirrored joint is one object shared by both curves.
+  expect(path.curves[1].p0).toBe(path.curves[0].p3);
+  path.curves.forEach((curve, index) => expect(curve.length).toBeCloseTo(lengths[index]!, 10));
+  expect(path.length).toBeCloseTo(
+    lengths.reduce((sum, length) => sum + length, 0),
+    10,
+  );
+});
+
+test("mirrorVertical mirrors every control point y through the bounding box center", () => {
+  const path = twoCurvePath();
+
+  path.mirrorVertical();
+
+  // The bounding box spans y in [-1, 1], so the center line sits at y = 0.
+  expectPointsEqual(controlPoints(path), [
+    new Vector(-1, 0),
+    new Vector(0, -1),
+    new Vector(1, 1),
+    new Vector(2, 0),
+    new Vector(2, 0),
+    new Vector(3, -1),
+    new Vector(4, 0.5),
+    new Vector(5, 0),
+  ]);
+  expect(path.curves[1].p0).toBe(path.curves[0].p3);
+});
+
+test("mirroring twice restores the original control points and the bbox center stays fixed", () => {
+  const path = twoCurvePath();
+  const original = controlPoints(path);
+  const center = path.getBoundingBox();
+
+  path.mirrorHorizontal();
+  path.mirrorHorizontal();
+  expectPointsEqual(controlPoints(path), original);
+
+  path.mirrorVertical();
+  path.mirrorVertical();
+  expectPointsEqual(controlPoints(path), original);
+
+  const mirrored = path.getBoundingBox();
+  expect((mirrored.minX + mirrored.maxX) / 2).toBeCloseTo((center.minX + center.maxX) / 2, 10);
+  expect((mirrored.minY + mirrored.maxY) / 2).toBeCloseTo((center.minY + center.maxY) / 2, 10);
+});
+
+test("translate shifts every control point and preserves the lengths and the joint sharing", () => {
+  const path = twoCurvePath();
+  const original = controlPoints(path);
+  const joint = path.curves[0].p3;
+  const curveLengths = path.curves.map((curve) => curve.length);
+  const totalLength = path.length;
+  const generationBefore = path.generation;
+
+  path.translate(new Vector<2>(5, -5));
+
+  expectPointsEqual(
+    controlPoints(path),
+    original.map((point) => new Vector<2>(point.x + 5, point.y - 5)),
+  );
+  path.curves.forEach((curve, index) => expect(curve.length).toBeCloseTo(curveLengths[index]!, 10));
+  expect(path.length).toBeCloseTo(totalLength, 10);
+  expect(path.generation).toBe(generationBefore + 1);
+  // The joint stays one shared object after the translation.
+  expect(path.curves[1].p0).toBe(path.curves[0].p3);
+  expect(path.curves[0].p3).not.toBe(joint);
 });

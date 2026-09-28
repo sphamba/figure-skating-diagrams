@@ -112,14 +112,7 @@ export abstract class Spin extends Element {
         }),
       );
     }
-    if (!this.leftHanded) return keyframes;
-    return keyframes.map(
-      (keyframe) =>
-        new HipsKeyframe(keyframe.coordinate, {
-          position: (keyframe.data.position as Vector<3>).copy(),
-          orientation: keyframe.data.orientation!.copy().conjugate(),
-        }),
-    );
+    return keyframes;
   }
 
   toJSON(): SpinJSON {

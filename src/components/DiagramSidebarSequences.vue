@@ -3,6 +3,7 @@ import { computed, nextTick, ref, shallowRef } from "vue";
 import Button from "openvue/button";
 import ColorPicker from "openvue/colorpicker";
 import ConfirmPopup from "openvue/confirmpopup";
+import Dialog from "openvue/dialog";
 import Inplace from "openvue/inplace";
 import InputText from "openvue/inputtext";
 import Listbox from "openvue/listbox";
@@ -75,6 +76,46 @@ function setTraceColor(sequence: Sequence, footKey: FootKey, color: string) {
 }
 
 const confirmPopupRef = ref<{ alignOverlay: () => void } | null>(null);
+
+type SequenceAction = "duplicate" | "mirror-horizontal" | "mirror-vertical";
+
+const sequenceActionKind = shallowRef<SequenceAction | null>(null);
+const sequenceActionOpen = ref(false);
+
+const sequenceActionHeader = computed(() => {
+  switch (sequenceActionKind.value) {
+    case "duplicate":
+      return "Duplicate sequence";
+    case "mirror-horizontal":
+      return "Mirror sequence horizontally";
+    case "mirror-vertical":
+      return "Mirror sequence vertically";
+    default:
+      return "";
+  }
+});
+
+function openSequenceAction(kind: SequenceAction) {
+  sequenceActionKind.value = kind;
+  sequenceActionOpen.value = true;
+}
+
+function closeSequenceAction() {
+  sequenceActionOpen.value = false;
+}
+
+// The path is mirrored in place, so the sequences array keeps its identity and
+// the parent canvas needs the explicit redraw the trace color change uses.
+function applySequenceAction(target: Sequence) {
+  const kind = sequenceActionKind.value;
+  if (!kind || !target) return;
+  if (kind === "duplicate") store.duplicateSequence(target);
+  else {
+    store.mirrorSequence(target, kind === "mirror-horizontal" ? "horizontal" : "vertical");
+    emit("redraw");
+  }
+  closeSequenceAction();
+}
 
 function confirmDelete(sequence: Sequence, event: Event) {
   confirm.require({
@@ -158,16 +199,77 @@ function confirmDelete(sequence: Sequence, event: Event) {
         />
       </template>
     </Listbox>
-    <Button
-      v-if="isEditor"
-      label="Add sequence"
-      icon="pi pi-plus"
-      severity="secondary"
-      text
-      class="diagram-sidebar__add-sequence"
-      @click="store.addSequence()"
-    />
+    <div v-if="isEditor" class="diagram-sidebar__sequence-tools">
+      <Button label="Add sequence" icon="pi pi-plus" severity="secondary" text @click="store.addSequence()" />
+      <div class="diagram-sidebar__sequence-actions">
+        <Button
+          icon="pi pi-clone"
+          aria-label="Duplicate a sequence"
+          severity="secondary"
+          text
+          rounded
+          size="small"
+          v-tooltip.bottom="'duplicate'"
+          @click="openSequenceAction('duplicate')"
+        />
+        <Button
+          icon="pi pi-arrows-h"
+          aria-label="Mirror a sequence horizontally"
+          severity="secondary"
+          text
+          rounded
+          size="small"
+          v-tooltip.bottom="'mirror horizontally'"
+          @click="openSequenceAction('mirror-horizontal')"
+        />
+        <Button
+          icon="pi pi-arrows-v"
+          aria-label="Mirror a sequence vertically"
+          severity="secondary"
+          text
+          rounded
+          size="small"
+          v-tooltip.bottom="'mirror vertically'"
+          @click="openSequenceAction('mirror-vertical')"
+        />
+      </div>
+    </div>
     <ConfirmPopup ref="confirmPopupRef" group="diagram-sidebar-delete" />
+    <Dialog
+      v-model:visible="sequenceActionOpen"
+      :header="sequenceActionHeader"
+      modal
+      class="diagram-sidebar__sequence-action-dialog"
+      @hide="sequenceActionKind = null"
+    >
+      <Listbox
+        :model-value="null"
+        :options="sequences"
+        option-label="name"
+        @change="(event) => applySequenceAction(event.value)"
+      >
+        <template #option="{ option }">
+          <span class="diagram-sidebar__swatches">
+            <span
+              v-for="swatch in footSwatches"
+              :key="swatch.letter"
+              class="diagram-sidebar__swatch-wrapper"
+              :style="{ background: sequenceInfos.get(option)?.[swatch.footKey] }"
+            >
+              <span
+                class="diagram-sidebar__swatch-letter"
+                :style="{ color: textColorFor(sequenceInfos.get(option)?.[swatch.footKey] ?? '#ffffff') }"
+                >{{ swatch.letter }}</span
+              >
+            </span>
+          </span>
+          <span class="diagram-sidebar__sequence-display-name">{{ sequenceInfos.get(option)?.name }}</span>
+        </template>
+      </Listbox>
+      <template #footer>
+        <Button label="Cancel" severity="secondary" icon="pi pi-times" @click="closeSequenceAction" />
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -253,7 +355,26 @@ function confirmDelete(sequence: Sequence, event: Event) {
   user-select: none;
 }
 
-.diagram-sidebar__add-sequence {
-  align-self: flex-start;
+.diagram-sidebar__sequence-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.diagram-sidebar__sequence-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+</style>
+
+<style lang="scss">
+/* Dialog root teleports to body, scoped attributes never reach it */
+.diagram-sidebar__sequence-action-dialog {
+  width: 300px;
+  max-width: 90vw;
+}
+
+.diagram-sidebar__sequence-action-dialog .p-listbox {
+  width: 100%;
 }
 </style>

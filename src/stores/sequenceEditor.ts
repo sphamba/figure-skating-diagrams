@@ -12,6 +12,9 @@ import type { PathCoordinate } from "@/engine/coordinates";
 
 const STORAGE_KEY = "sequence-editor";
 const DEFAULT_SEQUENCE_NAME = "Sequence";
+// World axes: the canvas negates y, so world +x draws right and world -y draws
+// down. A duplicate lands 5 m to the bottom right of its original.
+const DUPLICATE_SHIFT = new Vector<2>(5, -5);
 
 function defaultSequence(): Sequence {
   const path = new Path();
@@ -146,6 +149,27 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
   function renameSequence(sequence: Sequence, name: string) {
     const trimmed = name.trim();
     if (trimmed) sequence.name = trimmed;
+    triggerRef(diagram);
+    saveToStorage();
+  }
+
+  function duplicateSequence(sequence: Sequence) {
+    if (!diagram.value.sequences.includes(sequence)) return;
+    const copy = Sequence.fromJSON(sequence.toJSON());
+    copy.name = uniqueSequenceName(diagram.value.sequences);
+    copy.path.translate(DUPLICATE_SHIFT);
+    diagram.value.sequences = [...diagram.value.sequences, copy];
+    activeSequence.value = copy;
+    triggerRef(diagram);
+    saveToStorage();
+  }
+
+  // The sequence is mirrored in place, so the sequences array keeps its
+  // identity and the sidebar emits the canvas redraw itself.
+  function mirrorSequence(sequence: Sequence, axis: "horizontal" | "vertical") {
+    if (!diagram.value.sequences.includes(sequence)) return;
+    if (axis === "horizontal") sequence.mirrorHorizontal();
+    else sequence.mirrorVertical();
     triggerRef(diagram);
     saveToStorage();
   }
@@ -328,6 +352,8 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     addSequence,
     removeSequence,
     renameSequence,
+    duplicateSequence,
+    mirrorSequence,
     setTraceColor,
     setDiagramName,
     setDiagramBpm,

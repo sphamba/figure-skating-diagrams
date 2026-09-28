@@ -109,3 +109,31 @@ export function changeElementType(
 export function createDefaultFootTurn(start: PathCoordinate, end: PathCoordinate, footKey: FootKey = "footL"): Element {
   return new LeftForwardInsideThreeTurn(footKey, start, end);
 }
+
+// The type name carries the side as a "Left"/"Right" token, so the mirror
+// swaps it; jumps carry no side and flip their handedness instead.
+function swapSideInType(type: string): string {
+  return type.replace(/Left|Right/g, (side) => (side === "Left" ? "Right" : "Left"));
+}
+
+// The mirrored element swaps the feet: the type side flips, spins and jumps
+// flip their handedness, and spins also swap the side in their type name. A
+// default short name encodes the side and regenerates from the new type, a
+// custom label survives.
+export function mirrorElement(element: Element): Element {
+  const json = element.toJSON() as {
+    type: string;
+    start: number;
+    end: number;
+    shortName?: string;
+    leftHanded?: boolean;
+    spinType?: string;
+    revolutions?: number;
+  };
+  const type = swapSideInType(json.type);
+  const flipsHandedness = isJumpType(type) || isSpinType(type);
+  const leftHanded = flipsHandedness ? !json.leftHanded : json.leftHanded;
+  const template = { ...json, type, leftHanded };
+  if (json.shortName === element.defaultShortName) delete template.shortName;
+  return changeElementType(type, template);
+}

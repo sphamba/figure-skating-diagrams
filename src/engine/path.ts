@@ -1,4 +1,4 @@
-import { Curve, type Curvilinear } from "./curve.js";
+import { Curve, type AxisRect, type Curvilinear } from "./curve.js";
 import type { PathCoordinate } from "./coordinates.js";
 import type { CanvasRenderingContext2DSized } from "./rinkCanvas.js";
 import { Vector } from "./vector.js";
@@ -277,6 +277,61 @@ export class Path {
       this.curves.shift();
       this.updateLength();
     }
+  }
+
+  // The bounding box of the control points, the same computation the curve
+  // bounding box tests use, so it stays consistent with picking and culling.
+  getBoundingBox(): AxisRect {
+    if (this.curves.length === 0) return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const curve of this.curves) {
+      for (const point of [curve.p0, curve.p1, curve.p2, curve.p3]) {
+        minX = Math.min(minX, point.x);
+        maxX = Math.max(maxX, point.x);
+        minY = Math.min(minY, point.y);
+        maxY = Math.max(maxY, point.y);
+      }
+    }
+    return { minX, maxX, minY, maxY };
+  }
+
+  mirrorHorizontal() {
+    const rect = this.getBoundingBox();
+    const center = (rect.minX + rect.maxX) / 2;
+    this.transformPoints((point) => new Vector<2>(2 * center - point.x, point.y));
+  }
+
+  mirrorVertical() {
+    const rect = this.getBoundingBox();
+    const center = (rect.minY + rect.maxY) / 2;
+    this.transformPoints((point) => new Vector<2>(point.x, 2 * center - point.y));
+  }
+
+  // A joint is one object shared by neighbor curves, so every unique point is
+  // transformed once and reassigned by identity: the sharing survives and no
+  // joint realignment is needed. updateLength bumps the generation, so cached
+  // trace geometry rebuilds after the transform.
+  private transformPoints(transform: (point: Vector<2>) => Vector<2>) {
+    const transformed = new Map<Vector<2>, Vector<2>>();
+    for (const curve of this.curves) {
+      for (const point of [curve.p0, curve.p1, curve.p2, curve.p3]) {
+        if (!transformed.has(point)) transformed.set(point, transform(point));
+      }
+    }
+    for (const curve of this.curves) {
+      curve.p0 = transformed.get(curve.p0)!;
+      curve.p1 = transformed.get(curve.p1)!;
+      curve.p2 = transformed.get(curve.p2)!;
+      curve.p3 = transformed.get(curve.p3)!;
+    }
+    this.updateLength();
+  }
+
+  translate(offset: Vector<2>) {
+    this.transformPoints((point) => point.plus(offset));
   }
 
   getCurvesAroundPoint(point: Vector<2>): [Curve, Curve] {

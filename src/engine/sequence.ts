@@ -10,7 +10,7 @@ import type { Transition } from "./keyframe.js";
 import { Path } from "./path.js";
 import { Quaternion, getQuaternionFromAngleAxis } from "./quaternion.js";
 import type { CanvasRenderingContext2DSized } from "./rinkCanvas.js";
-import { changeElementType } from "./element/turnTypes.js";
+import { changeElementType, mirrorElement } from "./element/turnTypes.js";
 import { computeSpanScales } from "./element/spanScaling.js";
 import type { FootTurnJSON } from "./element/turn.js";
 import { PartialVector, Vector } from "./vector.js";
@@ -216,6 +216,27 @@ export class Sequence {
       this.removeElementKeyframes("hips", previous.hips);
     }
     this.refreshElementKeyframes(element);
+  }
+
+  // Mirrors the drawn figure about the bounding box center of the path: the
+  // path control points flip, and every element is replaced with its mirrored
+  // element, so the feet swap and the spins and jumps reverse their rotation.
+  // The element replacement keeps the feet swap through the JSON round-trips
+  // of saving, loading and the edit history.
+  mirrorHorizontal() {
+    this.path.mirrorHorizontal();
+    this.mirrorElements();
+  }
+
+  mirrorVertical() {
+    this.path.mirrorVertical();
+    this.mirrorElements();
+  }
+
+  private mirrorElements() {
+    for (const element of [...this.elements]) {
+      this.replaceElement(element, mirrorElement(element));
+    }
   }
 
   private refreshElementKeyframes(element: Element) {
