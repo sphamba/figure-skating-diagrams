@@ -206,6 +206,9 @@ export class Editor {
   }
 
   bpm: number = DEFAULT_BPM;
+  // Optional loop window that replaces the cursor window while the playback
+  // loop is armed or active; the views supply it. Read fresh at each draw.
+  loopDrawWindow?: () => [number, number] | null;
   videoTimeSeconds: number | null = null;
   // Base64 data URL of the rink background image; an empty/null value keeps the plain rink fill.
   backgroundImage: string | undefined = undefined;
@@ -1704,6 +1707,15 @@ export class Editor {
     const extent = fullTimeExtentSeconds(this.sequences, this.bpm);
     if (!extent) return null;
     if (this.videoTimeSeconds === null) return null;
+    const loopWindow = this.loopDrawWindow?.() ?? null;
+    if (loopWindow) {
+      const t0 = Math.max(extent[0], loopWindow[0]);
+      const t1 = Math.min(extent[1], loopWindow[1]);
+      // The armed range collapses onto the cursor before point B exists, so
+      // the zero-width window keeps every time outside the draw range.
+      if (t1 <= t0) return [t0, t0];
+      return [t0, t1];
+    }
     const center = this.videoTimeSeconds;
     const t0 = Math.max(extent[0], center - DRAW_WINDOW_SECONDS);
     const t1 = Math.min(extent[1], center + DRAW_WINDOW_SECONDS);

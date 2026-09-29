@@ -106,6 +106,27 @@ test("the short draw window collapses when the cursor lies outside the extent", 
   expect(window()).toBeNull();
 });
 
+test("the loop window replaces the cursor window while the playback loop is set", () => {
+  const { editor } = makeEditor(true);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const window = (editor as any).traceDrawWindow.bind(editor) as () => [number, number] | null;
+  editor.videoTimeSeconds = 5;
+  editor.shortDrawRange = true;
+  // Without a loop window the cursor window still applies.
+  expect(window()).toEqual([1, 9]);
+  editor.loopDrawWindow = () => [3, 7];
+  expect(window()).toEqual([3, 7]);
+  // The loop window clamps against the extent, not against the cursor.
+  editor.loopDrawWindow = () => [-5, 20];
+  expect(window()).toEqual([0, 10]);
+  // The armed range collapses onto the cursor before point B exists.
+  editor.loopDrawWindow = () => [5, 5];
+  expect(window()).toEqual([5, 5]);
+  // The option off keeps the full extent even with a loop window set.
+  editor.shortDrawRange = false;
+  expect(window()).toBeNull();
+});
+
 test("a cursor outside the extent draws the muted outside-range stroke", async () => {
   const { editor, calls } = makeEditor(true);
   editor.videoTimeSeconds = 5;

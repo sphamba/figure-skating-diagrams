@@ -15,6 +15,7 @@ import { useAppearanceStore } from "@/stores/appearance";
 import { useMediaQuery } from "@/composables/useMediaQuery";
 import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
 import { usePlaybackKeyToggle } from "@/composables/usePlaybackKeyToggle";
+import { usePlaybackLoop } from "@/composables/usePlaybackLoop";
 import { usePlaybackSpeed } from "@/composables/usePlaybackSpeed";
 import { useTimeCursorStepping } from "@/composables/useTimeCursorStepping";
 import { useTimeCursorKeys } from "@/composables/useTimeCursorKeys";
@@ -68,6 +69,19 @@ const {
   speed: playbackSpeed,
   extent: () => timeExtent.value,
 });
+const {
+  stage: loopStage,
+  toggle: toggleLoop,
+  reset: resetLoop,
+  drawWindow: loopDrawWindow,
+} = usePlaybackLoop(videoTime, playing, setTimestamp);
+const loopAriaLabel = computed(() =>
+  loopStage.value === "idle"
+    ? "Set loop point A at the current time"
+    : loopStage.value === "armed"
+      ? "Set loop point B and start the loop"
+      : "Stop the loop",
+);
 const { step: stepTimeCursor } = useTimeCursorStepping(videoRef, {
   seconds: videoTime,
   setTimestamp,
@@ -80,6 +94,7 @@ const { step: stepTimeCursor } = useTimeCursorStepping(videoRef, {
 // same diagram object, so the watch only fires on the identity change.
 const seenDiagram = computed(() => store.getDiagram());
 watch(seenDiagram, (diagram) => {
+  resetLoop();
   const earliest = earliestTimeKeyframeSeconds(diagram);
   if (earliest !== null) setTimestamp(earliest);
 });
@@ -99,6 +114,7 @@ watch(
   videoUrl,
   (value) => {
     videoStatus.value = value.trim() !== "" ? "pending" : "empty";
+    resetLoop();
     pauseAnimation();
   },
   { immediate: true },
@@ -185,6 +201,11 @@ watch(
   },
   { immediate: true },
 );
+
+// The loop stage changes the drawn window, so a paused toggle still repaints.
+watch(loopStage, () => {
+  editor?.requestDraw();
+});
 
 // The background image and its opacity live in the diagram, so the canvas editor follows the store here.
 watch(
@@ -362,6 +383,7 @@ function createEditor() {
   editorInstance.scaleElements = scaleElements.value;
   editorInstance.showLabels = showLabels.value;
   editorInstance.shortDrawRange = store.getShortDrawRange();
+  editorInstance.loopDrawWindow = () => loopDrawWindow.value;
   editorInstance.setHiddenSequences(hiddenSequenceSet.value);
   editorInstance.onVideoTimeChange = (seconds) => setTimestamp(seconds);
   editorInstance.onTimeScrubStart = () => {
@@ -530,6 +552,14 @@ onBeforeUnmount(() => {
             rounded
             @click="togglePlayback"
           />
+          <Button
+            icon="pi pi-replay"
+            :aria-label="loopAriaLabel"
+            :severity="loopStage === 'idle' ? 'secondary' : 'primary'"
+            rounded
+            :class="{ 'home-view__loop-armed': loopStage === 'armed' }"
+            @click="toggleLoop"
+          />
           <Select
             v-model="playbackSpeed"
             :options="playbackSpeedOptions"
@@ -583,6 +613,27 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 0.75rem;
   margin: 0 auto;
+}
+
+/* A loop point waits for its partner: the armed button pulses until the loop closes. */
+.home-view__loop-armed {
+  animation: home-view-loop-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes home-view-loop-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-view__loop-armed {
+    animation: none;
+  }
 }
 
 /* The speed select reads as a fixed-width chip: no arrow, centered label. */

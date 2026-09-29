@@ -55,6 +55,7 @@ import { useUndoRedoKeys } from "@/composables/useUndoRedoKeys";
 import { useMediaQuery } from "@/composables/useMediaQuery";
 import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
 import { usePlaybackKeyToggle } from "@/composables/usePlaybackKeyToggle";
+import { usePlaybackLoop } from "@/composables/usePlaybackLoop";
 import { useEditorModeKeys } from "@/composables/useEditorModeKeys";
 import { useTimeCursorStepping } from "@/composables/useTimeCursorStepping";
 import { useTimeCursorKeys } from "@/composables/useTimeCursorKeys";
@@ -757,6 +758,23 @@ const {
   speed: playbackSpeed,
   extent: () => timeExtent.value,
 });
+const {
+  stage: loopStage,
+  toggle: toggleLoop,
+  reset: resetLoop,
+  drawWindow: loopDrawWindow,
+} = usePlaybackLoop(videoTime, playing, setTimestamp);
+const loopAriaLabel = computed(() =>
+  loopStage.value === "idle"
+    ? "Set loop point A at the current time"
+    : loopStage.value === "armed"
+      ? "Set loop point B and start the loop"
+      : "Stop the loop",
+);
+// The loop stage changes the drawn window, so a paused toggle still repaints.
+watch(loopStage, () => {
+  editor?.requestDraw();
+});
 const { step: stepTimeCursor } = useTimeCursorStepping(videoRef, {
   seconds: videoTime,
   setTimestamp,
@@ -769,6 +787,7 @@ const { step: stepTimeCursor } = useTimeCursorStepping(videoRef, {
 // same diagram object, so the watch only fires on the identity change.
 const seenDiagram = computed(() => store.getDiagram());
 watch(seenDiagram, (diagram) => {
+  resetLoop();
   const earliest = earliestTimeKeyframeSeconds(diagram);
   if (earliest !== null) setTimestamp(earliest);
 });
@@ -777,6 +796,7 @@ watch(
   videoUrl,
   (value) => {
     videoStatus.value = value.trim() !== "" ? "pending" : "empty";
+    resetLoop();
     pauseAnimation();
   },
   { immediate: true },
@@ -1235,6 +1255,7 @@ onMounted(() => {
   editorInstance.backgroundImageOpacity = backgroundImageOpacity.value;
   editorInstance.symmetric = diagramSymmetric.value;
   editorInstance.shortDrawRange = store.getShortDrawRange();
+  editorInstance.loopDrawWindow = () => loopDrawWindow.value;
   editorInstance.onElementChangeRequest = (element) => {
     elementToChange.value = element;
     isProvisionalTarget.value = editorInstance.isProvisional(element);
@@ -1778,6 +1799,14 @@ function closeElementChange() {
             rounded
             @click="togglePlayback"
           />
+          <Button
+            icon="pi pi-replay"
+            :aria-label="loopAriaLabel"
+            :severity="loopStage === 'idle' ? 'secondary' : 'primary'"
+            rounded
+            :class="{ 'editor-view__loop-armed': loopStage === 'armed' }"
+            @click="toggleLoop"
+          />
           <Select
             v-model="playbackSpeed"
             :options="playbackSpeedOptions"
@@ -2224,6 +2253,27 @@ function closeElementChange() {
 }
 
 /* The speed select reads as a fixed-width chip: no arrow, centered label. */
+/* A loop point waits for its partner: the armed button pulses until the loop closes. */
+.editor-view__loop-armed {
+  animation: editor-view-loop-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes editor-view-loop-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-view__loop-armed {
+    animation: none;
+  }
+}
+
 .editor-view__speed {
   width: 3.25rem;
   height: 2rem;
