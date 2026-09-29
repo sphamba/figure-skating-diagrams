@@ -2,8 +2,9 @@ import { computed, ref, watch, type Ref } from "vue";
 
 export type LoopStage = "idle" | "armed" | "active";
 
-// A-B loop controller. The wrap watch confines a running playback to the armed
+// A-B loop controller. The wrap watch confines a running playback to the loop
 // region; setTimestamp performs the forward-only restart at the loop start.
+// A user scrub or seek outside the region clamps back to the closest loop end.
 export function usePlaybackLoop(seconds: Ref<number>, playing: Ref<boolean>, setTimestamp: (value: number) => void) {
   const stage = ref<LoopStage>("idle");
   const pointA = ref(0);
@@ -49,8 +50,14 @@ export function usePlaybackLoop(seconds: Ref<number>, playing: Ref<boolean>, set
 
   watch(seconds, (value) => {
     const region = bounds.value;
-    if (!region || !playing.value) return;
-    if (value >= region[1]) setTimestamp(region[0]);
+    if (!region) return;
+    if (playing.value) {
+      if (value >= region[1]) setTimestamp(region[0]);
+      else if (value < region[0]) setTimestamp(region[0]);
+      return;
+    }
+    if (value < region[0]) setTimestamp(region[0]);
+    else if (value > region[1]) setTimestamp(region[1]);
   });
 
   return { stage, bounds, drawWindow, toggle, reset };

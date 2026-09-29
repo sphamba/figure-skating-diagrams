@@ -206,9 +206,13 @@ export class Editor {
   }
 
   bpm: number = DEFAULT_BPM;
-  // Optional loop window that replaces the cursor window while the playback
-  // loop is armed or active; the views supply it. Read fresh at each draw.
+  // Optional loop window that ranges the traces while the playback loop is
+  // armed or active, with or without the short draw range option; the views
+  // supply it. Read fresh at each draw.
   loopDrawWindow?: () => [number, number] | null;
+  // Optional loop bounds the cursor time clamps into; the views supply them. Read fresh at each cursor set.
+  // A non-null value also marks the loop active for the draw window.
+  loopTimeBounds?: () => [number, number] | null;
   videoTimeSeconds: number | null = null;
   // Base64 data URL of the rink background image; an empty/null value keeps the plain rink fill.
   backgroundImage: string | undefined = undefined;
@@ -823,8 +827,14 @@ export class Editor {
   // recenter the view on a later resize.
   private setVideoTime(seconds: number) {
     this.autoFitRink = false;
-    this.videoTimeSeconds = seconds;
-    this.onVideoTimeChange?.(seconds);
+    this.videoTimeSeconds = this.clampIntoLoop(seconds);
+    this.onVideoTimeChange?.(this.videoTimeSeconds);
+  }
+
+  private clampIntoLoop(seconds: number): number {
+    const bounds = this.loopTimeBounds?.() ?? null;
+    if (!bounds) return seconds;
+    return Math.min(Math.max(seconds, bounds[0]), bounds[1]);
   }
 
   private setTimeCursorToElementCenter(element: Element) {
@@ -1701,21 +1711,30 @@ export class Editor {
     }
   }
 
-  // The time window the short draw range renders around the time cursor.
+  // The trace draw window: the loop range while the playback loop is armed or
+  // active. An active loop intersects the four-second cursor window when the
+  // short draw range option is on; the armed span stays whole so it previews
+  // where point B lands. Without a loop, the option alone limits the window.
   private traceDrawWindow(): [number, number] | null {
-    if (!this.shortDrawRange) return null;
     const extent = fullTimeExtentSeconds(this.sequences, this.bpm);
     if (!extent) return null;
-    if (this.videoTimeSeconds === null) return null;
     const loopWindow = this.loopDrawWindow?.() ?? null;
     if (loopWindow) {
-      const t0 = Math.max(extent[0], loopWindow[0]);
-      const t1 = Math.min(extent[1], loopWindow[1]);
-      // The armed range collapses onto the cursor before point B exists, so
-      // the zero-width window keeps every time outside the draw range.
+      let t0 = Math.max(extent[0], loopWindow[0]);
+      let t1 = Math.min(extent[1], loopWindow[1]);
+      // The four-second window intersects only an active loop: the armed span
+      // previews where point B lands, and the cursor window would clip it.
+      if (this.shortDrawRange && this.videoTimeSeconds !== null && this.loopTimeBounds?.() != null) {
+        t0 = Math.max(t0, this.videoTimeSeconds - DRAW_WINDOW_SECONDS);
+        t1 = Math.min(t1, this.videoTimeSeconds + DRAW_WINDOW_SECONDS);
+      }
+      // A collapsed window (the armed span before point B exists, or a loop
+      // range outside the extent) keeps every time outside the draw range.
       if (t1 <= t0) return [t0, t0];
       return [t0, t1];
     }
+    if (!this.shortDrawRange) return null;
+    if (this.videoTimeSeconds === null) return null;
     const center = this.videoTimeSeconds;
     const t0 = Math.max(extent[0], center - DRAW_WINDOW_SECONDS);
     const t1 = Math.min(extent[1], center + DRAW_WINDOW_SECONDS);

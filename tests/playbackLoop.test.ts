@@ -115,13 +115,47 @@ describe("usePlaybackLoop", () => {
     expect(loop.setTimestamp).toHaveBeenCalledWith(5);
   });
 
-  it("does not wrap a paused playback crossing the loop end", async () => {
+  it("clamps a paused scrub past the loop end back to the loop end", async () => {
     const loop = mountLoop();
     loop.seconds.value = 5;
     loop.toggle();
     loop.seconds.value = 9;
     loop.toggle();
     loop.seconds.value = 10;
+    await nextTick();
+    expect(loop.setTimestamp).toHaveBeenCalledWith(9);
+  });
+
+  it("clamps a paused scrub before the loop start back to the loop start", async () => {
+    const loop = mountLoop();
+    loop.seconds.value = 5;
+    loop.toggle();
+    loop.seconds.value = 9;
+    loop.toggle();
+    loop.seconds.value = 3;
+    await nextTick();
+    expect(loop.setTimestamp).toHaveBeenCalledWith(5);
+  });
+
+  it("clamps a user seek below the loop start while playing back to the loop start", async () => {
+    const loop = mountLoop();
+    loop.seconds.value = 5;
+    loop.toggle();
+    loop.seconds.value = 9;
+    loop.toggle();
+    loop.playing.value = true;
+    loop.seconds.value = 3;
+    await nextTick();
+    expect(loop.setTimestamp).toHaveBeenCalledWith(5);
+  });
+
+  it("does not clamp a paused scrub inside the loop range", async () => {
+    const loop = mountLoop();
+    loop.seconds.value = 5;
+    loop.toggle();
+    loop.seconds.value = 9;
+    loop.toggle();
+    loop.seconds.value = 7;
     await nextTick();
     expect(loop.setTimestamp).not.toHaveBeenCalled();
   });

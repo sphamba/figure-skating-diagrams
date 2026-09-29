@@ -1321,6 +1321,64 @@ test("clicking near the path in view mode places the time cursor at the nearest 
   editor.destroy();
 });
 
+function clickNearPathAtFraction(editor: Editor, canvas: HTMLCanvasElement, fraction: number): number | null {
+  const path = editor.getSequences()[0].path;
+  const reported = { seconds: null as number | null };
+  editor.onVideoTimeChange = (seconds: number) => {
+    reported.seconds = seconds;
+  };
+
+  const zoom = editorRef(editor).view.zoom;
+  const sx = (wx: number) => 512 + wx * zoom;
+  const sy = (wy: number) => 512 - wy * zoom;
+  const spot = path.getPosition((path.length * fraction) as PathCoordinate);
+  // 4 px off the path on screen: within the pick tolerance, and the time cursor is
+  // hidden so the click cannot hit it.
+  const off = 4 / zoom;
+  mouse("mousedown", canvas, { clientX: sx(spot.x), clientY: sy(spot.y - off), button: 0, ctrlKey: false });
+  mouse("mouseup", window, {});
+  return reported.seconds;
+}
+
+test("the loop bounds clamp a cursor time set below the loop start", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "view";
+  const path = editor.getSequences()[0].path;
+  // Time 0 at the path start and time 12 at the path end, so a quarter of the
+  // path resolves to time 3.
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 12));
+  editor.loopTimeBounds = () => [5, 9];
+
+  expect(clickNearPathAtFraction(editor, canvas, 0.25)).toBeCloseTo(5, 3);
+  expect(editor.videoTimeSeconds).toBeCloseTo(5, 3);
+  editor.destroy();
+});
+
+test("the loop bounds clamp a cursor time set past the loop end", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "view";
+  const path = editor.getSequences()[0].path;
+  // Time 0 at the path start and time 12 at the path end, so 0.9 of the path
+  // resolves to time 10.8.
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 12));
+  editor.loopTimeBounds = () => [5, 9];
+
+  expect(clickNearPathAtFraction(editor, canvas, 0.9)).toBeCloseTo(9, 3);
+  expect(editor.videoTimeSeconds).toBeCloseTo(9, 3);
+  editor.destroy();
+});
+
+test("without loop bounds a cursor time set passes through unchanged", () => {
+  const { editor, canvas } = makeEditor();
+  editorRef(editor).mode = "view";
+  const path = editor.getSequences()[0].path;
+  editor.getSequences()[0].addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 12));
+
+  expect(clickNearPathAtFraction(editor, canvas, 0.25)).toBeCloseTo(3, 3);
+  expect(editor.videoTimeSeconds).toBeCloseTo(3, 3);
+  editor.destroy();
+});
+
 test("clicking far from the path in view mode pans and leaves the time cursor alone", () => {
   const { editor, canvas } = makeEditor();
   editorRef(editor).mode = "view";

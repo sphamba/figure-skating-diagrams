@@ -5,12 +5,16 @@ import { useVideoTimestamp } from "../src/composables/useVideoTimestamp";
 
 const video = ref<HTMLVideoElement | null | undefined>(undefined);
 let seconds: Ref<number> | undefined;
+let playing: Ref<boolean> | undefined;
+let pauseTimestamp: (() => void) | undefined;
 let setTimestamp: ((value: number) => void) | undefined;
 
 const Host = defineComponent({
   setup() {
     const result = useVideoTimestamp(video);
     seconds = result.seconds;
+    playing = result.playing;
+    pauseTimestamp = result.pause;
     setTimestamp = result.setTimestamp;
     return () => null;
   },
@@ -90,6 +94,27 @@ describe("useVideoTimestamp", () => {
     await flush();
     expect(seconds!.value).toBe(2.5);
     wrapper.unmount();
+  });
+
+  it("drops the playing flag before the pause event", async () => {
+    host();
+    const element = document.createElement("video");
+    video.value = element;
+    await flush();
+    element.dispatchEvent(new Event("play"));
+    element.dispatchEvent(new Event("playing"));
+    await flush();
+    expect(playing!.value).toBe(true);
+    pauseTimestamp!();
+    expect(playing!.value).toBe(false);
+    // The queued pause event arrives after the flag dropped.
+    element.dispatchEvent(new Event("pause"));
+    await flush();
+    expect(playing!.value).toBe(false);
+    element.currentTime = 4;
+    element.dispatchEvent(new Event("seeked"));
+    await flush();
+    expect(seconds!.value).toBe(4);
   });
 
   it("resets to zero when the element is removed", async () => {

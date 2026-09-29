@@ -71,6 +71,7 @@ const {
   toggle: toggleLoop,
   reset: resetLoop,
   drawWindow: loopDrawWindow,
+  bounds: loopBounds,
 } = usePlaybackLoop(videoTime, playing, setTimestamp);
 const loopAriaLabel = computed(() =>
   loopStage.value === "idle"
@@ -381,6 +382,7 @@ function createEditor() {
   editorInstance.showLabels = appearance.showLabels;
   editorInstance.shortDrawRange = store.getShortDrawRange();
   editorInstance.loopDrawWindow = () => loopDrawWindow.value;
+  editorInstance.loopTimeBounds = () => loopBounds.value;
   editorInstance.setHiddenSequences(hiddenSequenceSet.value);
   editorInstance.onVideoTimeChange = (seconds) => setTimestamp(seconds);
   editorInstance.onTimeScrubStart = () => {
@@ -506,6 +508,7 @@ onBeforeUnmount(() => {
                 :sequences="visibleSequences"
                 :time-seconds="videoTime"
                 :bpm="bpm"
+                :loop-window="loopDrawWindow"
                 @seek="setTimestamp"
                 @scrub-start="onPaneScrubStart"
                 @scrub-end="onPaneScrubEnd"

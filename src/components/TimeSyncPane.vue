@@ -11,11 +11,15 @@ import type { Time, PathCoordinate } from "@/engine/coordinates";
 import { elementFullName } from "@/engine/element/fullName";
 import { textColorFor } from "@/utils/contrast";
 
-const props = defineProps<{
-  sequences: Sequence[];
-  timeSeconds: number | null;
-  bpm: number;
-}>();
+const props = withDefaults(
+  defineProps<{
+    sequences: Sequence[];
+    timeSeconds: number | null;
+    bpm: number;
+    loopWindow?: [number, number] | null;
+  }>(),
+  { loopWindow: null },
+);
 
 const emit = defineEmits<{ seek: [seconds: number]; scrubStart: []; scrubEnd: [] }>();
 
@@ -86,7 +90,8 @@ const annotationRows = computed<AnnotationRow[]>(() => {
 
 // One horizontal strip per sequence: the named elements in a line. The strip
 // offset centers the current element.
-// Elements without a short name are not shown.
+// Elements without a short name are not shown. A set loop window keeps only
+// the elements that play during the loop.
 const CURRENT_TOLERANCE = 0.000001; // path coordinate, meters
 const elementStrips = computed<ElementStrip[]>(() => {
   const time = props.timeSeconds;
@@ -96,7 +101,15 @@ const elementStrips = computed<ElementStrip[]>(() => {
     if (!cursorInSequence(sequence)) continue;
     const shown = [...sequence.elements]
       .sort((a, b) => (a.start as number) - (b.start as number))
-      .filter((element) => element.shortName !== "");
+      .filter((element) => element.shortName !== "")
+      .filter((element) => {
+        if (!props.loopWindow) return true;
+        const start = Number(sequence.getTimeFromPathCoordinate(element.start as PathCoordinate, props.bpm));
+        const end = Number(sequence.getTimeFromPathCoordinate(element.end as PathCoordinate, props.bpm));
+        // An element spanning a loop end still plays during the loop, so the
+        // overlap keeps its chip.
+        return Math.min(start, end) <= props.loopWindow[1] && Math.max(start, end) >= props.loopWindow[0];
+      });
     if (shown.length === 0) continue;
     const u = sequence.getPathCoordinateFromTime(time as Time, props.bpm);
     // The last element whose start the cursor has reached. At a shared boundary

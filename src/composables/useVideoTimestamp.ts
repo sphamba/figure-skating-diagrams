@@ -168,14 +168,14 @@ export function useVideoTimestamp(video: Ref<HTMLVideoElement | null | undefined
   }
 
   function pause() {
-    const element = video.value;
-    if (element) {
-      element.pause();
-      return;
-    }
+    // The pause event is a queued task, so drop the flag now: the scrub handlers
+    // read it before the event fires.
     stopLoop();
+    stopRvfc();
     playing.value = false;
     lastFrame = null;
+    const element = video.value;
+    if (element) element.pause();
   }
 
   function setTimestamp(value: number) {

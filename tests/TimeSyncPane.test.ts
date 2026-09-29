@@ -22,8 +22,12 @@ function buildSequence(): Sequence {
   return sequence;
 }
 
-async function openPane(sequences: Sequence[], time: number | null): Promise<HTMLElement | null> {
-  const wrapper = mount(TimeSyncPane, { props: { sequences, timeSeconds: time, bpm: 120 } });
+async function openPane(
+  sequences: Sequence[],
+  time: number | null,
+  loopWindow: [number, number] | null = null,
+): Promise<HTMLElement | null> {
+  const wrapper = mount(TimeSyncPane, { props: { sequences, timeSeconds: time, bpm: 120, loopWindow } });
   await new Promise((resolve) => setTimeout(resolve, 0));
   const content = wrapper.find(".time-sync-pane").element as HTMLElement | null;
   wrapper.unmount();
@@ -124,6 +128,28 @@ test("shows only named elements, with only the current one at full opacity", asy
   expect(labels).not.toContain("Two-feet forward glide");
   expect(labels).toContain("B");
   expect(labels).toContain("C");
+  const current = chips.filter((chip) => !chip.classList.contains("time-sync-pane__chip--dim"));
+  expect(current.length).toBe(1);
+  expect(current[0]?.textContent?.trim()).toBe("B");
+});
+
+test("keeps only the elements that play inside the loop window", async () => {
+  // Element B plays from time 3 to 6, element C from 6 to 9.
+  const content = await openPane([buildFallbackSequence()], 4.5, [3, 5.9]);
+  const labels = elementChips(content).map((chip) => chip.textContent?.trim());
+  // The element after the loop end stays hidden.
+  expect(labels).toEqual(["B"]);
+  // The armed shape filters the same way: the span from A to the cursor.
+  const armed = await openPane([buildFallbackSequence()], 4.5, [3, 4.5]);
+  expect(elementChips(armed).map((chip) => chip.textContent?.trim())).toEqual(["B"]);
+});
+
+test("keeps an element that spans the loop start as the current chip", async () => {
+  // Element B plays from time 3 to 6, so the loop start at 4.5 lies inside it.
+  const content = await openPane([buildFallbackSequence()], 4.5, [4.5, 8]);
+  const chips = elementChips(content);
+  const labels = chips.map((chip) => chip.textContent?.trim());
+  expect(labels).toEqual(["B", "C"]);
   const current = chips.filter((chip) => !chip.classList.contains("time-sync-pane__chip--dim"));
   expect(current.length).toBe(1);
   expect(current[0]?.textContent?.trim()).toBe("B");

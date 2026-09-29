@@ -106,7 +106,7 @@ test("the short draw window collapses when the cursor lies outside the extent", 
   expect(window()).toBeNull();
 });
 
-test("the loop window replaces the cursor window while the playback loop is set", () => {
+test("the loop window ranges the traces with or without the time range limit", () => {
   const { editor } = makeEditor(true);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const window = (editor as any).traceDrawWindow.bind(editor) as () => [number, number] | null;
@@ -114,17 +114,39 @@ test("the loop window replaces the cursor window while the playback loop is set"
   editor.shortDrawRange = true;
   // Without a loop window the cursor window still applies.
   expect(window()).toEqual([1, 9]);
+  // An active loop intersects the four-second window on top of the loop range.
+  editor.loopTimeBounds = () => [0, 10];
   editor.loopDrawWindow = () => [3, 7];
   expect(window()).toEqual([3, 7]);
-  // The loop window clamps against the extent, not against the cursor.
+  editor.loopDrawWindow = () => [-5, 20];
+  expect(window()).toEqual([1, 9]);
+  // The armed span stays whole: no four-second intersection while arming.
+  editor.loopTimeBounds = () => null;
   editor.loopDrawWindow = () => [-5, 20];
   expect(window()).toEqual([0, 10]);
   // The armed range collapses onto the cursor before point B exists.
   editor.loopDrawWindow = () => [5, 5];
   expect(window()).toEqual([5, 5]);
-  // The option off keeps the full extent even with a loop window set.
+  // The loop range applies with the option off too.
+  editor.loopDrawWindow = () => [3, 7];
   editor.shortDrawRange = false;
+  expect(window()).toEqual([3, 7]);
+  // With the option off the loop range clamps against the extent only.
+  editor.loopDrawWindow = () => [-5, 20];
+  expect(window()).toEqual([0, 10]);
+  // Without a loop window and with the option off nothing is limited.
+  editor.loopDrawWindow = () => null;
   expect(window()).toBeNull();
+});
+
+test("the loop range applies without the cursor window when no time exists", () => {
+  const { editor } = makeEditor(true);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const window = (editor as any).traceDrawWindow.bind(editor) as () => [number, number] | null;
+  editor.shortDrawRange = true;
+  editor.loopDrawWindow = () => [3, 7];
+  editor.loopTimeBounds = () => [3, 7];
+  expect(window()).toEqual([3, 7]);
 });
 
 test("a cursor outside the extent draws the muted outside-range stroke", async () => {
