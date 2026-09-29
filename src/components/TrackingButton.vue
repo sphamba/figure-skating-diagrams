@@ -9,7 +9,7 @@ defineEmits<{ toggle: [] }>();
     class="tracking-button"
     :class="{ 'tracking-button--active': active }"
     :aria-pressed="active"
-    :aria-label="active ? 'Stop tracking the time cursor' : 'Center the view on the time cursor'"
+    :aria-label="active ? $t('tracking.stop') : $t('tracking.start')"
     @click="$emit('toggle')"
   >
     <svg

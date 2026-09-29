@@ -61,16 +61,19 @@ import { useTimeCursorStepping } from "@/composables/useTimeCursorStepping";
 import { useTimeCursorKeys } from "@/composables/useTimeCursorKeys";
 import { useTooltipTouchGuard } from "@/composables/useTooltipTouchGuard";
 import { usePlaybackSpeed } from "@/composables/usePlaybackSpeed";
+import { useI18n } from "vue-i18n";
+
+const { t } = useI18n();
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 
-const editModeOptions = [
-  { label: "View", value: "view", icon: "pi pi-eye", key: "V" },
-  { label: "Path", value: "path", icon: "pi pi-signature", key: "P" },
-  { label: "Elements", value: "elements", icon: "pi pi-objects-column", key: "E" },
-  { label: "Timing", value: "timing", icon: "pi pi-clock", key: "T" },
-  { label: "Annotations", value: "annotations", icon: "pi pi-tag", key: "A" },
-];
+const editModeOptions = computed(() => [
+  { label: t("editor.modes.view"), value: "view", icon: "pi pi-eye", key: "V" },
+  { label: t("editor.modes.path"), value: "path", icon: "pi pi-signature", key: "P" },
+  { label: t("editor.modes.elements"), value: "elements", icon: "pi pi-objects-column", key: "E" },
+  { label: t("editor.modes.timing"), value: "timing", icon: "pi pi-clock", key: "T" },
+  { label: t("editor.modes.annotations"), value: "annotations", icon: "pi pi-tag", key: "A" },
+]);
 const editMode = ref<EditMode>("view");
 
 const isMobile = useMediaQuery("(max-width: 767.98px)");
@@ -106,131 +109,136 @@ const spinPath = ref<string[]>([]);
 const defaultSpinRevolutions = 3;
 const spinRevolutionsDraft = ref<number | null>(defaultSpinRevolutions);
 
-const elementKindGroupOptions = [
-  { label: "Glide", value: "glide" },
-  { label: "Stroke", value: "stroke" },
-  { label: "One-foot turn", value: "turn" },
-  { label: "Two-feet turn", value: "twoFeetTurn" },
-  { label: "Jump", value: "jump" },
-  { label: "Spin", value: "spin" },
-];
+const elementKindGroupOptions = computed(() => [
+  { label: t("editor.kinds.glide"), value: "glide" },
+  { label: t("editor.kinds.stroke"), value: "stroke" },
+  { label: t("editor.kinds.oneFootTurn"), value: "turn" },
+  { label: t("editor.kinds.twoFeetTurn"), value: "twoFeetTurn" },
+  { label: t("editor.kinds.jump"), value: "jump" },
+  { label: t("editor.kinds.spin"), value: "spin" },
+]);
 
-const glideLevelOptions: { label: string; value: string }[][] = [
+const glideLevelOptions = computed<{ label: string; value: string }[][]>(() => [
   [
-    { label: "Left", value: "Left" },
-    { label: "Right", value: "Right" },
-    { label: "Two-feet", value: "TwoFoot" },
+    { label: t("editor.common.left"), value: "Left" },
+    { label: t("editor.common.right"), value: "Right" },
+    { label: t("editor.common.twoFeet"), value: "TwoFoot" },
   ],
   [
-    { label: "Forward", value: "Forward" },
-    { label: "Backward", value: "Backward" },
+    { label: t("editor.common.forward"), value: "Forward" },
+    { label: t("editor.common.backward"), value: "Backward" },
   ],
   [
-    { label: "Inside", value: "Inside" },
-    { label: "Outside", value: "Outside" },
-    { label: "Neither", value: "Neither" },
+    { label: t("editor.common.inside"), value: "Inside" },
+    { label: t("editor.common.outside"), value: "Outside" },
+    { label: t("editor.common.neither"), value: "Neither" },
   ],
-];
+]);
 
-const glideTwoFeetOptions: { label: string; value: string }[] = [
-  { label: "Forward", value: "Forward" },
-  { label: "Backward", value: "Backward" },
-  { label: "Spread eagle", value: "SpreadEagle" },
-  { label: "Ina Bauer", value: "InaBauer" },
-];
+const glideTwoFeetOptions = computed<{ label: string; value: string }[]>(() => [
+  { label: t("editor.common.forward"), value: "Forward" },
+  { label: t("editor.common.backward"), value: "Backward" },
+  { label: t("editor.glide.spreadEagle"), value: "SpreadEagle" },
+  { label: t("editor.glide.inaBauer"), value: "InaBauer" },
+]);
 
-const glidePoseFrontFootOptions = [
-  { label: "Left front", value: "Left" },
-  { label: "Right front", value: "Right" },
-];
+const glidePoseFrontFootOptions = computed(() => [
+  { label: t("editor.glide.leftFront"), value: "Left" },
+  { label: t("editor.glide.rightFront"), value: "Right" },
+]);
 
-const strokeLevelOptions: { label: string; value: string }[][] = [
+const strokeLevelOptions = computed<{ label: string; value: string }[][]>(() => [
   [
-    { label: "Left", value: "Left" },
-    { label: "Right", value: "Right" },
-  ],
-  [
-    { label: "Forward", value: "Forward" },
-    { label: "Backward", value: "Backward" },
+    { label: t("editor.common.left"), value: "Left" },
+    { label: t("editor.common.right"), value: "Right" },
   ],
   [
-    { label: "Inside", value: "Inside" },
-    { label: "Outside", value: "Outside" },
-    { label: "Neither", value: "Neither" },
+    { label: t("editor.common.forward"), value: "Forward" },
+    { label: t("editor.common.backward"), value: "Backward" },
   ],
   [
-    { label: "Normal", value: "Normal" },
-    { label: "Crossed", value: "Crossed" },
-    { label: "Crossed back", value: "CrossedBack" },
+    { label: t("editor.common.inside"), value: "Inside" },
+    { label: t("editor.common.outside"), value: "Outside" },
+    { label: t("editor.common.neither"), value: "Neither" },
   ],
-];
+  [
+    { label: t("editor.stroke.normal"), value: "Normal" },
+    { label: t("editor.stroke.crossed"), value: "Crossed" },
+    { label: t("editor.stroke.crossedBack"), value: "CrossedBack" },
+  ],
+]);
 
-const turnGroupOptions = [
-  { label: "Three-turn", value: "ThreeTurn" },
-  { label: "Bracket", value: "Bracket" },
-  { label: "Rocker", value: "Rocker" },
-  { label: "Counter", value: "Counter" },
-  { label: "Loop", value: "Loop" },
-  { label: "Twizzle", value: "Twizzle" },
-];
+const turnGroupOptions = computed(() => [
+  { label: t("editor.turns.threeTurn"), value: "ThreeTurn" },
+  { label: t("editor.turns.bracket"), value: "Bracket" },
+  { label: t("editor.turns.rocker"), value: "Rocker" },
+  { label: t("editor.turns.counter"), value: "Counter" },
+  { label: t("editor.turns.loop"), value: "Loop" },
+  { label: t("editor.turns.twizzle"), value: "Twizzle" },
+]);
 
-const turnSideLevelOptions = [
-  { label: "Left", value: "Left" },
-  { label: "Right", value: "Right" },
-];
+const turnSideLevelOptions = computed(() => [
+  { label: t("editor.common.left"), value: "Left" },
+  { label: t("editor.common.right"), value: "Right" },
+]);
 
-const turnDirectionLevelOptions = [
-  { label: "Forward", value: "Forward" },
-  { label: "Backward", value: "Backward" },
-];
+const turnDirectionLevelOptions = computed(() => [
+  { label: t("editor.common.forward"), value: "Forward" },
+  { label: t("editor.common.backward"), value: "Backward" },
+]);
 
-const turnEdgeLevelOptions = [
-  { label: "Inside", value: "Inside" },
-  { label: "Outside", value: "Outside" },
-];
+const turnEdgeLevelOptions = computed(() => [
+  { label: t("editor.common.inside"), value: "Inside" },
+  { label: t("editor.common.outside"), value: "Outside" },
+]);
 
-const twoFeetTurnGroupOptions = [
-  { label: "Mohawk", value: "Mohawk" },
-  { label: "Choctaw", value: "Choctaw" },
-];
+const twoFeetTurnGroupOptions = computed(() => [
+  { label: t("editor.twoFeetTurns.mohawk"), value: "Mohawk" },
+  { label: t("editor.twoFeetTurns.choctaw"), value: "Choctaw" },
+]);
 
-const twoFeetTurnOpennessLevelOptions = [
-  { label: "Open", value: "Open" },
-  { label: "Closed", value: "Closed" },
-];
+const twoFeetTurnOpennessLevelOptions = computed(() => [
+  { label: t("editor.twoFeetTurns.open"), value: "Open" },
+  { label: t("editor.twoFeetTurns.closed"), value: "Closed" },
+]);
 
-const twoFeetTurnLevelOptionsByGroup: { [group: string]: { label: string; value: string }[][] } = {
-  Mohawk: [turnSideLevelOptions, turnDirectionLevelOptions, twoFeetTurnOpennessLevelOptions],
-  Choctaw: [turnSideLevelOptions, turnDirectionLevelOptions, twoFeetTurnOpennessLevelOptions],
-};
+const twoFeetTurnLevelOptionsByGroup = computed<{ [group: string]: { label: string; value: string }[][] }>(() => ({
+  Mohawk: [turnSideLevelOptions.value, turnDirectionLevelOptions.value, twoFeetTurnOpennessLevelOptions.value],
+  Choctaw: [turnSideLevelOptions.value, turnDirectionLevelOptions.value, twoFeetTurnOpennessLevelOptions.value],
+}));
 
 const twoFeetTurnStepCounts: { [group: string]: number } = {
   Mohawk: 4,
   Choctaw: 4,
 };
 
-const twizzleTurnsLevelOptions = [
-  { label: "½ turn", value: "0.5" },
-  { label: "1 turn", value: "1" },
-  { label: "1½ turns", value: "1.5" },
-  { label: "2 turns", value: "2" },
-  { label: "2½ turns", value: "2.5" },
-  { label: "3 turns", value: "3" },
-  { label: "3½ turns", value: "3.5" },
-  { label: "4 turns", value: "4" },
-  { label: "4½ turns", value: "4.5" },
-  { label: "5 turns", value: "5" },
-  { label: "5½ turns", value: "5.5" },
-];
+// The half-turn label shows "½" for x.5 values; the unit pluralizes with the i18n catalog.
+function twizzleTurnLabel(value: string): string {
+  const turns = Number(value);
+  const display = value.endsWith(".5") ? `${value.slice(0, -2)}½` : value;
+  return `${display} ${t("editor.turnUnit", turns === 0.5 || turns === 1 ? 1 : 2)}`;
+}
 
-const turnLevelOptionsByGroup: { [group: string]: { label: string; value: string }[][] } = {
-  ThreeTurn: [turnSideLevelOptions, turnDirectionLevelOptions, turnEdgeLevelOptions],
-  Bracket: [turnSideLevelOptions, turnDirectionLevelOptions, turnEdgeLevelOptions],
-  Rocker: [turnSideLevelOptions, turnDirectionLevelOptions, turnEdgeLevelOptions],
-  Counter: [turnSideLevelOptions, turnDirectionLevelOptions, turnEdgeLevelOptions],
-  Loop: [turnSideLevelOptions, turnDirectionLevelOptions, turnEdgeLevelOptions],
-  Twizzle: [turnSideLevelOptions, turnDirectionLevelOptions, turnEdgeLevelOptions, twizzleTurnsLevelOptions],
-};
+const twizzleTurnsLevelOptions = computed(() =>
+  ["0.5", "1", "1.5", "2", "2.5", "3", "3.5", "4", "4.5", "5", "5.5"].map((value) => ({
+    label: twizzleTurnLabel(value),
+    value,
+  })),
+);
+
+const turnLevelOptionsByGroup = computed<{ [group: string]: { label: string; value: string }[][] }>(() => ({
+  ThreeTurn: [turnSideLevelOptions.value, turnDirectionLevelOptions.value, turnEdgeLevelOptions.value],
+  Bracket: [turnSideLevelOptions.value, turnDirectionLevelOptions.value, turnEdgeLevelOptions.value],
+  Rocker: [turnSideLevelOptions.value, turnDirectionLevelOptions.value, turnEdgeLevelOptions.value],
+  Counter: [turnSideLevelOptions.value, turnDirectionLevelOptions.value, turnEdgeLevelOptions.value],
+  Loop: [turnSideLevelOptions.value, turnDirectionLevelOptions.value, turnEdgeLevelOptions.value],
+  Twizzle: [
+    turnSideLevelOptions.value,
+    turnDirectionLevelOptions.value,
+    turnEdgeLevelOptions.value,
+    twizzleTurnsLevelOptions.value,
+  ],
+}));
 
 const turnStepCounts: { [group: string]: number } = {
   ThreeTurn: 4,
@@ -247,8 +255,8 @@ const turnStepFinal = computed(() => turnPath.value.length >= (turnStepCounts[tu
 
 const currentTurnOptions = computed(() => {
   if (turnStepFinal.value) return [];
-  if (turnPath.value.length === 0) return turnGroupOptions;
-  return turnLevelOptionsByGroup[turnGroup.value]?.[turnPath.value.length - 1] ?? [];
+  if (turnPath.value.length === 0) return turnGroupOptions.value;
+  return turnLevelOptionsByGroup.value[turnGroup.value]?.[turnPath.value.length - 1] ?? [];
 });
 
 const twoFeetTurnGroup = computed(() => twoFeetPath.value[0] ?? "");
@@ -259,8 +267,8 @@ const twoFeetTurnStepFinal = computed(
 
 const currentTwoFeetTurnOptions = computed(() => {
   if (twoFeetTurnStepFinal.value) return [];
-  if (twoFeetPath.value.length === 0) return twoFeetTurnGroupOptions;
-  return twoFeetTurnLevelOptionsByGroup[twoFeetTurnGroup.value]?.[twoFeetPath.value.length - 1] ?? [];
+  if (twoFeetPath.value.length === 0) return twoFeetTurnGroupOptions.value;
+  return twoFeetTurnLevelOptionsByGroup.value[twoFeetTurnGroup.value]?.[twoFeetPath.value.length - 1] ?? [];
 });
 
 const glideSideTwoFoot = computed(() => glidePath.value[0] === "TwoFoot");
@@ -272,15 +280,15 @@ const glideStepFinal = computed(
 
 const currentGlideOptions = computed(() => {
   if (glideStepFinal.value) return [];
-  if (glidePath.value.length === 1 && glideSideTwoFoot.value) return glideTwoFeetOptions;
-  if (glidePath.value.length === 2 && glidePoseStep.value) return glidePoseFrontFootOptions;
-  return glideLevelOptions[glidePath.value.length] ?? [];
+  if (glidePath.value.length === 1 && glideSideTwoFoot.value) return glideTwoFeetOptions.value;
+  if (glidePath.value.length === 2 && glidePoseStep.value) return glidePoseFrontFootOptions.value;
+  return glideLevelOptions.value[glidePath.value.length] ?? [];
 });
 
-const strokeStepFinal = computed(() => strokePath.value.length >= strokeLevelOptions.length);
+const strokeStepFinal = computed(() => strokePath.value.length >= strokeLevelOptions.value.length);
 
 const currentStrokeOptions = computed(
-  () => (strokeStepFinal.value ? [] : strokeLevelOptions[strokePath.value.length]) ?? [],
+  () => (strokeStepFinal.value ? [] : strokeLevelOptions.value[strokePath.value.length]) ?? [],
 );
 
 type ElementKind = "glide" | "stroke" | "turn" | "twoFeetTurn" | "jump" | "spin";
@@ -455,70 +463,73 @@ function autoSelectVariants() {
 const chosenLabels = computed<string[]>(() => {
   if (!elementChangeBranch.value) return [];
   if (elementChangeBranch.value === "jump") {
-    const labels = ["Jump"];
+    const labels = [t("editor.kinds.jump")];
     jumpPath.value.forEach((value, level) => {
-      const options = level === 0 ? jumpHandednessOptions : level === 1 ? jumpTypeChoices : jumpRevolutionOptions;
+      const options =
+        level === 0 ? jumpHandednessOptions.value : level === 1 ? jumpTypeChoices : jumpRevolutionOptions.value;
       const option = options.find((choice) => choice.value === value);
       if (option) labels.push(option.label);
     });
     return labels;
   }
   if (elementChangeBranch.value === "twoFeetTurn") {
-    const labels = ["Two-feet turn"];
+    const labels = [t("editor.kinds.twoFeetTurn")];
     twoFeetPath.value.forEach((value, level) => {
       const options: { label: string; value: string }[] | undefined =
-        level === 0 ? twoFeetTurnGroupOptions : twoFeetTurnLevelOptionsByGroup[twoFeetTurnGroup.value]?.[level - 1];
+        level === 0
+          ? twoFeetTurnGroupOptions.value
+          : twoFeetTurnLevelOptionsByGroup.value[twoFeetTurnGroup.value]?.[level - 1];
       const option = options?.find((choice) => choice.value === value);
       if (option) labels.push(option.label);
     });
     return labels;
   }
   if (elementChangeBranch.value === "spin") {
-    const labels = ["Spin"];
+    const labels = [t("editor.kinds.spin")];
     spinPath.value.forEach((value, level) => {
       if (level === 4) {
-        labels.push(`${value} revolution${value === "1" ? "" : "s"}`);
+        labels.push(t("editor.spins.revolutionsCount", { count: Number(value) }));
         return;
       }
       const options =
         level === 0
-          ? jumpHandednessOptions
+          ? jumpHandednessOptions.value
           : level === 1
-            ? spinFootLevelOptions
+            ? spinFootLevelOptions.value
             : level === 2
-              ? spinEdgeLevelOptions
-              : spinTypeLevelOptions;
+              ? spinEdgeLevelOptions.value
+              : spinTypeLevelOptions.value;
       const option = options.find((choice) => choice.value === value);
       if (option) labels.push(option.label);
     });
     return labels;
   }
   if (elementChangeBranch.value === "glide") {
-    const labels = ["Glide"];
+    const labels = [t("editor.kinds.glide")];
     glidePath.value.forEach((value, level) => {
       const options =
         level === 1 && glidePath.value[0] === "TwoFoot"
-          ? glideTwoFeetOptions
+          ? glideTwoFeetOptions.value
           : level === 2 && (glidePath.value[1] === "SpreadEagle" || glidePath.value[1] === "InaBauer")
-            ? glidePoseFrontFootOptions
-            : glideLevelOptions[level];
+            ? glidePoseFrontFootOptions.value
+            : glideLevelOptions.value[level];
       const option = options?.find((choice) => choice.value === value);
       if (option) labels.push(option.label);
     });
     return labels;
   }
   if (elementChangeBranch.value === "stroke") {
-    const labels = ["Stroke"];
+    const labels = [t("editor.kinds.stroke")];
     strokePath.value.forEach((value, level) => {
-      const option = strokeLevelOptions[level]?.find((choice) => choice.value === value);
+      const option = strokeLevelOptions.value[level]?.find((choice) => choice.value === value);
       if (option) labels.push(option.label);
     });
     return labels;
   }
-  const labels = ["One-foot turn"];
+  const labels = [t("editor.kinds.oneFootTurn")];
   turnPath.value.forEach((value, level) => {
     const options: { label: string; value: string }[] | undefined =
-      level === 0 ? turnGroupOptions : turnLevelOptionsByGroup[turnGroup.value]?.[level - 1];
+      level === 0 ? turnGroupOptions.value : turnLevelOptionsByGroup.value[turnGroup.value]?.[level - 1];
     const option = options?.find((choice) => choice.value === value);
     if (option) labels.push(option.label);
   });
@@ -526,116 +537,101 @@ const chosenLabels = computed<string[]>(() => {
 });
 
 const sharedHelpItems: HelpItem[] = [
-  { keys: ["V"], descriptions: ["switch to the View mode"] },
-  { keys: ["P"], descriptions: ["switch to the Path mode"] },
-  { keys: ["E"], descriptions: ["switch to the Elements mode"] },
-  { keys: ["T"], descriptions: ["switch to the Timing mode"] },
-  { keys: ["A"], descriptions: ["switch to the Annotations mode"] },
-  { keys: ["one finger"], descriptions: ["same as a left click"] },
-  { keys: ["two fingers"], descriptions: ["pinch to zoom and drag to move the view"] },
-  { keys: ["space"], descriptions: ["toggle the playback"] },
-  { keys: ["ctrl", "z"], descriptions: ["undo the last change"] },
-  { keys: ["ctrl", "y"], descriptions: ["redo the last undone change"] },
-  { keys: ["ctrl", "shift", "z"], descriptions: ["redo the last undone change"] },
-  { keys: ["left arrow"], descriptions: ["move the time cursor back one video frame or 1/30 second"] },
-  { keys: ["right arrow"], descriptions: ["move the time cursor forward one video frame or 1/30 second"] },
+  { keys: ["v"], descriptions: ["switchView"] },
+  { keys: ["p"], descriptions: ["switchPath"] },
+  { keys: ["e"], descriptions: ["switchElements"] },
+  { keys: ["t"], descriptions: ["switchTiming"] },
+  { keys: ["a"], descriptions: ["switchAnnotations"] },
+  { keys: ["oneFinger"], descriptions: ["sameAsLeftClick"] },
+  { keys: ["twoFingers"], descriptions: ["pinchZoomDragView"] },
+  { keys: ["space"], descriptions: ["togglePlayback"] },
+  { keys: ["ctrl", "z"], descriptions: ["undo"] },
+  { keys: ["ctrl", "y"], descriptions: ["redo"] },
+  { keys: ["ctrl", "shift", "z"], descriptions: ["redo"] },
+  { keys: ["leftArrow"], descriptions: ["cursorBack"] },
+  { keys: ["rightArrow"], descriptions: ["cursorForward"] },
 ];
 
 const helpItems = computed<HelpItem[]>(() =>
   editMode.value === "view"
     ? [
-        { keys: ["left drag"], descriptions: ["move the view"] },
-        { keys: ["right drag"], descriptions: ["move the view"] },
+        { keys: ["leftDrag"], descriptions: ["moveView"] },
+        { keys: ["rightDrag"], descriptions: ["moveView"] },
         { keys: ["wheel"], descriptions: ["zoom"] },
         ...sharedHelpItems,
       ]
     : editMode.value === "timing"
       ? [
           {
-            keys: ["left click"],
-            descriptions: ["on a timing point: select it", "on the path: create a provisional timing point"],
+            keys: ["leftClick"],
+            descriptions: ["timingSelect", "timingCreate"],
           },
           {
-            keys: ["left drag"],
-            descriptions: [
-              "on empty space: draw a selection rectangle",
-              "on the path: create a provisional timing point at the release position",
-            ],
+            keys: ["leftDrag"],
+            descriptions: ["drawSelection", "timingCreateRelease"],
           },
-          { keys: ["drag"], descriptions: ["a timing point: move it"] },
-          { keys: ["ctrl", "left click"], descriptions: ["add or remove from the selection"] },
-          { keys: ["right drag"], descriptions: ["move the view"] },
+          { keys: ["drag"], descriptions: ["timingMove"] },
+          { keys: ["ctrl", "leftClick"], descriptions: ["selectionAddRemove"] },
+          { keys: ["rightDrag"], descriptions: ["moveView"] },
           { keys: ["wheel"], descriptions: ["zoom"] },
-          { keys: ["+"], descriptions: ["button on the provisional timing point: open the timing keyframe dialog"] },
-          { keys: ["\u2212"], descriptions: ["button beside a selected timing point: remove it"] },
-          { keys: ["cog"], descriptions: ["on a selected timing point: open the timing keyframe dialog"] },
+          { keys: ["+"], descriptions: ["timingOpenDialogPlus"] },
+          { keys: ["\u2212"], descriptions: ["timingRemove"] },
+          { keys: ["cog"], descriptions: ["timingOpenDialogCog"] },
           ...sharedHelpItems,
         ]
       : editMode.value === "annotations"
         ? [
             {
-              keys: ["left click"],
-              descriptions: ["on the path: create a provisional annotation", "on an annotation: select it"],
+              keys: ["leftClick"],
+              descriptions: ["annotationCreate", "annotationSelect"],
             },
             {
-              keys: ["left drag"],
-              descriptions: [
-                "on empty space: draw a selection rectangle",
-                "on the path: create a provisional annotation over the dragged range",
-              ],
+              keys: ["leftDrag"],
+              descriptions: ["drawSelection", "annotationCreateRange"],
             },
-            { keys: ["drag"], descriptions: ["an annotation: move it or its ends"] },
-            { keys: ["ctrl", "left click"], descriptions: ["add or remove from the selection"] },
-            { keys: ["right drag"], descriptions: ["move the view"] },
+            { keys: ["drag"], descriptions: ["annotationMove"] },
+            { keys: ["ctrl", "leftClick"], descriptions: ["selectionAddRemove"] },
+            { keys: ["rightDrag"], descriptions: ["moveView"] },
             { keys: ["wheel"], descriptions: ["zoom"] },
-            { keys: ["+"], descriptions: ["on the provisional annotation: open the annotation dialog"] },
-            { keys: ["\u2212"], descriptions: ["button beside a selected annotation: remove it"] },
-            { keys: ["cog"], descriptions: ["on a selected annotation: open the annotation dialog"] },
+            { keys: ["+"], descriptions: ["annotationOpenDialogPlus"] },
+            { keys: ["\u2212"], descriptions: ["annotationRemove"] },
+            { keys: ["cog"], descriptions: ["annotationOpenDialogCog"] },
             ...sharedHelpItems,
           ]
         : editMode.value === "elements"
           ? [
-              { keys: ["left click"], descriptions: ["on the path: create a provisional element"] },
+              { keys: ["leftClick"], descriptions: ["elementCreate"] },
               {
-                keys: ["left drag"],
-                descriptions: [
-                  "on empty space: draw a selection rectangle",
-                  "on the path: create a provisional element over the dragged range",
-                ],
+                keys: ["leftDrag"],
+                descriptions: ["drawSelection", "elementCreateRange"],
               },
-              { keys: ["drag"], descriptions: ["a provisional element: move it or its ends"] },
-              { keys: ["right drag"], descriptions: ["move the view"] },
+              { keys: ["drag"], descriptions: ["elementMove"] },
+              { keys: ["rightDrag"], descriptions: ["moveView"] },
               { keys: ["wheel"], descriptions: ["zoom"] },
-              { keys: ["+"], descriptions: ["on the provisional element: open the element selection dialog"] },
-              { keys: ["−"], descriptions: ["button beside a selected element: remove it"] },
-              { keys: ["cog"], descriptions: ["on a selected element: open the element selection dialog"] },
+              { keys: ["+"], descriptions: ["elementOpenDialogPlus"] },
+              { keys: ["\u2212"], descriptions: ["elementRemove"] },
+              { keys: ["cog"], descriptions: ["elementOpenDialogCog"] },
               ...sharedHelpItems,
             ]
           : [
               {
-                keys: ["left click"],
-                descriptions: ["on a control point: select it", "on a line: select that curve"],
+                keys: ["leftClick"],
+                descriptions: ["controlSelect", "lineSelect"],
               },
-              { keys: ["left drag"], descriptions: ["on empty space: draw a selection rectangle"] },
+              { keys: ["leftDrag"], descriptions: ["drawSelection"] },
               {
                 keys: ["drag"],
-                descriptions: [
-                  "a selected curve: move it (and the others selected)",
-                  "one of the selected points: move all selected points",
-                ],
+                descriptions: ["curveMove", "pointsMove"],
               },
-              { keys: ["ctrl", "left click"], descriptions: ["add or remove from the selection"] },
-              { keys: ["ctrl", "A"], descriptions: ["select all"] },
-              { keys: ["right drag"], descriptions: ["move the view"] },
+              { keys: ["ctrl", "leftClick"], descriptions: ["selectionAddRemove"] },
+              { keys: ["ctrl", "a"], descriptions: ["selectAll"] },
+              { keys: ["rightDrag"], descriptions: ["moveView"] },
               { keys: ["wheel"], descriptions: ["zoom"] },
               {
                 keys: ["+"],
-                descriptions: [
-                  "button near the end of the path: add a segment",
-                  "button at the midpoint of a selected curve: split it",
-                ],
+                descriptions: ["addSegment", "splitCurve"],
               },
-              { keys: ["\u2212"], descriptions: ["button beside a selected point: remove that point"] },
+              { keys: ["\u2212"], descriptions: ["pointRemove"] },
               ...sharedHelpItems,
             ],
 );
@@ -765,10 +761,10 @@ const {
 } = usePlaybackLoop(videoTime, playing, setTimestamp);
 const loopAriaLabel = computed(() =>
   loopStage.value === "idle"
-    ? "Set loop point A at the current time"
+    ? t("player.loopA")
     : loopStage.value === "armed"
-      ? "Set loop point B and start the loop"
-      : "Stop the loop",
+      ? t("player.loopB")
+      : t("player.loopStop"),
 );
 // The loop stage changes the drawn window, so a paused toggle still repaints.
 watch(loopStage, () => {
@@ -850,10 +846,10 @@ watch(
   { immediate: true },
 );
 
-const timingTypeOptions = [
-  { label: "Time", value: "time" },
-  { label: "Beats", value: "beats" },
-];
+const timingTypeOptions = computed(() => [
+  { label: t("editor.timing.timeOption"), value: "time" },
+  { label: t("editor.timing.beatsLabel"), value: "beats" },
+]);
 const timingKeyframeOpen = ref(false);
 const timingTarget = shallowRef<TimingKeyframe | null>(null);
 const timingIsProvisional = ref(false);
@@ -877,7 +873,7 @@ function formatTimingValue(value: number): string {
 const annotationOpen = ref(false);
 const annotationTarget = shallowRef<Annotation | null>(null);
 const annotationIsProvisional = ref(false);
-const annotationTitleDraft = ref("Annotation");
+const annotationTitleDraft = ref(t("editor.dialog.annotationDefault"));
 const annotationDescriptionDraft = ref("");
 const annotationColorDraft = ref(DEFAULT_ANNOTATION_COLOR);
 const annotationColor = computed({
@@ -907,7 +903,7 @@ function commitAnnotationChange() {
     closeAnnotationChange();
     return;
   }
-  target.title = annotationTitleDraft.value.trim() || "Annotation";
+  target.title = annotationTitleDraft.value.trim() || t("editor.dialog.annotationDefault");
   target.description = annotationDescriptionDraft.value;
   target.color = annotationColorDraft.value;
   if (annotationIsProvisional.value) {
@@ -1374,51 +1370,51 @@ function clearShortNameDraft() {
   focusShortNameInput();
 }
 
-const jumpHandednessOptions: { label: string; value: string }[] = [
-  { label: "Right-handed", value: "Right" },
-  { label: "Left-handed", value: "Left" },
-];
+const jumpHandednessOptions = computed(() => [
+  { label: t("editor.jumps.rightHanded"), value: "Right" },
+  { label: t("editor.jumps.leftHanded"), value: "Left" },
+]);
 
-const spinFootLevelOptions: { label: string; value: string }[] = [
-  { label: "Left foot", value: "LeftFoot" },
-  { label: "Right foot", value: "RightFoot" },
-];
+const spinFootLevelOptions = computed(() => [
+  { label: t("editor.spins.leftFoot"), value: "LeftFoot" },
+  { label: t("editor.spins.rightFoot"), value: "RightFoot" },
+]);
 
-const spinEdgeLevelOptions: { label: string; value: string }[] = [
-  { label: "Inside", value: "Inside" },
-  { label: "Outside", value: "Outside" },
-];
+const spinEdgeLevelOptions = computed(() => [
+  { label: t("editor.common.inside"), value: "Inside" },
+  { label: t("editor.common.outside"), value: "Outside" },
+]);
 
-const spinTypeLevelOptions: { label: string; value: string }[] = [
-  { label: "Upright", value: "upright" },
-  { label: "Layback", value: "layback" },
-  { label: "Camel", value: "camel" },
-  { label: "Sit", value: "sit" },
-];
+const spinTypeLevelOptions = computed(() => [
+  { label: t("editor.spins.upright"), value: "upright" },
+  { label: t("editor.spins.layback"), value: "layback" },
+  { label: t("editor.spins.camel"), value: "camel" },
+  { label: t("editor.spins.sit"), value: "sit" },
+]);
 
-const jumpRevolutionOptions: { label: string; value: string }[] = [
-  { label: "Single", value: "1" },
-  { label: "Double", value: "2" },
-  { label: "Triple", value: "3" },
-  { label: "Quadruple", value: "4" },
-];
+const jumpRevolutionOptions = computed(() => [
+  { label: t("editor.jumps.single"), value: "1" },
+  { label: t("editor.jumps.double"), value: "2" },
+  { label: t("editor.jumps.triple"), value: "3" },
+  { label: t("editor.jumps.quadruple"), value: "4" },
+]);
 
 const jumpStepFinal = computed(() => jumpPath.value.length >= 3);
 
 const currentJumpOptions = computed(() => {
   if (jumpStepFinal.value) return [];
-  if (jumpPath.value.length === 0) return jumpHandednessOptions;
+  if (jumpPath.value.length === 0) return jumpHandednessOptions.value;
   if (jumpPath.value.length === 1) return jumpTypeChoices;
-  return jumpRevolutionOptions;
+  return jumpRevolutionOptions.value;
 });
 
 const spinStepFinal = computed(() => spinPath.value.length >= 5);
 
 const currentSpinOptions = computed(() => {
-  if (spinPath.value.length === 0) return jumpHandednessOptions;
-  if (spinPath.value.length === 1) return spinFootLevelOptions;
-  if (spinPath.value.length === 2) return spinEdgeLevelOptions;
-  if (spinPath.value.length === 3) return spinTypeLevelOptions;
+  if (spinPath.value.length === 0) return jumpHandednessOptions.value;
+  if (spinPath.value.length === 1) return spinFootLevelOptions.value;
+  if (spinPath.value.length === 2) return spinEdgeLevelOptions.value;
+  if (spinPath.value.length === 3) return spinTypeLevelOptions.value;
   return [];
 });
 
@@ -1582,7 +1578,7 @@ function onStrokeChange(value: string) {
   const next = [...strokePath.value, value];
   strokePath.value = next;
   if (next.length === 1) validOneFootVariant.value = computeOneFootValidity(value);
-  if (next.length >= strokeLevelOptions.length) {
+  if (next.length >= strokeLevelOptions.value.length) {
     const [side, direction, edge, crossed] = next;
     onFinalChoice(`${side}${crossed}${direction}${edge === "Neither" ? "" : edge}Glide`);
   }
@@ -1768,7 +1764,7 @@ function closeElementChange() {
         <Button
           v-if="isMobile"
           icon="pi pi-bars"
-          aria-label="Open settings"
+          :aria-label="$t('player.openSettings')"
           severity="secondary"
           text
           rounded
@@ -1779,7 +1775,7 @@ function closeElementChange() {
           <Button
             icon="pi pi-stopwatch"
             :aria-pressed="shortDrawRange"
-            aria-label="Limit the drawn animation to four seconds around the current time"
+            :aria-label="$t('player.shortRange')"
             severity="secondary"
             :text="!shortDrawRange"
             rounded
@@ -1788,7 +1784,7 @@ function closeElementChange() {
           />
           <Button
             icon="pi pi-step-backward"
-            aria-label="Back to the earliest time"
+            :aria-label="$t('player.jumpToStart')"
             severity="secondary"
             rounded
             size="small"
@@ -1796,7 +1792,7 @@ function closeElementChange() {
           />
           <Button
             :icon="playing ? 'pi pi-pause' : 'pi pi-play'"
-            :aria-label="playing ? 'Pause the animation' : 'Play the animation'"
+            :aria-label="playing ? $t('player.pause') : $t('player.play')"
             rounded
             @click="togglePlayback"
           />
@@ -1815,7 +1811,7 @@ function closeElementChange() {
             option-value="value"
             :allow-empty="false"
             size="small"
-            aria-label="Playback speed"
+            :aria-label="$t('player.speed')"
             class="editor-view__speed"
           />
         </div>
@@ -1824,7 +1820,7 @@ function closeElementChange() {
 
     <Dialog
       v-model:visible="elementChangeOpen"
-      header="Element selection"
+      :header="$t('editor.dialog.elementSelection')"
       modal
       class="editor-view__element-dialog"
       @hide="closeElementChange"
@@ -1868,7 +1864,7 @@ function closeElementChange() {
               <i
                 v-if="oneFootValidAt(glidePath.length, option.value)"
                 class="pi pi-check-circle editor-view__valid-check"
-                aria-label="Valid variant flag"
+                :aria-label="$t('editor.dialog.validFlag')"
               ></i>
             </span>
           </template>
@@ -1891,7 +1887,7 @@ function closeElementChange() {
               <i
                 v-if="oneFootValidAt(strokePath.length, option.value)"
                 class="pi pi-check-circle editor-view__valid-check"
-                aria-label="Valid variant flag"
+                :aria-label="$t('editor.dialog.validFlag')"
               ></i>
             </span>
           </template>
@@ -1914,7 +1910,7 @@ function closeElementChange() {
               <i
                 v-if="validFlagAt('turn', turnPath.length, option.value)"
                 class="pi pi-check-circle editor-view__valid-check"
-                aria-label="Valid variant flag"
+                :aria-label="$t('editor.dialog.validFlag')"
               ></i>
             </span>
           </template>
@@ -1939,7 +1935,7 @@ function closeElementChange() {
               <i
                 v-if="validFlagAt('twoFeetTurn', twoFeetPath.length, option.value)"
                 class="pi pi-check-circle editor-view__valid-check"
-                aria-label="Valid variant flag"
+                :aria-label="$t('editor.dialog.validFlag')"
               ></i>
             </span>
           </template>
@@ -1962,7 +1958,7 @@ function closeElementChange() {
               <i
                 v-if="jumpPath.length === 1 && jumpTypeValid(option.value)"
                 class="pi pi-check-circle editor-view__valid-check"
-                aria-label="Valid jump type"
+                :aria-label="$t('editor.dialog.validJump')"
               ></i>
             </span>
           </template>
@@ -1985,7 +1981,7 @@ function closeElementChange() {
         </Listbox>
 
         <div v-else-if="elementChangeBranch === 'spin' && !spinStepFinal" class="editor-view__short-name">
-          <label class="editor-view__mode-label" for="spin-revolutions">Revolutions</label>
+          <label class="editor-view__mode-label" for="spin-revolutions">{{ $t("editor.dialog.revolutions") }}</label>
           <InputNumber
             id="spin-revolutions"
             v-model="spinRevolutionsDraft"
@@ -1999,7 +1995,7 @@ function closeElementChange() {
         </div>
 
         <div v-else class="editor-view__short-name">
-          <label class="editor-view__mode-label" for="element-short-name">Short name</label>
+          <label class="editor-view__mode-label" for="element-short-name">{{ $t("editor.dialog.shortName") }}</label>
           <InputGroup>
             <InputText
               id="element-short-name"
@@ -2015,7 +2011,7 @@ function closeElementChange() {
                 text
                 rounded
                 size="small"
-                aria-label="Clear short name"
+                aria-label="$t('editor.dialog.clearShortName')"
                 @click="clearShortNameDraft"
               />
             </InputGroupAddon>
@@ -2026,39 +2022,50 @@ function closeElementChange() {
       <template #footer>
         <Button
           v-if="currentStepFinal"
-          label="Start"
+          :label="$t('editor.dialog.start')"
           severity="secondary"
           icon="pi pi-home"
           @click="startElementChange"
         />
         <Button
           v-if="elementChangeBranch"
-          label="Previous"
+          :label="$t('editor.dialog.previous')"
           severity="secondary"
           icon="pi pi-arrow-left"
           @click="previousElementChangeStep"
         />
         <Button
           v-if="autoSelectAvailable"
-          label="Auto"
+          :label="$t('editor.dialog.auto')"
           severity="primary"
           icon="pi pi-bolt"
           @click="autoSelectVariants"
         />
         <Button
           v-if="elementChangeBranch === 'spin' && !spinStepFinal && spinPath.length === 4"
-          label="Next"
+          :label="$t('editor.dialog.next')"
           icon="pi pi-arrow-right"
           @click="onSpinRevolutionsChange"
         />
-        <Button v-if="currentStepFinal" label="OK" icon="pi pi-check" @click="commitElementChange" />
-        <Button v-else label="Close" severity="secondary" icon="pi pi-times" @click="closeElementChange" />
+        <Button
+          v-if="currentStepFinal"
+          :label="$t('editor.dialog.ok')"
+          icon="pi pi-check"
+          @click="commitElementChange"
+        />
+        <Button
+          v-else
+          :label="$t('editor.dialog.close')"
+          severity="secondary"
+          icon="pi pi-times"
+          @click="closeElementChange"
+        />
       </template>
     </Dialog>
 
     <Dialog
       v-model:visible="timingKeyframeOpen"
-      header="Timing keyframe"
+      :header="$t('editor.dialog.timingKeyframe')"
       modal
       class="editor-view__timing-dialog"
       @hide="closeTimingKeyframe"
@@ -2071,11 +2078,11 @@ function closeElementChange() {
         :allow-empty="false"
       />
       <p v-if="timingKind === 'beats'" class="editor-view__timing-caption">
-        Number of beats from the previous timing keyframe.
+        {{ $t("editor.timing.beatsCaption") }}
       </p>
       <div class="editor-view__timing-value">
         <label class="editor-view__mode-label" for="timing-value">{{
-          timingKind === "time" ? "Time (min:sec.decimals)" : "Beats"
+          timingKind === "time" ? $t("editor.timing.timeLabel") : $t("editor.timing.beatsLabel")
         }}</label>
         <InputGroup v-if="timingKind === 'time'">
           <InputText
@@ -2095,7 +2102,7 @@ function closeElementChange() {
                 text
                 rounded
                 size="small"
-                aria-label="Increase by one second"
+                :aria-label="$t('editor.timing.increaseOneSecond')"
                 @click="stepTimingValue(1)"
               />
               <Button
@@ -2104,7 +2111,7 @@ function closeElementChange() {
                 text
                 rounded
                 size="small"
-                aria-label="Decrease by one second"
+                :aria-label="$t('editor.timing.decreaseOneSecond')"
                 @click="stepTimingValue(-1)"
               />
             </div>
@@ -2129,38 +2136,43 @@ function closeElementChange() {
         <small v-if="timingValueInvalid" class="editor-view__timing-error">
           {{
             timingValueError === "bounds"
-              ? "The time must not be before the previous timing keyframe."
+              ? $t("editor.timing.errorBounds")
               : timingKind === "time"
-                ? "Use min:sec or min:sec.decimals with seconds below 60, for example 1:24.5."
-                : "Enter a number of beats."
+                ? $t("editor.timing.errorTimeFormat")
+                : $t("editor.timing.errorBeatsFormat")
           }}
         </small>
         <div class="editor-view__timing-transitions">
           <div class="editor-view__timing-transition">
             <ToggleSwitch v-model="timingDecelerateTo" input-id="timing-decelerate-to" />
-            <label for="timing-decelerate-to">Decelerate to</label>
+            <label for="timing-decelerate-to">{{ $t("editor.timing.decelerateTo") }}</label>
           </div>
           <div class="editor-view__timing-transition">
             <ToggleSwitch v-model="timingAccelerateFrom" input-id="timing-accelerate-from" />
-            <label for="timing-accelerate-from">Accelerate from</label>
+            <label for="timing-accelerate-from">{{ $t("editor.timing.accelerateFrom") }}</label>
           </div>
         </div>
       </div>
       <template #footer>
-        <Button label="OK" icon="pi pi-check" @click="commitTimingKeyframe" />
-        <Button label="Close" severity="secondary" icon="pi pi-times" @click="closeTimingKeyframe" />
+        <Button :label="$t('editor.dialog.ok')" icon="pi pi-check" @click="commitTimingKeyframe" />
+        <Button
+          :label="$t('editor.dialog.close')"
+          severity="secondary"
+          icon="pi pi-times"
+          @click="closeTimingKeyframe"
+        />
       </template>
     </Dialog>
 
     <Dialog
       v-model:visible="annotationOpen"
-      header="Annotation"
+      :header="$t('editor.dialog.annotation')"
       modal
       class="editor-view__annotation-dialog"
       @hide="closeAnnotationChange"
     >
       <div class="editor-view__annotation-fields">
-        <label class="editor-view__mode-label" for="annotation-title">Title</label>
+        <label class="editor-view__mode-label" for="annotation-title">{{ $t("editor.annotationFields.title") }}</label>
         <InputText
           id="annotation-title"
           v-model="annotationTitleDraft"
@@ -2168,7 +2180,9 @@ function closeElementChange() {
           autofocus
           @keydown.enter="commitAnnotationChange"
         />
-        <label class="editor-view__mode-label" for="annotation-description">Description</label>
+        <label class="editor-view__mode-label" for="annotation-description">{{
+          $t("editor.annotationFields.description")
+        }}</label>
         <Textarea
           id="annotation-description"
           v-model="annotationDescriptionDraft"
@@ -2176,12 +2190,17 @@ function closeElementChange() {
           rows="3"
           auto-resize
         />
-        <label class="editor-view__mode-label" for="annotation-color">Color</label>
+        <label class="editor-view__mode-label" for="annotation-color">{{ $t("editor.annotationFields.color") }}</label>
         <ColorPicker id="annotation-color" v-model="annotationColor" />
       </div>
       <template #footer>
-        <Button label="OK" icon="pi pi-check" @click="commitAnnotationChange" />
-        <Button label="Close" severity="secondary" icon="pi pi-times" @click="closeAnnotationChange" />
+        <Button :label="$t('editor.dialog.ok')" icon="pi pi-check" @click="commitAnnotationChange" />
+        <Button
+          :label="$t('editor.dialog.close')"
+          severity="secondary"
+          icon="pi pi-times"
+          @click="closeAnnotationChange"
+        />
       </template>
     </Dialog>
   </div>

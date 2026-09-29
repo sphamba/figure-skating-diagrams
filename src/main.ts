@@ -12,7 +12,9 @@ import { definePreset } from "@openuxkit/themes";
 
 import App from "./App.vue";
 import router from "./router";
+import { i18n } from "./i18n";
 import { useAppearanceStore } from "./stores/appearance";
+import { useLocaleStore } from "./stores/locale";
 
 const appPreset = definePreset(Aura, {
   semantic: {
@@ -36,6 +38,8 @@ const app = createApp(App);
 
 app.use(createPinia());
 useAppearanceStore();
+useLocaleStore();
+app.use(i18n);
 app.use(router);
 app.use(ConfirmationService);
 app.directive("ripple", Ripple);

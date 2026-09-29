@@ -7,6 +7,7 @@ import SplitterPanel from "openvue/splitterpanel";
 import TimeSyncPane from "@/components/TimeSyncPane.vue";
 import TrackingButton from "@/components/TrackingButton.vue";
 import DiagramSidebar, { type HelpItem } from "@/components/DiagramSidebar.vue";
+import { useI18n } from "vue-i18n";
 import { Editor } from "@/engine/sequenceEditor/editor";
 import { earliestTimeKeyframeSeconds, fullTimeExtentSeconds } from "@/engine/diagram";
 import type { Sequence } from "@/engine/sequence";
@@ -27,6 +28,7 @@ const drawerOpen = ref(false);
 
 const store = useSequenceEditorStore();
 const appearance = useAppearanceStore();
+const { t } = useI18n();
 
 const sequences = computed(() => store.getSequences());
 const activeSequence = computed(() => store.getActiveSequence());
@@ -75,10 +77,10 @@ const {
 } = usePlaybackLoop(videoTime, playing, setTimestamp);
 const loopAriaLabel = computed(() =>
   loopStage.value === "idle"
-    ? "Set loop point A at the current time"
+    ? t("player.loopA")
     : loopStage.value === "armed"
-      ? "Set loop point B and start the loop"
-      : "Stop the loop",
+      ? t("player.loopB")
+      : t("player.loopStop"),
 );
 const { step: stepTimeCursor } = useTimeCursorStepping(videoRef, {
   seconds: videoTime,
@@ -268,14 +270,14 @@ watch(
 );
 
 const helpItems: HelpItem[] = [
-  { keys: ["left drag"], descriptions: ["move the view"] },
-  { keys: ["right drag"], descriptions: ["move the view"] },
+  { keys: ["leftDrag"], descriptions: ["moveView"] },
+  { keys: ["rightDrag"], descriptions: ["moveView"] },
   { keys: ["wheel"], descriptions: ["zoom"] },
-  { keys: ["one finger"], descriptions: ["same as a left click"] },
-  { keys: ["two fingers"], descriptions: ["pinch to zoom and drag to move the view"] },
-  { keys: ["space"], descriptions: ["toggle the playback"] },
-  { keys: ["left arrow"], descriptions: ["move the time cursor back one video frame or 1/30 second"] },
-  { keys: ["right arrow"], descriptions: ["move the time cursor forward one video frame or 1/30 second"] },
+  { keys: ["oneFinger"], descriptions: ["sameAsLeftClick"] },
+  { keys: ["twoFingers"], descriptions: ["pinchZoomDragView"] },
+  { keys: ["space"], descriptions: ["togglePlayback"] },
+  { keys: ["leftArrow"], descriptions: ["cursorBack"] },
+  { keys: ["rightArrow"], descriptions: ["cursorForward"] },
 ];
 
 const viewportWidth = ref(0);
@@ -521,7 +523,7 @@ onBeforeUnmount(() => {
         <Button
           v-if="isMobile"
           icon="pi pi-bars"
-          aria-label="Open settings"
+          :aria-label="$t('player.openSettings')"
           severity="secondary"
           text
           rounded
@@ -531,7 +533,7 @@ onBeforeUnmount(() => {
           <Button
             icon="pi pi-stopwatch"
             :aria-pressed="shortDrawRange"
-            aria-label="Limit the drawn animation to four seconds around the current time"
+            :aria-label="$t('player.shortRange')"
             severity="secondary"
             :text="!shortDrawRange"
             rounded
@@ -540,7 +542,7 @@ onBeforeUnmount(() => {
           />
           <Button
             icon="pi pi-step-backward"
-            aria-label="Back to the earliest time"
+            :aria-label="$t('player.jumpToStart')"
             severity="secondary"
             rounded
             size="small"
@@ -548,7 +550,7 @@ onBeforeUnmount(() => {
           />
           <Button
             :icon="playing ? 'pi pi-pause' : 'pi pi-play'"
-            :aria-label="playing ? 'Pause the animation' : 'Play the animation'"
+            :aria-label="playing ? $t('player.pause') : $t('player.play')"
             rounded
             @click="togglePlayback"
           />
@@ -567,7 +569,7 @@ onBeforeUnmount(() => {
             option-value="value"
             :allow-empty="false"
             size="small"
-            aria-label="Playback speed"
+            :aria-label="$t('player.speed')"
             class="home-view__speed"
           />
         </div>

@@ -1,19 +1,35 @@
 <script setup lang="ts">
 import Tag from "openvue/tag";
+import { useI18n } from "vue-i18n";
 import type { HelpItem } from "@/components/DiagramSidebar.vue";
+
+const { t } = useI18n();
 
 defineProps<{ helpItems: HelpItem[] }>();
 
-// The icon is picked per key tag: mouse gestures, finger gestures, otherwise a keyboard key.
-// The UI button tags "+" and "−" show no icon; the cog tag shows only a cog icon.
+// The icon is picked per key ID: mouse gestures, finger gestures, otherwise a keyboard key.
+// The UI button tags "+" and "\u2212" show no icon; the cog tag shows only a cog icon.
+// Keys and descriptions are stable IDs translated through the i18n catalogs.
 function iconOf(key: string): "mouse" | "finger" | "twoFinger" | "keyboard" | "cog" | "none" {
-  const lower = key.toLowerCase();
-  if (lower.includes("two fingers")) return "twoFinger";
-  if (lower.includes("finger")) return "finger";
-  if (lower.includes("wheel") || lower.includes("click") || lower.includes("drag")) return "mouse";
-  if (lower === "cog") return "cog";
-  if (lower === "+" || lower === "−") return "none";
-  return "keyboard";
+  switch (key) {
+    case "twoFingers":
+      return "twoFinger";
+    case "oneFinger":
+      return "finger";
+    case "wheel":
+    case "leftClick":
+    case "leftDrag":
+    case "rightDrag":
+    case "drag":
+      return "mouse";
+    case "cog":
+      return "cog";
+    case "+":
+    case "\u2212":
+      return "none";
+    default:
+      return "keyboard";
+  }
 }
 </script>
 
@@ -28,7 +44,7 @@ function iconOf(key: string): "mouse" | "finger" | "twoFinger" | "keyboard" | "c
         <template v-for="(key, keyIndex) in item.keys" :key="key">
           <Tag
             :class="iconOf(key) === 'cog' ? 'diagram-sidebar__hint-cog-tag' : undefined"
-            :value="iconOf(key) === 'cog' ? undefined : key"
+            :value="iconOf(key) === 'cog' ? undefined : t(`help.keys.${key}`)"
             rounded
           >
             <template v-if="iconOf(key) !== 'none'" #icon>
@@ -86,14 +102,14 @@ function iconOf(key: string): "mouse" | "finger" | "twoFinger" | "keyboard" | "c
                 />
               </svg>
             </template>
-            <span v-if="iconOf(key) !== 'cog'" class="diagram-sidebar__hint-label">{{ key }}</span>
+            <span v-if="iconOf(key) !== 'cog'" class="diagram-sidebar__hint-label">{{ t(`help.keys.${key}`) }}</span>
           </Tag>
           <span v-if="keyIndex < item.keys.length - 1" class="diagram-sidebar__hint-separator">+</span>
         </template>
       </span>
       <span class="diagram-sidebar__hint-descs">
         <span v-for="description in item.descriptions" :key="description" class="diagram-sidebar__hint-desc">
-          {{ description }}
+          {{ t(`help.descs.${description}`) }}
         </span>
       </span>
     </li>

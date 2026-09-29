@@ -86,9 +86,9 @@ const diagramSymmetric = computed({
 <template>
   <div class="diagram-sidebar__diagram">
     <template v-if="isEditor">
-      <label class="diagram-sidebar__mode-label" for="diagram-name">Diagram name</label>
+      <label class="diagram-sidebar__mode-label" for="diagram-name">{{ $t("diagram.name") }}</label>
       <InputText id="diagram-name" v-model="diagramName" class="w-full" />
-      <label class="diagram-sidebar__mode-label" for="diagram-bpm">BPM</label>
+      <label class="diagram-sidebar__mode-label" for="diagram-bpm">{{ $t("diagram.bpm") }}</label>
       <InputNumber
         id="diagram-bpm"
         v-model="diagramBpm"
@@ -98,7 +98,7 @@ const diagramSymmetric = computed({
         placeholder="120"
         fluid
       />
-      <label class="diagram-sidebar__mode-label" for="diagram-video-url">Video URL</label>
+      <label class="diagram-sidebar__mode-label" for="diagram-video-url">{{ $t("diagram.videoUrl") }}</label>
       <InputText
         id="diagram-video-url"
         v-model="videoUrl"
@@ -107,13 +107,15 @@ const diagramSymmetric = computed({
         placeholder="https://example.com/video.mp4"
       />
       <small v-if="videoError" class="diagram-sidebar__load-error">
-        The video could not be loaded. Use a direct link to an .mp4 file.
+        {{ $t("diagram.videoError") }}
       </small>
-      <label class="diagram-sidebar__mode-label" for="diagram-background-image">Background image</label>
+      <label class="diagram-sidebar__mode-label" for="diagram-background-image">{{
+        $t("diagram.backgroundImage")
+      }}</label>
       <template v-if="!backgroundSet">
         <Button
           id="diagram-background-image"
-          label="Add background image"
+          :label="$t('diagram.addBackgroundImage')"
           icon="pi pi-image"
           class="w-full"
           severity="secondary"
@@ -121,8 +123,14 @@ const diagramSymmetric = computed({
         />
       </template>
       <template v-else>
-        <img class="diagram-sidebar__preview" :src="store.getDiagram().backgroundImage" alt="Rink background preview" />
-        <label class="diagram-sidebar__mode-label" for="diagram-background-opacity">Background opacity</label>
+        <img
+          class="diagram-sidebar__preview"
+          :src="store.getDiagram().backgroundImage"
+          :alt="$t('diagram.backgroundPreviewAlt')"
+        />
+        <label class="diagram-sidebar__mode-label" for="diagram-background-opacity">{{
+          $t("diagram.backgroundOpacity")
+        }}</label>
         <Slider
           id="diagram-background-opacity"
           v-model="backgroundOpacityPercent"
@@ -132,7 +140,7 @@ const diagramSymmetric = computed({
           :step="1"
         />
         <Button
-          label="Remove background image"
+          :label="$t('diagram.removeBackgroundImage')"
           icon="pi pi-trash"
           class="w-full"
           severity="secondary"
@@ -142,21 +150,21 @@ const diagramSymmetric = computed({
       <input ref="backgroundImageInput" type="file" accept="image/*" hidden @change="onBackgroundSelected" />
       <div class="diagram-sidebar__toggle">
         <ToggleSwitch v-model="diagramSymmetric" input-id="diagram-symmetric" />
-        <label for="diagram-symmetric">Symmetric</label>
+        <label for="diagram-symmetric">{{ $t("diagram.symmetric") }}</label>
       </div>
     </template>
     <template v-else>
-      <label class="diagram-sidebar__mode-label">Diagram name</label>
+      <label class="diagram-sidebar__mode-label">{{ $t("diagram.name") }}</label>
       <span class="diagram-sidebar__value">{{ diagramName }}</span>
       <template v-if="videoSet">
-        <label class="diagram-sidebar__mode-label">Video URL</label>
+        <label class="diagram-sidebar__mode-label">{{ $t("diagram.videoUrl") }}</label>
         <a class="diagram-sidebar__value diagram-sidebar__link" :href="videoUrl" target="_blank" rel="noreferrer">
           {{ videoUrl }}
-          <i class="pi pi-external-link pi-sm" aria-label="Open the video in a new tab" />
+          <i class="pi pi-external-link pi-sm" :aria-label="$t('diagram.openVideoNewTab')" />
         </a>
       </template>
       <template v-if="diagramBpm !== undefined">
-        <label class="diagram-sidebar__mode-label">BPM</label>
+        <label class="diagram-sidebar__mode-label">{{ $t("diagram.bpm") }}</label>
         <span class="diagram-sidebar__value">{{ diagramBpm }}</span>
       </template>
     </template>

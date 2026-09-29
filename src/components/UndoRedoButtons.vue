@@ -9,7 +9,7 @@ defineEmits<{ undo: []; redo: [] }>();
       type="button"
       class="undo-redo-buttons__button"
       :disabled="!canUndo"
-      aria-label="Undo the last change"
+      :aria-label="$t('undoRedo.undo')"
       @click="$emit('undo')"
     >
       <svg
@@ -30,7 +30,7 @@ defineEmits<{ undo: []; redo: [] }>();
       type="button"
       class="undo-redo-buttons__button"
       :disabled="!canRedo"
-      aria-label="Redo the last undone change"
+      :aria-label="$t('undoRedo.redo')"
       @click="$emit('redo')"
     >
       <svg

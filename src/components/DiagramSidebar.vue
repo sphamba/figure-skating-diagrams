@@ -4,13 +4,14 @@ export type SidebarMode = "home" | "editor";
 </script>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import Drawer from "openvue/drawer";
 import Tabs from "openvue/tabs";
 import Tab from "openvue/tab";
 import TabList from "openvue/tablist";
 import TabPanel from "openvue/tabpanel";
 import TabPanels from "openvue/tabpanels";
+import { useI18n } from "vue-i18n";
 import DiagramSidebarDiagram from "@/components/DiagramSidebarDiagram.vue";
 import DiagramSidebarFiles from "@/components/DiagramSidebarFiles.vue";
 import DiagramSidebarHelp from "@/components/DiagramSidebarHelp.vue";
@@ -32,36 +33,38 @@ const darkMode = defineModel<boolean>("darkMode", { required: true });
 
 const emit = defineEmits<{ "load-start": []; redraw: [] }>();
 
+const { t } = useI18n();
+
 const activeTab = ref("files");
 
-const sections = [
-  { value: "files", label: "Files" },
-  { value: "diagram", label: "Diagram" },
-  { value: "sequences", label: "Sequences" },
-  { value: "options", label: "Options" },
-  { value: "help", label: "Help" },
-];
+const sections = computed(() => [
+  { value: "files", label: t("sidebar.sections.files") },
+  { value: "diagram", label: t("sidebar.sections.diagram") },
+  { value: "sequences", label: t("sidebar.sections.sequences") },
+  { value: "options", label: t("sidebar.sections.options") },
+  { value: "help", label: t("sidebar.sections.help") },
+]);
 </script>
 
 <template>
   <aside v-if="!props.mobile" class="diagram-sidebar">
     <div class="diagram-sidebar__section">
-      <div class="diagram-sidebar__section-head">Files</div>
+      <div class="diagram-sidebar__section-head">{{ $t("sidebar.sections.files") }}</div>
       <DiagramSidebarFiles :mode="props.mode" @load-start="emit('load-start')" />
     </div>
 
     <div class="diagram-sidebar__section">
-      <div class="diagram-sidebar__section-head">Diagram</div>
+      <div class="diagram-sidebar__section-head">{{ $t("sidebar.sections.diagram") }}</div>
       <DiagramSidebarDiagram :mode="props.mode" :video-error="props.videoError ?? false" />
     </div>
 
     <div class="diagram-sidebar__section">
-      <div class="diagram-sidebar__section-head">Sequences</div>
+      <div class="diagram-sidebar__section-head">{{ $t("sidebar.sections.sequences") }}</div>
       <DiagramSidebarSequences :mode="props.mode" @redraw="emit('redraw')" />
     </div>
 
     <div class="diagram-sidebar__section">
-      <div class="diagram-sidebar__section-head">Options</div>
+      <div class="diagram-sidebar__section-head">{{ $t("sidebar.sections.options") }}</div>
       <DiagramSidebarOptions
         v-model:show-labels="showLabels"
         v-model:scale-elements="scaleElements"
@@ -70,7 +73,7 @@ const sections = [
     </div>
 
     <div class="diagram-sidebar__section">
-      <div class="diagram-sidebar__section-head">Help</div>
+      <div class="diagram-sidebar__section-head">{{ $t("sidebar.sections.help") }}</div>
       <DiagramSidebarHelp :help-items="props.helpItems" />
     </div>
   </aside>

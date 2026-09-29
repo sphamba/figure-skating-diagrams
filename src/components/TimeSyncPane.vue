@@ -603,7 +603,7 @@ onBeforeUnmount(() => {
               <button
                 type="button"
                 class="time-sync-pane__toggle"
-                :aria-label="active ? 'Fold element names' : 'Unfold element names'"
+                :aria-label="active ? $t('timeSync.foldNames') : $t('timeSync.unfoldNames')"
                 :aria-expanded="active"
                 @click.stop="toggleStripOpen(strip.key)"
               >
@@ -638,7 +638,7 @@ onBeforeUnmount(() => {
               <button
                 type="button"
                 class="time-sync-pane__toggle"
-                :aria-label="active ? 'Hide description' : 'Show description'"
+                :aria-label="active ? $t('timeSync.hideDescription') : $t('timeSync.showDescription')"
                 :aria-expanded="active"
                 @click.stop="toggleAnnotationOpen(row.key)"
               >
@@ -647,13 +647,13 @@ onBeforeUnmount(() => {
             </div>
           </AccordionHeader>
           <AccordionContent>
-            <p class="time-sync-pane__detail">{{ row.description || "No description" }}</p>
+            <p class="time-sync-pane__detail">{{ row.description || $t("timeSync.noDescription") }}</p>
           </AccordionContent>
         </AccordionPanel>
       </TransitionGroup>
     </Accordion>
 
-    <span v-if="!hasRows" class="time-sync-pane__empty">No element yet</span>
+    <span v-if="!hasRows" class="time-sync-pane__empty">{{ $t("timeSync.noElement") }}</span>
   </div>
 </template>
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import Select from "openvue/select";
+import { useI18n } from "vue-i18n";
 import diagramTree from "virtual:diagram-tree";
 
 export type DiagramTreeSource = { source: "bundled"; path: string };
@@ -9,13 +10,15 @@ const emit = defineEmits<{ select: [source: DiagramTreeSource] }>();
 
 type TreeGroup = { label: string; items: { name: string; path: string }[] };
 
+const { t } = useI18n();
+
 const bundledGroups = computed<TreeGroup[]>(() => {
   const groups: TreeGroup[] = [];
   const walk = (folder: typeof diagramTree, prefix: string) => {
     if (folder.files.length > 0) groups.push({ label: prefix, items: folder.files });
     for (const child of folder.folders) walk(child, prefix ? `${prefix} / ${child.name}` : child.name);
   };
-  walk(diagramTree, "diagrams");
+  walk(diagramTree, t("files.treeRoot"));
   return groups;
 });
 
@@ -31,7 +34,7 @@ function onTreeSelect(value: unknown) {
 
 <template>
   <div class="diagram-tree">
-    <label class="diagram-tree__label" for="diagram-tree-input">Saved diagrams</label>
+    <label class="diagram-tree__label" for="diagram-tree-input">{{ $t("files.savedDiagrams") }}</label>
     <Select
       input-id="diagram-tree-input"
       :model-value="selectedPath"
@@ -40,7 +43,7 @@ function onTreeSelect(value: unknown) {
       option-value="path"
       option-group-label="label"
       option-group-children="items"
-      placeholder="Open a diagram"
+      :placeholder="$t('files.openPlaceholder')"
       class="w-full"
       @update:model-value="onTreeSelect"
     />

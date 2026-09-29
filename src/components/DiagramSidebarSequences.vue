@@ -9,6 +9,7 @@ import InputText from "openvue/inputtext";
 import Listbox from "openvue/listbox";
 import ToggleSwitch from "openvue/toggleswitch";
 import { useConfirm } from "openvue/useconfirm";
+import { useI18n } from "vue-i18n";
 import { textColorFor } from "@/utils/contrast";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import type { Sequence, FootKey } from "@/engine/sequence";
@@ -22,6 +23,7 @@ const isEditor = computed(() => props.mode === "editor");
 
 const store = useSequenceEditorStore();
 const confirm = useConfirm();
+const { t } = useI18n();
 
 const sequences = computed(() => store.getSequences());
 const activeSequence = computed(() => store.getActiveSequence());
@@ -38,10 +40,16 @@ const sequenceInfos = computed(
     ),
 );
 
-const footSwatches = [
-  { footKey: "footL" as FootKey, letter: "L" },
-  { footKey: "footR" as FootKey, letter: "R" },
-];
+const footSwatches = computed(() => [
+  { footKey: "footL" as FootKey, letter: t("sequence.footLetterL") },
+  { footKey: "footR" as FootKey, letter: t("sequence.footLetterR") },
+]);
+
+function traceColorAria(option: Sequence, footKey: FootKey): string {
+  const name = sequenceInfos.value.get(option)?.name ?? t("sequence.fallbackName");
+  const foot = t(footKey === "footL" ? "sequence.footL" : "sequence.footR");
+  return t("sequence.traceColorAria", { name, foot });
+}
 
 const selectedSequence = computed({
   get: () => activeSequence.value,
@@ -85,11 +93,11 @@ const sequenceActionOpen = ref(false);
 const sequenceActionHeader = computed(() => {
   switch (sequenceActionKind.value) {
     case "duplicate":
-      return "Duplicate sequence";
+      return t("sequence.dialogDuplicate");
     case "mirror-horizontal":
-      return "Mirror sequence horizontally";
+      return t("sequence.dialogMirrorH");
     case "mirror-vertical":
-      return "Mirror sequence vertically";
+      return t("sequence.dialogMirrorV");
     default:
       return "";
   }
@@ -121,10 +129,10 @@ function confirmDelete(sequence: Sequence, event: Event) {
   confirm.require({
     group: "diagram-sidebar-delete",
     target: event.currentTarget as HTMLElement,
-    message: `Delete "${sequence.name}"?`,
+    message: t("sequence.deleteConfirm", { name: sequence.name }),
     icon: "pi pi-exclamation-triangle",
-    rejectLabel: "Cancel",
-    acceptLabel: "Delete",
+    rejectLabel: t("sequence.cancel"),
+    acceptLabel: t("sequence.deleteLabel"),
     rejectProps: { severity: "secondary", text: true },
     acceptProps: { severity: "danger" },
     accept: () => store.removeSequence(sequence),
@@ -139,12 +147,12 @@ function confirmDelete(sequence: Sequence, event: Event) {
 
 <template>
   <div class="diagram-sidebar__sequences">
-    <label class="diagram-sidebar__mode-label">Sequences</label>
+    <label class="diagram-sidebar__mode-label">{{ $t("sequence.label") }}</label>
     <Listbox v-model="selectedSequence" :options="sequences" option-label="name" class="diagram-sidebar__sequence-list">
       <template #option="{ option }">
         <ToggleSwitch
           :model-value="store.isVisible(option)"
-          :aria-label="store.isVisible(option) ? 'Hide sequence' : 'Show sequence'"
+          :aria-label="store.isVisible(option) ? $t('sequence.hideAria') : $t('sequence.showAria')"
           @update:model-value="store.toggleVisible(option)"
           @click.stop
         />
@@ -159,7 +167,7 @@ function confirmDelete(sequence: Sequence, event: Event) {
             <ColorPicker
               v-if="isEditor"
               class="diagram-sidebar__swatch"
-              :aria-label="`${sequenceInfos.get(option)?.name ?? 'Sequence'} foot trace color ${swatch.letter}`"
+              :aria-label="traceColorAria(option, swatch.footKey)"
               :model-value="sequenceInfos.get(option)?.[swatch.footKey]"
               @update:model-value="(value) => setTraceColor(option, swatch.footKey, `#${value}`)"
             />
@@ -190,7 +198,7 @@ function confirmDelete(sequence: Sequence, event: Event) {
         <Button
           v-if="isEditor"
           icon="pi pi-trash"
-          aria-label="Delete sequence"
+          :aria-label="$t('sequence.deleteAria')"
           severity="danger"
           text
           rounded
@@ -200,36 +208,36 @@ function confirmDelete(sequence: Sequence, event: Event) {
       </template>
     </Listbox>
     <div v-if="isEditor" class="diagram-sidebar__sequence-tools">
-      <Button label="Add sequence" icon="pi pi-plus" severity="secondary" text @click="store.addSequence()" />
+      <Button :label="$t('sequence.add')" icon="pi pi-plus" severity="secondary" text @click="store.addSequence()" />
       <div class="diagram-sidebar__sequence-actions">
         <Button
           icon="pi pi-clone"
-          aria-label="Duplicate a sequence"
+          :aria-label="$t('sequence.duplicateAria')"
           severity="secondary"
           text
           rounded
           size="small"
-          v-tooltip.bottom="'duplicate'"
+          v-tooltip.bottom="t('sequence.tooltipDuplicate')"
           @click="openSequenceAction('duplicate')"
         />
         <Button
           icon="pi pi-arrows-h"
-          aria-label="Mirror a sequence horizontally"
+          :aria-label="$t('sequence.mirrorHAria')"
           severity="secondary"
           text
           rounded
           size="small"
-          v-tooltip.bottom="'mirror horizontally'"
+          v-tooltip.bottom="t('sequence.tooltipMirrorH')"
           @click="openSequenceAction('mirror-horizontal')"
         />
         <Button
           icon="pi pi-arrows-v"
-          aria-label="Mirror a sequence vertically"
+          :aria-label="$t('sequence.mirrorVAria')"
           severity="secondary"
           text
           rounded
           size="small"
-          v-tooltip.bottom="'mirror vertically'"
+          v-tooltip.bottom="t('sequence.tooltipMirrorV')"
           @click="openSequenceAction('mirror-vertical')"
         />
       </div>
@@ -267,7 +275,7 @@ function confirmDelete(sequence: Sequence, event: Event) {
         </template>
       </Listbox>
       <template #footer>
-        <Button label="Cancel" severity="secondary" icon="pi pi-times" @click="closeSequenceAction" />
+        <Button :label="$t('sequence.cancel')" severity="secondary" icon="pi pi-times" @click="closeSequenceAction" />
       </template>
     </Dialog>
   </div>

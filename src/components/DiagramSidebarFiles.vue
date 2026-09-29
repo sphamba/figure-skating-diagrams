@@ -5,6 +5,7 @@ import Tag from "openvue/tag";
 import ConfirmDialog from "openvue/confirmdialog";
 import { useConfirm } from "openvue/useconfirm";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import DiagramTree, { type DiagramTreeSource } from "@/components/DiagramTree.vue";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import type { PatternJSON } from "@/engine/pattern";
@@ -21,6 +22,7 @@ const isEditor = computed(() => props.mode === "editor");
 const router = useRouter();
 const store = useSequenceEditorStore();
 const confirm = useConfirm();
+const { t } = useI18n();
 
 const isUnsaved = computed(() => store.isUnsaved());
 const loadFailed = ref(false);
@@ -38,7 +40,7 @@ function loadIntoStore(json: PatternJSON | DiagramJSON | SequenceJSON) {
   if (isPattern(json)) {
     store.loadFromJSON(json);
   } else if (isSequenceJSON(json)) {
-    store.loadFromJSON({ name: "Diagram", sequences: [json] });
+    store.loadFromJSON({ name: t("files.defaultDiagramName"), sequences: [json] });
   } else {
     store.loadFromJSON(json);
   }
@@ -64,11 +66,11 @@ function openFileWithGuard() {
   }
   confirm.require({
     group: "diagram-sidebar-open-file",
-    header: "Unsaved changes",
-    message: "The current diagram has unsaved changes. Open the new file and lose them?",
+    header: t("files.confirm.unsavedHeader"),
+    message: t("files.confirm.openFileMessage"),
     icon: "pi pi-exclamation-triangle",
-    rejectLabel: "Cancel",
-    acceptLabel: "Open",
+    rejectLabel: t("files.confirm.cancel"),
+    acceptLabel: t("files.confirm.open"),
     acceptProps: { severity: "warning" },
     rejectProps: { severity: "secondary", text: true },
     accept: () => openFile(),
@@ -117,11 +119,11 @@ function openDiagramSource(source: DiagramTreeSource) {
   }
   confirm.require({
     group: "diagram-sidebar-open-tree",
-    header: "Unsaved changes",
-    message: "The current diagram has unsaved changes. Open the new diagram and lose them?",
+    header: t("files.confirm.unsavedHeader"),
+    message: t("files.confirm.openTreeMessage"),
     icon: "pi pi-exclamation-triangle",
-    rejectLabel: "Cancel",
-    acceptLabel: "Open",
+    rejectLabel: t("files.confirm.cancel"),
+    acceptLabel: t("files.confirm.open"),
     acceptProps: { severity: "warning" },
     rejectProps: { severity: "secondary", text: true },
     accept: () => {
@@ -143,17 +145,15 @@ function downloadFile() {
 }
 
 function confirmNew() {
-  const unsaved = !store.isUnsaved() ? "New diagram" : "Unsaved changes";
-  const message = store.isUnsaved()
-    ? "The current diagram has unsaved changes. Create a new diagram and lose them?"
-    : "Create a new diagram? The current diagram will be lost.";
+  const unsaved = !store.isUnsaved() ? t("files.confirm.newDiagramHeader") : t("files.confirm.unsavedHeader");
+  const message = store.isUnsaved() ? t("files.confirm.newMessageUnsaved") : t("files.confirm.newMessageEmpty");
   confirm.require({
     group: "diagram-sidebar-new",
     header: unsaved,
     message,
     icon: "pi pi-exclamation-triangle",
-    rejectLabel: "Cancel",
-    acceptLabel: "Create",
+    rejectLabel: t("files.confirm.cancel"),
+    acceptLabel: t("files.confirm.create"),
     acceptProps: { severity: "warning" },
     rejectProps: { severity: "secondary", text: true },
     accept: () => {
@@ -174,11 +174,11 @@ function leaveEditor() {
   }
   confirm.require({
     group: "diagram-sidebar-leave",
-    header: "Unsaved changes",
-    message: "The current diagram has unsaved changes. Leave the editor and lose them?",
+    header: t("files.confirm.unsavedHeader"),
+    message: t("files.confirm.leaveMessage"),
     icon: "pi pi-exclamation-triangle",
-    rejectLabel: "Cancel",
-    acceptLabel: "Leave",
+    rejectLabel: t("files.confirm.cancel"),
+    acceptLabel: t("files.confirm.leave"),
     acceptProps: { severity: "warning" },
     rejectProps: { severity: "secondary", text: true },
     accept: () => navigate("/"),
@@ -190,21 +190,33 @@ function leaveEditor() {
   <div class="diagram-sidebar__files">
     <Tag
       v-if="isEditor"
-      :value="isUnsaved ? 'Unsaved changes' : 'Saved'"
+      :value="isUnsaved ? t('files.unsaved') : t('files.saved')"
       :severity="isUnsaved ? 'warn' : 'success'"
       class="diagram-sidebar__unsaved-tag"
     />
     <DiagramTree class="w-full" @select="openDiagramSource" />
     <small v-if="loadFailed" class="diagram-sidebar__load-error">
-      The diagram could not be opened. Check that the json file is valid.
+      {{ $t("files.loadError") }}
     </small>
-    <Button label="Load JSON" icon="pi pi-folder-open" class="w-full" severity="secondary" @click="openFileWithGuard" />
+    <Button
+      :label="$t('files.loadJson')"
+      icon="pi pi-folder-open"
+      class="w-full"
+      severity="secondary"
+      @click="openFileWithGuard"
+    />
     <template v-if="isEditor">
-      <Button label="Download JSON" icon="pi pi-download" class="w-full" severity="secondary" @click="downloadFile" />
-      <Button label="New" icon="pi pi-plus" class="w-full" severity="secondary" @click="confirmNew" />
-      <Button label="Leave editor" icon="pi pi-arrow-left" class="w-full" @click="leaveEditor" />
+      <Button
+        :label="$t('files.downloadJson')"
+        icon="pi pi-download"
+        class="w-full"
+        severity="secondary"
+        @click="downloadFile"
+      />
+      <Button :label="$t('files.new')" icon="pi pi-plus" class="w-full" severity="secondary" @click="confirmNew" />
+      <Button :label="$t('files.leaveEditor')" icon="pi pi-arrow-left" class="w-full" @click="leaveEditor" />
     </template>
-    <Button v-else label="Open in editor" icon="pi pi-pencil" class="w-full" @click="openEditor" />
+    <Button v-else :label="$t('files.openInEditor')" icon="pi pi-pencil" class="w-full" @click="openEditor" />
     <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFileSelected" />
     <ConfirmDialog group="diagram-sidebar-open-file" />
     <ConfirmDialog group="diagram-sidebar-open-tree" />
