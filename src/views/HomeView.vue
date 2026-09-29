@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Button from "openvue/button";
-import SelectButton from "openvue/selectbutton";
+import Select from "openvue/select";
 import Splitter from "openvue/splitter";
 import SplitterPanel from "openvue/splitterpanel";
 import TimeSyncPane from "@/components/TimeSyncPane.vue";
@@ -530,15 +530,15 @@ onBeforeUnmount(() => {
             rounded
             @click="togglePlayback"
           />
-          <SelectButton
+          <Select
             v-model="playbackSpeed"
             :options="playbackSpeedOptions"
             option-label="label"
             option-value="value"
             :allow-empty="false"
             size="small"
-            rounded
             aria-label="Playback speed"
+            class="home-view__speed"
           />
         </div>
       </div>
@@ -583,6 +583,23 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 0.75rem;
   margin: 0 auto;
+}
+
+/* The speed select reads as a fixed-width chip: no arrow, centered label. */
+.home-view__speed {
+  width: 3.25rem;
+  height: 2rem;
+  align-items: center;
+  border-radius: 9999px;
+
+  :deep(.p-select-label) {
+    padding: 0 0.25rem;
+    text-align: center;
+  }
+
+  :deep(.p-select-dropdown) {
+    display: none;
+  }
 }
 
 .home-view__splitter {
