@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import Button from "openvue/button";
-import Checkbox from "openvue/checkbox";
 import InputNumber from "openvue/inputnumber";
 import InputText from "openvue/inputtext";
 import Slider from "openvue/slider";
+import ToggleSwitch from "openvue/toggleswitch";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 
 const props = defineProps<{ mode: "home" | "editor"; videoError: boolean }>();
@@ -140,8 +140,8 @@ const diagramSymmetric = computed({
         />
       </template>
       <input ref="backgroundImageInput" type="file" accept="image/*" hidden @change="onBackgroundSelected" />
-      <div class="diagram-sidebar__symmetric-checkbox">
-        <Checkbox v-model="diagramSymmetric" binary input-id="diagram-symmetric" />
+      <div class="diagram-sidebar__toggle">
+        <ToggleSwitch v-model="diagramSymmetric" input-id="diagram-symmetric" />
         <label for="diagram-symmetric">Symmetric</label>
       </div>
     </template>
@@ -178,7 +178,7 @@ const diagramSymmetric = computed({
   border: 1px solid var(--p-content-border-color);
 }
 
-.diagram-sidebar__symmetric-checkbox {
+.diagram-sidebar__toggle {
   display: flex;
   align-items: center;
   gap: 0.5rem;

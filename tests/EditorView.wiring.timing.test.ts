@@ -193,7 +193,7 @@ const timedDiagramJSON = {
   ],
 };
 
-test("the timing dialog commits the transition checkboxes onto the keyframe", async () => {
+test("the timing dialog commits the transition toggles onto the keyframe", async () => {
   const wrapper = await mountEditorView();
   await nextTick();
   const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
@@ -213,9 +213,9 @@ test("the timing dialog commits the transition checkboxes onto the keyframe", as
 
   const decelerate = document.getElementById("timing-decelerate-to") as HTMLInputElement;
   const accelerate = document.getElementById("timing-accelerate-from") as HTMLInputElement;
-  expect(decelerate, "the decelerate checkbox should mount in the dialog").not.toBeNull();
-  expect(accelerate, "the accelerate checkbox should mount in the dialog").not.toBeNull();
-  expect(decelerate.checked, "both checkboxes should stay unchecked for a linear keyframe").toBe(false);
+  expect(decelerate, "the decelerate toggle should mount in the dialog").not.toBeNull();
+  expect(accelerate, "the accelerate toggle should mount in the dialog").not.toBeNull();
+  expect(decelerate.checked, "both toggles should stay unchecked for a linear keyframe").toBe(false);
   expect(accelerate.checked).toBe(false);
 
   decelerate.click();
@@ -235,7 +235,7 @@ test("the timing dialog commits the transition checkboxes onto the keyframe", as
   await nextTick();
   const decelerateAgain = document.getElementById("timing-decelerate-to") as HTMLInputElement;
   const accelerateAgain = document.getElementById("timing-accelerate-from") as HTMLInputElement;
-  expect(decelerateAgain.checked, "the checkboxes should prefill from the keyframe").toBe(true);
+  expect(decelerateAgain.checked, "the toggles should prefill from the keyframe").toBe(true);
   expect(accelerateAgain.checked).toBe(false);
   wrapper.unmount();
   vi.unstubAllGlobals();

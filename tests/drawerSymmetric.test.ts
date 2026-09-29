@@ -60,37 +60,37 @@ beforeEach(() => {
   localStorage.clear();
 });
 
-test("editor mode shows the Symmetric checkbox, home mode hides it", async () => {
+test("editor mode shows the Symmetric toggle, home mode hides it", async () => {
   const wrapper = await mountDiagramPanel();
 
-  const checkbox = wrapper.find('input#diagram-symmetric[type="checkbox"]');
-  expect(checkbox.exists()).toBe(true);
-  expect(wrapper.find(".diagram-sidebar__symmetric-checkbox").exists()).toBe(true);
+  const toggle = wrapper.find('input#diagram-symmetric[role="switch"]');
+  expect(toggle.exists()).toBe(true);
+  expect(wrapper.find(".diagram-sidebar__toggle").exists()).toBe(true);
   expect(wrapper.text()).toContain("Symmetric");
   wrapper.unmount();
 
   const home = await mountDiagramPanel("home");
-  expect(home.find(".diagram-sidebar__symmetric-checkbox").exists()).toBe(false);
+  expect(home.find(".diagram-sidebar__toggle").exists()).toBe(false);
   home.unmount();
 });
 
-test("toggling the checkbox writes the flag to the store and the storage", async () => {
+test("toggling the Symmetric toggle writes the flag to the store and the storage", async () => {
   const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
   const wrapper = await mountDiagramPanel();
   const store = useSequenceEditorStore();
   expect(store.getDiagram().symmetric).toBeUndefined();
 
-  const checkbox = wrapper.findComponent({ name: "Checkbox" });
-  expect(checkbox.exists()).toBe(true);
-  checkbox.vm.$emit("update:modelValue", true);
+  const toggle = wrapper.findComponent({ name: "ToggleSwitch" });
+  expect(toggle.exists()).toBe(true);
+  toggle.vm.$emit("update:modelValue", true);
   await wrapper.vm.$nextTick();
 
   expect(store.getDiagram().symmetric).toBe(true);
   const stored = JSON.parse(localStorage.getItem("sequence-editor") as string) as { symmetric?: boolean };
   expect(stored.symmetric).toBe(true);
-  expect(checkbox.props("modelValue")).toBe(true);
+  expect(toggle.props("modelValue")).toBe(true);
 
-  checkbox.vm.$emit("update:modelValue", false);
+  toggle.vm.$emit("update:modelValue", false);
   await wrapper.vm.$nextTick();
   expect(store.getDiagram().symmetric).toBe(false);
   wrapper.unmount();

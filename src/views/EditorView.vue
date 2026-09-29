@@ -15,7 +15,7 @@ import InputGroup from "openvue/inputgroup";
 import InputGroupAddon from "openvue/inputgroupaddon";
 import Listbox from "openvue/listbox";
 import ColorPicker from "openvue/colorpicker";
-import Checkbox from "openvue/checkbox";
+import ToggleSwitch from "openvue/toggleswitch";
 import Splitter from "openvue/splitter";
 import SplitterPanel from "openvue/splitterpanel";
 import TimeSyncPane from "@/components/TimeSyncPane.vue";
@@ -2137,11 +2137,11 @@ function closeElementChange() {
         </small>
         <div class="editor-view__timing-transitions">
           <div class="editor-view__timing-transition">
-            <Checkbox v-model="timingDecelerateTo" binary input-id="timing-decelerate-to" />
+            <ToggleSwitch v-model="timingDecelerateTo" input-id="timing-decelerate-to" />
             <label for="timing-decelerate-to">Decelerate to</label>
           </div>
           <div class="editor-view__timing-transition">
-            <Checkbox v-model="timingAccelerateFrom" binary input-id="timing-accelerate-from" />
+            <ToggleSwitch v-model="timingAccelerateFrom" input-id="timing-accelerate-from" />
             <label for="timing-accelerate-from">Accelerate from</label>
           </div>
         </div>
