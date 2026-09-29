@@ -12,6 +12,7 @@ import { definePreset } from "@openuxkit/themes";
 
 import App from "./App.vue";
 import router from "./router";
+import { useAppearanceStore } from "./stores/appearance";
 
 const appPreset = definePreset(Aura, {
   semantic: {
@@ -34,6 +35,7 @@ const appPreset = definePreset(Aura, {
 const app = createApp(App);
 
 app.use(createPinia());
+useAppearanceStore();
 app.use(router);
 app.use(ConfirmationService);
 app.directive("ripple", Ripple);
@@ -43,7 +45,7 @@ app.use(OpenVue, {
     preset: appPreset,
     options: {
       prefix: "p",
-      darkModeSelector: "system",
+      darkModeSelector: ".app-dark",
       cssLayer: false,
     },
   },

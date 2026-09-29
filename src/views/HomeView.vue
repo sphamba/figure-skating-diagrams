@@ -11,6 +11,7 @@ import { Editor } from "@/engine/sequenceEditor/editor";
 import { earliestTimeKeyframeSeconds, fullTimeExtentSeconds } from "@/engine/diagram";
 import type { Sequence } from "@/engine/sequence";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
+import { useAppearanceStore } from "@/stores/appearance";
 import { useMediaQuery } from "@/composables/useMediaQuery";
 import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
 import { usePlaybackKeyToggle } from "@/composables/usePlaybackKeyToggle";
@@ -27,6 +28,7 @@ const isMobile = useMediaQuery("(max-width: 767.98px)");
 const drawerOpen = ref(false);
 
 const store = useSequenceEditorStore();
+const appearance = useAppearanceStore();
 
 const sequences = computed(() => store.getSequences());
 const activeSequence = computed(() => store.getActiveSequence());
@@ -445,6 +447,7 @@ onBeforeUnmount(() => {
       v-model:open="drawerOpen"
       v-model:scale-elements="scaleElements"
       v-model:show-labels="showLabels"
+      v-model:dark-mode="appearance.darkMode"
       mode="home"
       :mobile="isMobile"
       :help-items="helpItems"
@@ -621,7 +624,7 @@ onBeforeUnmount(() => {
   position: relative;
   display: flex;
   overflow: hidden;
-  background: white;
+  background: var(--p-content-background);
 }
 
 .home-view__canvas-area {

@@ -166,7 +166,7 @@ test("the view passes the full list and the hidden set tracks visibility toggles
   const latestList = recorder.sequences as unknown[];
   expect(latestList).toHaveLength(2);
 
-  const switches = wrapper.findAll(".p-toggleswitch");
+  const switches = wrapper.findAll(".diagram-sidebar__sequence-list .p-toggleswitch");
   expect(switches.length).toBe(2);
   const switchInput = switches[0]!.find(".p-toggleswitch-input");
   (switchInput.element as HTMLInputElement).checked = false;

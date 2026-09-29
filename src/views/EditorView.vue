@@ -47,6 +47,7 @@ import { TwoFeetTurn } from "@/engine/element/twoFeetTurn";
 import type { Element } from "@/engine/element/element";
 import { earliestTimeKeyframeSeconds, fullTimeExtentSeconds } from "@/engine/diagram";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
+import { useAppearanceStore } from "@/stores/appearance";
 import { storeToRefs } from "pinia";
 import UndoRedoButtons from "@/components/UndoRedoButtons.vue";
 import { useUndoRedoKeys } from "@/composables/useUndoRedoKeys";
@@ -667,6 +668,7 @@ watch(elementsPane, (pane) => {
 onBeforeUnmount(() => paneObserver?.disconnect());
 
 const store = useSequenceEditorStore();
+const appearance = useAppearanceStore();
 const { canUndo, canRedo } = storeToRefs(store);
 
 const sequences = computed(() => store.getSequences());
@@ -1680,6 +1682,7 @@ function closeElementChange() {
       v-model:open="drawerOpen"
       v-model:scale-elements="scaleElements"
       v-model:show-labels="showLabels"
+      v-model:dark-mode="appearance.darkMode"
       mode="editor"
       :mobile="isMobile"
       :help-items="helpItems"
@@ -2266,7 +2269,7 @@ function closeElementChange() {
   position: relative;
   display: flex;
   overflow: hidden;
-  background: white;
+  background: var(--p-content-background);
 }
 
 .editor-view__canvas-area {
