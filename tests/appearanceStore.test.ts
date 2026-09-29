@@ -27,6 +27,7 @@ beforeEach(() => {
   systemDark = false;
   vi.stubGlobal("matchMedia", matchMedia as unknown as MockInstance);
   vi.resetModules();
+  localStorage.clear();
   setActivePinia(createPinia());
   document.documentElement.className = "";
 });
@@ -72,4 +73,24 @@ test("the store falls back to light without matchMedia", async () => {
 
   expect(store.darkMode).toBe(false);
   expect(document.documentElement.classList.contains("app-dark")).toBe(false);
+});
+
+test("the store restores the persisted settings after a reload", async () => {
+  const { useAppearanceStore } = await import("@/stores/appearance");
+  const store = useAppearanceStore();
+  store.darkMode = true;
+  store.showLabels = false;
+  store.scaleElements = false;
+  expect(store.darkMode).toBe(true);
+  expect(document.documentElement.classList.contains("app-dark")).toBe(true);
+
+  vi.resetModules();
+  setActivePinia(createPinia());
+  const { useAppearanceStore: reloaded } = await import("@/stores/appearance");
+  const next = reloaded();
+  expect(next.darkMode).toBe(true);
+  expect(next.showLabels).toBe(false);
+  expect(next.scaleElements).toBe(false);
+  expect(document.documentElement.classList.contains("app-dark")).toBe(true);
+  vi.unstubAllGlobals();
 });

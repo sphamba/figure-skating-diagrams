@@ -72,8 +72,6 @@ const editModeOptions = [
   { label: "Annotations", value: "annotations", icon: "pi pi-tag", key: "A" },
 ];
 const editMode = ref<EditMode>("view");
-const scaleElements = ref(true);
-const showLabels = ref(true);
 
 const isMobile = useMediaQuery("(max-width: 767.98px)");
 const drawerOpen = ref(false);
@@ -1202,7 +1200,7 @@ useUndoRedoKeys(
 // A finger tap emulates a mouse enter, so the tab tooltips must stay off while the touch is recent.
 useTooltipTouchGuard();
 watch(
-  scaleElements,
+  () => appearance.scaleElements,
   (value) => {
     if (editor) {
       editor.scaleElements = value;
@@ -1213,7 +1211,7 @@ watch(
 );
 
 watch(
-  showLabels,
+  () => appearance.showLabels,
   (value) => {
     if (editor) {
       editor.showLabels = value;
@@ -1234,8 +1232,8 @@ onMounted(() => {
   isTracking.value = editorInstance.tracking;
   trackingStage.value = editorInstance.trackingStage === "cursor" ? "cursor" : "barycenter";
   editorInstance.setHiddenSequences(hiddenSequenceSet.value);
-  editorInstance.scaleElements = scaleElements.value;
-  editorInstance.showLabels = showLabels.value;
+  editorInstance.scaleElements = appearance.scaleElements;
+  editorInstance.showLabels = appearance.showLabels;
 
   editorInstance.onVideoTimeChange = (seconds) => setTimestamp(seconds);
   editorInstance.onTimeScrubStart = () => {
@@ -1702,8 +1700,8 @@ function closeElementChange() {
   <div class="editor-view">
     <DiagramSidebar
       v-model:open="drawerOpen"
-      v-model:scale-elements="scaleElements"
-      v-model:show-labels="showLabels"
+      v-model:scale-elements="appearance.scaleElements"
+      v-model:show-labels="appearance.showLabels"
       v-model:dark-mode="appearance.darkMode"
       mode="editor"
       :mobile="isMobile"

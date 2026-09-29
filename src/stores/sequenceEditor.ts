@@ -11,6 +11,7 @@ import { Vector } from "@/engine/vector";
 import type { PathCoordinate } from "@/engine/coordinates";
 
 const STORAGE_KEY = "sequence-editor";
+const SHORT_DRAW_RANGE_KEY = "sequence-editor-short-draw-range";
 const DEFAULT_SEQUENCE_NAME = "Sequence";
 // World axes: the canvas negates y, so world +x draws right and world -y draws
 // down. A duplicate lands 5 m to the bottom right of its original.
@@ -48,11 +49,28 @@ function loadStoredDiagram(): Diagram {
   }
 }
 
+function loadStoredShortDrawRange(): boolean {
+  try {
+    return localStorage.getItem(SHORT_DRAW_RANGE_KEY) === "true";
+  } catch (error) {
+    console.error("Could not read the stored short draw range:", error);
+    return false;
+  }
+}
+
+function storeShortDrawRange(value: boolean) {
+  try {
+    localStorage.setItem(SHORT_DRAW_RANGE_KEY, String(value));
+  } catch (error) {
+    console.error("Could not store the short draw range:", error);
+  }
+}
+
 const HISTORY_KEY = "sequence-editor-history";
 
 export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
   const diagram = shallowRef<Diagram>(loadStoredDiagram());
-  const shortDrawRange = ref(false);
+  const shortDrawRange = ref(loadStoredShortDrawRange());
   const activeSequence = shallowRef<Sequence | null>(diagram.value.sequences[0] ?? null);
   const hiddenSequences = shallowRef<Set<Sequence>>(new Set());
   const jsonBaseline = ref<string>(JSON.stringify(diagram.value.toJSON(), null, 2));
@@ -81,6 +99,7 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
 
   function setShortDrawRange(value: boolean) {
     shortDrawRange.value = value;
+    storeShortDrawRange(value);
   }
 
   function getActiveSequence(): Sequence | null {

@@ -22,9 +22,6 @@ import { useTimeCursorKeys } from "@/composables/useTimeCursorKeys";
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 
-const scaleElements = ref(true);
-const showLabels = ref(true);
-
 const isMobile = useMediaQuery("(max-width: 767.98px)");
 const drawerOpen = ref(false);
 
@@ -238,7 +235,7 @@ watch(
 );
 
 watch(
-  scaleElements,
+  () => appearance.scaleElements,
   (value) => {
     if (editor) {
       editor.scaleElements = value;
@@ -249,7 +246,7 @@ watch(
 );
 
 watch(
-  showLabels,
+  () => appearance.showLabels,
   (value) => {
     if (editor) {
       editor.showLabels = value;
@@ -380,8 +377,8 @@ function createEditor() {
   isTracking.value = editorInstance.tracking;
   trackingStage.value = editorInstance.trackingStage === "cursor" ? "cursor" : "barycenter";
   editorInstance.mode = "view";
-  editorInstance.scaleElements = scaleElements.value;
-  editorInstance.showLabels = showLabels.value;
+  editorInstance.scaleElements = appearance.scaleElements;
+  editorInstance.showLabels = appearance.showLabels;
   editorInstance.shortDrawRange = store.getShortDrawRange();
   editorInstance.loopDrawWindow = () => loopDrawWindow.value;
   editorInstance.setHiddenSequences(hiddenSequenceSet.value);
@@ -467,8 +464,8 @@ onBeforeUnmount(() => {
   <div class="home-view">
     <DiagramSidebar
       v-model:open="drawerOpen"
-      v-model:scale-elements="scaleElements"
-      v-model:show-labels="showLabels"
+      v-model:scale-elements="appearance.scaleElements"
+      v-model:show-labels="appearance.showLabels"
       v-model:dark-mode="appearance.darkMode"
       mode="home"
       :mobile="isMobile"
