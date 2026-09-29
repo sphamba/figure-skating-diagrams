@@ -12,6 +12,8 @@ import type { PathCoordinate } from "@/engine/coordinates";
 
 const STORAGE_KEY = "sequence-editor";
 const SHORT_DRAW_RANGE_KEY = "sequence-editor-short-draw-range";
+const FILENAME_KEY = "sequence-editor-filename";
+const DEFAULT_FILENAME = "diagram.json";
 const DEFAULT_SEQUENCE_NAME = "Sequence";
 // World axes: the canvas negates y, so world +x draws right and world -y draws
 // down. A duplicate lands 5 m to the bottom right of its original.
@@ -66,11 +68,36 @@ function storeShortDrawRange(value: boolean) {
   }
 }
 
+// The filename is hidden state: it only pre-fills the download name.
+function sanitizeFilename(name: string): string {
+  const base = name.split(/[\\/]/).pop()?.trim() ?? "";
+  return base !== "" ? base : DEFAULT_FILENAME;
+}
+
+function loadStoredFilename(): string {
+  try {
+    const raw = localStorage.getItem(FILENAME_KEY);
+    return raw ? sanitizeFilename(raw) : DEFAULT_FILENAME;
+  } catch (error) {
+    console.error("Could not read the stored filename:", error);
+    return DEFAULT_FILENAME;
+  }
+}
+
+function storeFilename(value: string) {
+  try {
+    localStorage.setItem(FILENAME_KEY, value);
+  } catch (error) {
+    console.error("Could not store the filename:", error);
+  }
+}
+
 const HISTORY_KEY = "sequence-editor-history";
 
 export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
   const diagram = shallowRef<Diagram>(loadStoredDiagram());
   const shortDrawRange = ref(loadStoredShortDrawRange());
+  const saveFilename = ref(loadStoredFilename());
   const activeSequence = shallowRef<Sequence | null>(diagram.value.sequences[0] ?? null);
   const hiddenSequences = shallowRef<Set<Sequence>>(new Set());
   const jsonBaseline = ref<string>(JSON.stringify(diagram.value.toJSON(), null, 2));
@@ -100,6 +127,15 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
   function setShortDrawRange(value: boolean) {
     shortDrawRange.value = value;
     storeShortDrawRange(value);
+  }
+
+  function getSaveFilename(): string {
+    return saveFilename.value;
+  }
+
+  function setSaveFilename(name: string) {
+    saveFilename.value = sanitizeFilename(name);
+    storeFilename(saveFilename.value);
   }
 
   function getActiveSequence(): Sequence | null {
@@ -354,6 +390,8 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     history.reset(JSON.stringify(diagram.value.toJSON()));
     syncHistoryState();
     markSaved();
+    saveFilename.value = DEFAULT_FILENAME;
+    storeFilename(saveFilename.value);
   }
 
   return {
@@ -361,6 +399,8 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     getDiagram,
     getShortDrawRange,
     setShortDrawRange,
+    getSaveFilename,
+    setSaveFilename,
     getActiveSequence,
     getSequences,
     isVisible,

@@ -83,6 +83,7 @@ async function onFileSelected(event: Event) {
   try {
     const json = JSON.parse(await file.text()) as PatternJSON | DiagramJSON | SequenceJSON;
     emit("load-start");
+    store.setSaveFilename(file.name);
     loadIntoStore(json);
     emit("close");
   } catch (error) {
@@ -100,6 +101,7 @@ async function loadDiagramSource({ path }: DiagramTreeSource) {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const json = JSON.parse(await response.text()) as PatternJSON | DiagramJSON | SequenceJSON;
     emit("load-start");
+    store.setSaveFilename(path.split("/").pop() ?? "");
     loadIntoStore(json);
     emit("close");
   } catch (error) {
@@ -133,7 +135,7 @@ function downloadFile() {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = "diagram.json";
+  anchor.download = store.getSaveFilename();
   anchor.click();
   URL.revokeObjectURL(url);
   store.markSaved();
