@@ -12,6 +12,7 @@ import TabList from "openvue/tablist";
 import TabPanel from "openvue/tabpanel";
 import TabPanels from "openvue/tabpanels";
 import { useI18n } from "vue-i18n";
+import DiagramSidebarAbout from "@/components/DiagramSidebarAbout.vue";
 import DiagramSidebarDiagram from "@/components/DiagramSidebarDiagram.vue";
 import DiagramSidebarFiles from "@/components/DiagramSidebarFiles.vue";
 import DiagramSidebarHelp from "@/components/DiagramSidebarHelp.vue";
@@ -43,7 +44,24 @@ const sections = computed(() => [
   { value: "sequences", label: t("sidebar.sections.sequences") },
   { value: "options", label: t("sidebar.sections.options") },
   { value: "help", label: t("sidebar.sections.help") },
+  { value: "about", label: t("sidebar.sections.about") },
 ]);
+
+const copyrightYear = new Date().getFullYear();
+
+// The theme hides the next arrow only on an exact integer scroll match, which
+// never fires when the browser keeps fractional scroll offsets. Hide the arrow
+// from the real scroll position instead. Scroll events do not bubble, so the
+// listener rides the capture phase from the Tabs root.
+function onTabsScroll(event: Event) {
+  const viewport = event.target as HTMLElement | null;
+  if (!viewport?.classList.contains("p-tablist-content")) return;
+  const nextArrow = viewport.parentElement?.querySelector<HTMLElement>(".p-tablist-next-button");
+  if (!nextArrow) return;
+  const maxScrollLeft = viewport.scrollWidth - viewport.clientWidth;
+  const atEnd = Math.abs(viewport.scrollLeft) >= maxScrollLeft - 1;
+  nextArrow.style.visibility = atEnd ? "hidden" : "";
+}
 </script>
 
 <template>
@@ -76,11 +94,18 @@ const sections = computed(() => [
       <div class="diagram-sidebar__section-head">{{ $t("sidebar.sections.help") }}</div>
       <DiagramSidebarHelp :help-items="props.helpItems" />
     </div>
+
+    <div class="diagram-sidebar__section">
+      <div class="diagram-sidebar__section-head">{{ $t("sidebar.sections.about") }}</div>
+      <DiagramSidebarAbout />
+    </div>
+
+    <div class="diagram-sidebar__copyright">{{ $t("sidebar.copyright", { year: copyrightYear }) }}</div>
   </aside>
 
   <!-- The drawer teleports to body, so the height class needs a global style. -->
   <Drawer v-else v-model:visible="open" position="bottom" modal class="diagram-sidebar__drawer">
-    <Tabs v-model:value="activeTab" scrollable class="diagram-sidebar__tabs">
+    <Tabs v-model:value="activeTab" scrollable class="diagram-sidebar__tabs" @scroll.capture="onTabsScroll">
       <TabList>
         <Tab v-for="section in sections" :key="section.value" :value="section.value">{{ section.label }}</Tab>
       </TabList>
@@ -104,8 +129,13 @@ const sections = computed(() => [
         <TabPanel value="help">
           <DiagramSidebarHelp :help-items="props.helpItems" />
         </TabPanel>
+        <TabPanel value="about">
+          <DiagramSidebarAbout />
+        </TabPanel>
       </TabPanels>
     </Tabs>
+
+    <div class="diagram-sidebar__copyright">{{ $t("sidebar.copyright", { year: copyrightYear }) }}</div>
   </Drawer>
 </template>
 
@@ -170,13 +200,26 @@ const sections = computed(() => [
   color: var(--p-form-field-invalid-hover-border-color);
 }
 
+.diagram-sidebar__copyright {
+  /* The auto margin pins the line to the sidebar bottom when it is short. */
+  margin-top: auto;
+  color: var(--p-text-muted-color);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
 /* The aura theme fixes bottom drawers at 10rem and the content at height 100%.
-   The theme styles are runtime injected, so these overrides use !important
-   and match the drawer root with or without the position ancestor. */
+   It also keeps border-style solid on all sides and sets only the top width,
+   so the other sides fall back to the default medium width. The theme styles
+   are runtime injected, so these overrides use !important and match the drawer
+   root with or without the position ancestor. */
 .p-drawer.diagram-sidebar__drawer,
 .p-drawer-bottom .p-drawer.diagram-sidebar__drawer {
   height: auto !important;
   max-height: 85vh !important;
+  border-inline-start-width: 0 !important;
+  border-inline-end-width: 0 !important;
+  border-block-end-width: 0 !important;
 }
 
 .p-drawer.diagram-sidebar__drawer .p-drawer-header,
@@ -198,5 +241,12 @@ const sections = computed(() => [
   /* The sections fill the drawer edge to edge without a theme padding. */
   padding: 0 !important;
   overflow-y: auto;
+}
+
+/* The drawer content has no padding, so the copyright line carries the side
+   padding that matches the tab panels. */
+.p-drawer.diagram-sidebar__drawer .diagram-sidebar__copyright,
+.p-drawer-bottom .p-drawer.diagram-sidebar__drawer .diagram-sidebar__copyright {
+  padding: 0 1.125rem 1rem;
 }
 </style>

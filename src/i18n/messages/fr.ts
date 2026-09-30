@@ -3,12 +3,14 @@ const fr = {
     title: "Diagrammes de patinage artistique",
   },
   sidebar: {
+    copyright: "© Son Pham-Ba {year}",
     sections: {
       files: "Fichiers",
       diagram: "Diagramme",
       sequences: "Séquences",
       options: "Options",
       help: "Aide",
+      about: "À propos",
     },
   },
   options: {

@@ -25,6 +25,7 @@
     "pinia": "^3.0.4",
     "primeicons": "^8.0.0",
     "vue": "^3.5.25",
+    "vue-i18n": "^11.4.12",
     "vue-router": "^4.6.3"
   },
   "devDependencies": {

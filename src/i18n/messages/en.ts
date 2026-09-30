@@ -3,12 +3,14 @@ const en = {
     title: "Figure Skating Diagrams",
   },
   sidebar: {
+    copyright: "© Son Pham-Ba {year}",
     sections: {
       files: "Files",
       diagram: "Diagram",
       sequences: "Sequences",
       options: "Options",
       help: "Help",
+      about: "About",
     },
   },
   options: {
