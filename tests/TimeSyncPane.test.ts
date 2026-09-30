@@ -1,7 +1,8 @@
 import { expect, test, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import TimeSyncPane from "@/components/TimeSyncPane.vue";
-import { BothForwardGlide } from "@/engine/element/glide";
+import { BothForwardGlide, glideConstructorsByType } from "@/engine/element/glide";
+import { DynamicGlide } from "@/engine/element/stroke";
 import { Annotation } from "@/engine/annotation";
 import { TimingKeyframe } from "@/engine/keyframe";
 import { Sequence } from "@/engine/sequence";
@@ -82,9 +83,7 @@ test("hides the annotation description after the arrow folds the row", async () 
   expect(detail).not.toBeNull();
   expect(detail?.textContent).toContain("No description");
   // The annotations accordion sits below the elements accordion.
-  const toggle = document.body.querySelector(
-    ".time-sync-pane__annotation-header .time-sync-pane__toggle",
-  );
+  const toggle = document.body.querySelector(".time-sync-pane__annotation-header .time-sync-pane__toggle");
   toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 0));
   const detailHidden = document.body.querySelector(".time-sync-pane__detail");
@@ -120,6 +119,182 @@ test("hides the current element full name after the arrow folds the strip", asyn
 function elementChips(root: HTMLElement | null): HTMLButtonElement[] {
   return Array.from(root?.querySelectorAll("button.time-sync-pane__chip--element") ?? []);
 }
+
+function crossedStroke(type: string, start: number, end: number): DynamicGlide {
+  const constructor = glideConstructorsByType[type] as unknown as new (start: number, end: number) => DynamicGlide;
+  return new constructor(start, end);
+}
+
+// An S-shaped curve: the curvature changes sign at half its length.
+function buildSSequence(): Sequence {
+  const path = new Path();
+  path.curves.push(new Curve(new Vector(0, 0), new Vector(1, 0), new Vector(1, 1), new Vector(2, 1)));
+  path.updateLength();
+  const sequence = new Sequence(path);
+  sequence.addKeyframe("time", new TimingKeyframe(0 as PathCoordinate, "time", 0));
+  sequence.addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+  return sequence;
+}
+
+function buildStraightSequence(): Sequence {
+  const path = new Path();
+  path.curves.push(new Curve(new Vector(-2.5, 0), new Vector(-0.5, 0), new Vector(0.5, 0), new Vector(2.5, 0)));
+  path.updateLength();
+  const sequence = new Sequence(path);
+  sequence.addKeyframe("time", new TimingKeyframe(0 as PathCoordinate, "time", 0));
+  sequence.addKeyframe("time", new TimingKeyframe(path.length as PathCoordinate, "time", 4));
+  return sequence;
+}
+
+function chipByLabel(root: HTMLElement | null, label: string): HTMLButtonElement | undefined {
+  return elementChips(root).find((chip) => chip.textContent?.trim() === label);
+}
+
+test("shows a CE chip at the time of an uncovered inflection", async () => {
+  const sequence = buildSSequence();
+  const length = sequence.path.length;
+  const element = new BothForwardGlide((0.6 * length) as PathCoordinate, length as PathCoordinate);
+  element.shortName = "G";
+  sequence.addElement(element);
+  const content = await openPane([sequence], 2.2);
+  const labels = elementChips(content).map((chip) => chip.textContent?.trim());
+  expect(labels).toContain("CE");
+  expect(labels).toContain("G");
+  // The CE chip renders like the element chips, with the same font size.
+  const ce = chipByLabel(content, "CE");
+  expect(ce).toBeDefined();
+  const styleClasses = (chip: HTMLButtonElement) =>
+    chip.className
+      .split(" ")
+      .filter((name) => name !== "time-sync-pane__chip--dim")
+      .sort()
+      .join(" ");
+  expect(styleClasses(ce!)).toBe(styleClasses(chipByLabel(content, "G")!));
+});
+
+test("seeks to the inflection time when the CE chip is clicked", async () => {
+  const sequence = buildSSequence();
+  const length = sequence.path.length;
+  const element = new BothForwardGlide((0.6 * length) as PathCoordinate, length as PathCoordinate);
+  element.shortName = "G";
+  sequence.addElement(element);
+  const wrapper = mount(TimeSyncPane, { props: { sequences: [sequence], timeSeconds: 2.2, bpm: 120 } });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const ce = chipByLabel(wrapper.find(".time-sync-pane").element, "CE");
+  ce?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const emitted = wrapper.emitted("seek");
+  expect(emitted?.length).toBe(1);
+  // The inflection lies at half the path, so its chip time is half the span.
+  expect(emitted?.[0]?.at(0)).toBeCloseTo(2);
+  wrapper.unmount();
+});
+
+test("selects the CE chip while the cursor plays between its anchor and the next element", async () => {
+  const sequence = buildSSequence();
+  const length = sequence.path.length;
+  const element = new BothForwardGlide((0.6 * length) as PathCoordinate, length as PathCoordinate);
+  element.shortName = "G";
+  sequence.addElement(element);
+  const content = await openPane([sequence], 2.2);
+  const current = elementChips(content).filter((chip) => !chip.classList.contains("time-sync-pane__chip--dim"));
+  expect(current.length).toBe(1);
+  expect(current[0]?.textContent?.trim()).toBe("CE");
+});
+
+test("shows no CE chip when an element span covers the inflection", async () => {
+  const sequence = buildSSequence();
+  const length = sequence.path.length;
+  const element = new BothForwardGlide(0 as PathCoordinate, length as PathCoordinate);
+  element.shortName = "G";
+  sequence.addElement(element);
+  const content = await openPane([sequence], 2.2);
+  expect(elementChips(content).map((chip) => chip.textContent?.trim())).toEqual(["G"]);
+});
+
+test("shows one chip per crossed stroke with the crossed label prefix", async () => {
+  const sequence = buildStraightSequence();
+  const length = sequence.path.length;
+  sequence.addElement(crossedStroke("LeftCrossedBackwardInsideGlide", 0, length / 2));
+  sequence.addElement(crossedStroke("LeftCrossedBackBackwardInsideGlide", length / 2, length));
+  const content = await openPane([sequence], 3);
+  const labels = elementChips(content).map((chip) => chip.textContent?.trim());
+  expect(labels).toEqual(["XF LBI", "XB LBI"]);
+  // The chip of the running stroke is the current one.
+  const current = elementChips(content).filter((chip) => !chip.classList.contains("time-sync-pane__chip--dim"));
+  expect(current.length).toBe(1);
+  expect(current[0]?.textContent?.trim()).toBe("XB LBI");
+});
+
+test("seeks to the stroke start when the crossed chip is clicked", async () => {
+  const sequence = buildStraightSequence();
+  const length = sequence.path.length;
+  sequence.addElement(crossedStroke("LeftCrossedBackwardInsideGlide", 0, length / 2));
+  const wrapper = mount(TimeSyncPane, { props: { sequences: [sequence], timeSeconds: 1, bpm: 120 } });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const xf = chipByLabel(wrapper.find(".time-sync-pane").element, "XF LBI");
+  xf?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(wrapper.emitted("seek")?.at(-1)?.at(0)).toBeCloseTo(0);
+  wrapper.unmount();
+});
+
+test("shows an XS chip when a crossed stroke crosses a change of edge", async () => {
+  const sequence = buildSSequence();
+  const length = sequence.path.length;
+  const stroke = crossedStroke("LeftCrossedForwardInsideGlide", 0.3 * length, 0.7 * length);
+  stroke.shortName = "S";
+  sequence.addElement(stroke);
+  const content = await openPane([sequence], 2);
+  const labels = elementChips(content).map((chip) => chip.textContent?.trim());
+  // The stroke covers the inflection, so it carries the XS prefix and no CE
+  // chip appears.
+  expect(labels).toEqual(["XS S"]);
+  const current = elementChips(content).filter((chip) => !chip.classList.contains("time-sync-pane__chip--dim"));
+  expect(current[0]?.textContent?.trim()).toBe("XS S");
+});
+
+test("keeps a clickable chip for a crossed stroke that draws no pill", async () => {
+  const sequence = buildStraightSequence();
+  const length = sequence.path.length;
+  sequence.addElement(crossedStroke("LeftCrossedForwardInsideGlide", 0, length / 2));
+  const wrapper = mount(TimeSyncPane, { props: { sequences: [sequence], timeSeconds: 1, bpm: 120 } });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const content = wrapper.find(".time-sync-pane").element;
+  // The crossing letter pair replaces the plain short name on the chip.
+  expect(elementChips(content).map((chip) => chip.textContent?.trim())).toEqual(["XF"]);
+  const chip = chipByLabel(content, "XF");
+  expect(chip?.getAttribute("title")).toBe("Crossed-front");
+  chip?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(wrapper.emitted("seek")?.at(-1)?.at(0)).toBeCloseTo(0);
+  wrapper.unmount();
+});
+
+test("keeps the pill alone for a crossed stroke without a short name", async () => {
+  const sequence = buildStraightSequence();
+  const length = sequence.path.length;
+  const stroke = crossedStroke("LeftCrossedBackwardInsideGlide", 0, length / 2);
+  stroke.shortName = "";
+  sequence.addElement(stroke);
+  const content = await openPane([sequence], 1);
+  // The crossed stroke survives the empty short name with its pill.
+  expect(elementChips(content).map((chip) => chip.textContent?.trim())).toEqual(["XF"]);
+  expect(chipByLabel(content, "XF")?.getAttribute("title")).toBe("Crossed-front");
+});
+
+test("keeps only the markers whose anchor time plays inside the loop window", async () => {
+  const sequence = buildSSequence();
+  const length = sequence.path.length;
+  const element = new BothForwardGlide((0.6 * length) as PathCoordinate, length as PathCoordinate);
+  element.shortName = "G";
+  sequence.addElement(element);
+  // The CE chip plays at time 2, before the loop window.
+  const outside = await openPane([sequence], 3.5, [3, 4]);
+  expect(elementChips(outside).map((chip) => chip.textContent?.trim())).toEqual(["G"]);
+  const inside = await openPane([sequence], 3.5, [1.5, 4]);
+  expect(elementChips(inside).map((chip) => chip.textContent?.trim())).toEqual(["CE", "G"]);
+});
 
 test("shows only named elements, with only the current one at full opacity", async () => {
   const content = await openPane([buildFallbackSequence()], 4.5);

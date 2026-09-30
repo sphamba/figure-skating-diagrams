@@ -178,6 +178,7 @@ const fr = {
     showDescription: "Afficher la description",
     noDescription: "Aucune description",
     noElement: "Aucun élément",
+    changeEdge: "Changement de carre",
   },
   tracking: {
     stop: "Arrêter le suivi du curseur temporel",

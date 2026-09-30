@@ -174,6 +174,7 @@ const en = {
     showDescription: "Show description",
     noDescription: "No description",
     noElement: "No element yet",
+    changeEdge: "Change of edge",
   },
   tracking: {
     stop: "Stop tracking the time cursor",

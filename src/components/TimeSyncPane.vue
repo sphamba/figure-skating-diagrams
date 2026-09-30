@@ -9,7 +9,15 @@ import { WHEEL_SENSITIVITY } from "@/engine/constants";
 import type { Annotation } from "@/engine/annotation";
 import type { Time, PathCoordinate } from "@/engine/coordinates";
 import { elementFullName } from "@/engine/element/fullName";
+import type { Element as EngineElement } from "@/engine/element/element";
+import {
+  CHANGE_EDGE_LABEL,
+  crossedStrokeLabel,
+  uncoveredChangeEdgeCoordinates,
+} from "@/engine/sequenceEditor/changeEdge";
+import { isStrokeElement } from "@/engine/sequenceEditor/curvatureWarning";
 import { textColorFor } from "@/utils/contrast";
+import { useI18n } from "vue-i18n";
 
 const props = withDefaults(
   defineProps<{
@@ -22,6 +30,8 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{ seek: [seconds: number]; scrubStart: []; scrubEnd: [] }>();
+
+const { t } = useI18n();
 
 type AnnotationRow = {
   kind: "annotation";
@@ -38,6 +48,8 @@ type ElementItem = {
   label: string;
   fullName: string;
   startTime: number;
+  endTime: number;
+  anchor: number;
 };
 
 type ElementStrip = {
@@ -90,18 +102,58 @@ const annotationRows = computed<AnnotationRow[]>(() => {
 
 // One horizontal strip per sequence: the named elements in a line. The strip
 // offset centers the current element.
-// Elements without a short name are not shown. A set loop window keeps only
-// the elements that play during the loop.
+// A crossed stroke shows as one chip with the crossed label before the short
+// name, like its canvas pills; a stroke that draws no pill keeps a clickable
+// chip with its crossing letter pair, described by the crossing variant.
+// Other elements without a short name are not shown. CE chips mark the
+// uncovered change-of-edge points, timed at when the skater passes them. A
+// set loop window keeps only the chips that play during the loop.
 const CURRENT_TOLERANCE = 0.000001; // path coordinate, meters
+
+// The chip of a crossed stroke: the canvas pill text before the short name. A
+// stroke that draws no pill, or without a short name, shows the crossing
+// alone, described by the crossing variant.
+function crossedChip(sequence: Sequence, element: EngineElement): { label: string; fullName: string } | null {
+  if (!isStrokeElement(element) || !element.crossed) return null;
+  const pill = crossedStrokeLabel(sequence, element);
+  if (!pill || !element.shortName) {
+    return {
+      label: pill ?? (element.crossedBack ? "XB" : "XF"),
+      fullName: element.crossedBack ? "Crossed-back" : "Crossed-front",
+    };
+  }
+  return { label: `${pill} ${element.shortName}`, fullName: elementFullName(element) };
+}
+
+// The change-of-edge chips sit at the uncovered change points, timed at when
+// the skater passes them.
+function sequenceMarkers(sequence: Sequence): ElementItem[] {
+  const markers: ElementItem[] = [];
+  let index = 0;
+  for (const u of uncoveredChangeEdgeCoordinates(sequence)) {
+    const startTime = Number(sequence.getTimeFromPathCoordinate(u, props.bpm));
+    markers.push({
+      key: `${index}-${CHANGE_EDGE_LABEL}`,
+      label: CHANGE_EDGE_LABEL,
+      fullName: t("timeSync.changeEdge"),
+      startTime,
+      endTime: startTime,
+      anchor: u as number,
+    });
+    index++;
+  }
+  return markers;
+}
+
 const elementStrips = computed<ElementStrip[]>(() => {
   const time = props.timeSeconds;
   if (time === null) return [];
   const strips: ElementStrip[] = [];
   for (const sequence of props.sequences) {
     if (!cursorInSequence(sequence)) continue;
-    const shown = [...sequence.elements]
+    const elementItems: ElementItem[] = [...sequence.elements]
       .sort((a, b) => (a.start as number) - (b.start as number))
-      .filter((element) => element.shortName !== "")
+      .filter((element) => element.shortName !== "" || (isStrokeElement(element) && element.crossed))
       .filter((element) => {
         if (!props.loopWindow) return true;
         const start = Number(sequence.getTimeFromPathCoordinate(element.start as PathCoordinate, props.bpm));
@@ -109,24 +161,40 @@ const elementStrips = computed<ElementStrip[]>(() => {
         // An element spanning a loop end still plays during the loop, so the
         // overlap keeps its chip.
         return Math.min(start, end) <= props.loopWindow[1] && Math.max(start, end) >= props.loopWindow[0];
+      })
+      .map((element, index) => {
+        const crossed = crossedChip(sequence, element);
+        return {
+          key: `${index}-${element.start}-${element.end}`,
+          label: crossed ? crossed.label : element.shortName,
+          fullName: crossed ? crossed.fullName : elementFullName(element),
+          startTime: Number(sequence.getTimeFromPathCoordinate(element.start as PathCoordinate, props.bpm)),
+          endTime: Number(sequence.getTimeFromPathCoordinate(element.end as PathCoordinate, props.bpm)),
+          anchor: Math.min(element.start as number, element.end as number),
+        };
       });
-    if (shown.length === 0) continue;
+    // A point chip plays during the loop when its anchor time lies inside it.
+    const markerItems = sequenceMarkers(sequence).filter((marker) => {
+      if (!props.loopWindow) return true;
+      return marker.startTime >= props.loopWindow[0] && marker.startTime <= props.loopWindow[1];
+    });
+    const items = [...elementItems, ...markerItems].sort((a, b) => a.startTime - b.startTime);
+    if (items.length === 0) continue;
     const u = sequence.getPathCoordinateFromTime(time as Time, props.bpm);
-    // The last element whose start the cursor has reached. At a shared boundary
-    // the cursor belongs to the element that starts there, so the previous one
+    // The last chip whose anchor the cursor has reached. At a shared boundary
+    // the cursor belongs to the chip that starts there, so the previous one
     // does not stay selected. The tolerance keeps the rounding of the seek time
     // from putting the cursor just below a start.
     let current = -1;
-    for (let index = 0; index < shown.length; index++) {
-      const element = shown[index]!;
-      if (Math.min(element.start as number, element.end as number) - CURRENT_TOLERANCE <= u) current = index;
+    for (let index = 0; index < items.length; index++) {
+      const item = items[index]!;
+      if (item.anchor - CURRENT_TOLERANCE <= u) current = index;
     }
     if (current === -1) {
       let bestDistance = Infinity;
-      for (let index = 0; index < shown.length; index++) {
-        const element = shown[index]!;
-        const end = Number(sequence.getTimeFromPathCoordinate(element.end as PathCoordinate, props.bpm));
-        const distance = Math.abs(end - time);
+      for (let index = 0; index < items.length; index++) {
+        const item = items[index]!;
+        const distance = Math.abs(item.endTime - time);
         if (distance < bestDistance) {
           bestDistance = distance;
           current = index;
@@ -138,12 +206,7 @@ const elementStrips = computed<ElementStrip[]>(() => {
       key: `${sequenceToken(sequence)}-${sequence.name}`,
       sequence,
       current,
-      items: shown.map((element, index) => ({
-        key: `${index}-${element.start}-${element.end}`,
-        label: element.shortName,
-        fullName: elementFullName(element),
-        startTime: Number(sequence.getTimeFromPathCoordinate(element.start as PathCoordinate, props.bpm)),
-      })),
+      items,
     });
   }
   return strips;

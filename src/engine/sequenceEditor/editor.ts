@@ -17,6 +17,12 @@ import { TimingKeyframe } from "../keyframe.js";
 import { Sequence, DEFAULT_BPM, getOppositeFootKey, hasTimeEvolution, sequenceTimeRange } from "../sequence.js";
 import { checkSequenceCurvatures, isGlideElement, isStrokeElement } from "./curvatureWarning.js";
 import {
+  CHANGE_EDGE_LABEL,
+  crossedStrokeLabel,
+  uncoveredChangeEdgeCoordinates,
+  uniformCoordinateAt,
+} from "./changeEdge.js";
+import {
   ACTION_BUTTON_HIT_RADIUS,
   ACTION_BUTTON_RADIUS,
   ActionButtonLabel,
@@ -83,7 +89,6 @@ const MIN_BLADE_LENGTH = 25; // px, only effective when zoomed out
 const MIN_MARK_SIZE = 12; // px minimum toe-pick mark diameter when zoomed out
 const MIN_DRAW_INCREMENT = 2; // px
 const ELEMENTS_PATH_COLOR = "#000";
-const CHANGE_EDGE_LABEL = "CE";
 const ELEMENT_DRAW_INCREMENT = 0.02; // m
 const NODE_SIZE = 10; // px
 const POLYGON_ALPHA = 0.25;
@@ -2534,7 +2539,7 @@ export class Editor {
   }
 
   private makeCrossedLabel(sequence: Sequence, element: DynamicGlide): PillLabel | null {
-    const text = this.crossedLabel(sequence, element);
+    const text = crossedStrokeLabel(sequence, element);
     if (!text) return null;
     const geometry = this.getLabelGeometryInside(sequence.path, element.start);
     if (!geometry) return null;
@@ -2545,29 +2550,10 @@ export class Editor {
     });
   }
 
-  private crossedLabel(sequence: Sequence, element: DynamicGlide): string | null {
-    const backward = !element.forward;
-    if (element.crossedBack) {
-      return backward && this.hasStrokeCurvatureSignChange(sequence, element) ? "XS" : "XB";
-    }
-    if (backward) return "XF";
-    return this.hasStrokeCurvatureSignChange(sequence, element) ? "XS" : null;
-  }
-
-  private hasStrokeCurvatureSignChange(sequence: Sequence, element: DynamicGlide): boolean {
-    const path = sequence.path;
-    const [startCurve, startU] = path.getCurveAndCurvilinearCoord(element.start);
-    const [endCurve, endU] = path.getCurveAndCurvilinearCoord(element.end);
-    return startCurve.getCurvature(startU) * endCurve.getCurvature(endU) < 0;
-  }
-
   private collectInflectionLabels() {
     for (const sequence of this.editSequences()) {
       if (sequence.path.curves.length === 0) continue;
-      for (const u of [
-        ...this.getUncoveredInflectionCoordinates(sequence),
-        ...this.getUncoveredJointEdgeChangeCoordinates(sequence),
-      ]) {
+      for (const u of uncoveredChangeEdgeCoordinates(sequence)) {
         if (this.changeEdgeHidden(sequence, u)) continue;
         const geometry = this.getLabelGeometryAt(sequence.path, u);
         this.labelLayer.add(
@@ -2644,41 +2630,6 @@ export class Editor {
   private changeEdgeHidden(sequence: Sequence, u: PathCoordinate): boolean {
     if (this.mode !== "view") return false;
     return this.anchorHidden(sequence, u);
-  }
-
-  private getUncoveredInflectionCoordinates(sequence: Sequence): PathCoordinate[] {
-    const curves = sequence.path.curves;
-    const pathCoordinates: PathCoordinate[] = [];
-    curves.forEach((curve, curveIndex) => {
-      for (const inflection of curve.getInflections()) {
-        // Convert the inflection parameter to a uniform path coordinate so it can
-        // be compared against the real element spans, not the visual scaling.
-        const u = this.uniformCoordinateAt(curves, curveIndex, inflection) as PathCoordinate;
-        if (!this.isInsideElementSpan(sequence, u)) pathCoordinates.push(u);
-      }
-    });
-    return pathCoordinates;
-  }
-
-  private getUncoveredJointEdgeChangeCoordinates(sequence: Sequence): PathCoordinate[] {
-    const curves = sequence.path.curves;
-    const pathCoordinates: PathCoordinate[] = [];
-    for (let i = 0; i + 1 < curves.length; i++) {
-      const before = curves[i]!.getCurvature(1 as Curvilinear);
-      const after = curves[i + 1]!.getCurvature(0 as Curvilinear);
-      if (before * after >= 0) continue; // zero curvature counts as no sign change
-      const u = this.uniformCoordinateAt(curves, i, 1 as Curvilinear) as PathCoordinate;
-      if (!this.isInsideElementSpan(sequence, u)) pathCoordinates.push(u);
-    }
-    return pathCoordinates;
-  }
-
-  private isInsideElementSpan(sequence: Sequence, u: PathCoordinate): boolean {
-    return sequence.elements.some((element) => {
-      const lo = Math.min(element.start as number, element.end as number);
-      const hi = Math.max(element.start as number, element.end as number);
-      return (u as number) >= lo && (u as number) <= hi;
-    });
   }
 
   private getElementPoints(element: Element): Vector<2>[] {
@@ -2796,7 +2747,7 @@ export class Editor {
       }
     }
 
-    return this.uniformCoordinateAt(curves, bestIndex, bestT) as PathCoordinate;
+    return uniformCoordinateAt(curves, bestIndex, bestT) as PathCoordinate;
   }
 
   private snapCursorToPathAnywhere(sequence: Sequence, cursor: Vector<2>): PathCoordinate | null {
@@ -2815,7 +2766,7 @@ export class Editor {
       }
     }
 
-    return this.uniformCoordinateAt(curves, bestIndex, bestT) as PathCoordinate;
+    return uniformCoordinateAt(curves, bestIndex, bestT) as PathCoordinate;
   }
 
   private startElementSegmentDrag(element: Element, screenX: number, screenY: number) {
@@ -2869,17 +2820,6 @@ export class Editor {
     const [curve] = path.getCurveAndCurvilinearCoord(u as PathCoordinate);
     const index = path.curves.indexOf(curve);
     return index >= 0 ? index : 0;
-  }
-
-  private uniformCoordinateAt(curves: Curve[], curveIndex: number, s: number): number {
-    let u = 0;
-    for (let i = 0; i < curveIndex; i++) u += curves[i]!.length;
-    u += this.uniformWithinCurve(curves[curveIndex]!, s);
-    return u;
-  }
-
-  private uniformWithinCurve(curve: Curve, s: number): number {
-    return curve.getUniformCoordFromCurvilinear(s as Curvilinear);
   }
 
   private pickElement(screenX: number, screenY: number): Element | null {
@@ -3237,7 +3177,7 @@ export class Editor {
       const hit = sequence.path.pickCurve(cursor, tolerance);
       if (!hit) continue;
       const { t } = hit.curve.getClosestPoint(cursor);
-      const u = this.uniformCoordinateAt(sequence.path.curves, hit.curveIndex, t);
+      const u = uniformCoordinateAt(sequence.path.curves, hit.curveIndex, t);
       if (!best || hit.distance < best.distance) {
         best = { sequence, u, distance: hit.distance };
       }
@@ -3484,7 +3424,7 @@ export class Editor {
           sequence,
           curveIndex: result.curveIndex,
           distance: result.distance,
-          u: this.uniformCoordinateAt(sequence.path.curves, result.curveIndex, t),
+          u: uniformCoordinateAt(sequence.path.curves, result.curveIndex, t),
         };
       }
     }
@@ -3951,7 +3891,7 @@ export class Editor {
       if (picked.pointKey === "p0" || picked.pointKey === "p3") {
         const curve = sequence.path.curves[picked.curveIndex];
         if (curve) {
-          const u = this.uniformCoordinateAt(sequence.path.curves, picked.curveIndex, picked.pointKey === "p0" ? 0 : 1);
+          const u = uniformCoordinateAt(sequence.path.curves, picked.curveIndex, picked.pointKey === "p0" ? 0 : 1);
           this.moveVideoCursorToPathCoordinate(sequence, u);
         }
       }

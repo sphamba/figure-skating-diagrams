@@ -120,8 +120,8 @@ function defineDynamicGlide(
 
 const glideStrokes = [
   ["Normal", false, "normal", false],
-  ["Crossed", true, "crossed", false],
-  ["CrossedBack", true, "crossed back", true],
+  ["Crossed", true, "Crossed-front", false],
+  ["CrossedBack", true, "Crossed-back", true],
 ] as const;
 
 for (const [side, left] of glideSides) {
@@ -134,9 +134,12 @@ for (const [side, left] of glideSides) {
         if (!glideConstructorsByType[type]) {
           defineDynamicGlide(type, shortName, config);
         }
+        const edgeText = edge === "neither" ? "" : edge + " ";
         glideKindChoices.push({
           type,
-          label: `${side} ${strokeLabel} ${direction.toLowerCase()} ${edge === "neither" ? "" : edge + " "}stroke`,
+          label: crossed
+            ? `${strokeLabel} ${side.toLowerCase()} ${direction.toLowerCase()} ${edgeText}stroke`
+            : `${side} ${strokeLabel} ${direction.toLowerCase()} ${edgeText}stroke`,
         });
       }
     }
