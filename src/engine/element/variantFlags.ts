@@ -13,7 +13,7 @@ export type VariantFlags = {
   turns?: string; // twizzle turn count as string, e.g. "1.5"
 };
 
-const STROKE_NAMES = ["CrossedBack", "Crossed", "Normal"] as const; // longest first
+const STROKE_NAMES = ["CrossedBack", "Crossed", "Normal"] as const;
 const TURN_GROUPS = ["ThreeTurn", "Bracket", "Rocker", "Counter", "Loop"] as const;
 const TWO_FEET_GROUPS = ["Mohawk", "Choctaw"] as const;
 
@@ -59,7 +59,9 @@ export function parseVariantFlags(type: string): VariantFlags {
 
   if (rest.endsWith("Glide")) {
     let base = rest.slice(0, -"Glide".length);
-    const stroke = STROKE_NAMES.find((name) => base.startsWith(name));
+    const stroke = STROKE_NAMES.find(
+      (name) => base.startsWith(name) && parseDirection(base.slice(name.length))[0] !== undefined,
+    );
     if (stroke) {
       flags.stroke = stroke;
       base = base.slice(stroke.length);

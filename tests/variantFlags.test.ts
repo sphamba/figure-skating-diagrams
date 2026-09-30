@@ -36,6 +36,19 @@ describe("parseVariantFlags", () => {
       direction: "Forward",
       edge: "Inside",
     });
+    // The crossed backward stroke must not match the CrossedBack stroke name.
+    expect(parseVariantFlags("LeftCrossedBackwardInsideGlide")).toEqual({
+      side: "Left",
+      stroke: "Crossed",
+      direction: "Backward",
+      edge: "Inside",
+    });
+    expect(parseVariantFlags("RightCrossedBackwardOutsideGlide")).toEqual({
+      side: "Right",
+      stroke: "Crossed",
+      direction: "Backward",
+      edge: "Outside",
+    });
     expect(parseVariantFlags("LeftCrossedBackBackwardOutsideGlide")).toEqual({
       side: "Left",
       stroke: "CrossedBack",

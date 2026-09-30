@@ -170,6 +170,31 @@ test("opening the element dialog inside an existing variant focuses the short na
   vi.unstubAllGlobals();
 });
 
+test("opening the dialog on a crossed backward stroke keeps the backward variants", async () => {
+  const wrapper = await mountEditorView();
+  await nextTick();
+
+  recorder.editor.onElementChangeRequest({
+    type: "LeftCrossedBackwardInsideGlide",
+    shortName: "LCBI",
+    start: 0,
+    end: 1,
+  });
+  await nextTick();
+  await nextTick();
+
+  const tags = Array.from(document.querySelectorAll(".editor-view__element-kind .p-tag")).map((tag) =>
+    tag.textContent?.trim(),
+  );
+  expect(tags).toContain("Backward");
+  expect(tags).toContain("Inside");
+  expect(tags).toContain("Crossed");
+  expect(tags).not.toContain("Forward");
+  expect(tags).not.toContain("Crossed back");
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
 test("reaching the short name step from the previous step focuses the short name input", async () => {
   const wrapper = await mountEditorView();
   await nextTick();
