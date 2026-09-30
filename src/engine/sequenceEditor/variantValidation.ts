@@ -18,10 +18,13 @@ export type TurnVariantValidity = {
 };
 
 // Computed valid variant values of a one-foot glide or stroke after the foot is
-// selected. The direction comes from the state entering the element, the same
-// way as for turns; the edge comes from the path curvature at the element's
-// end, unlike turns which read it at the start. A null value cannot be
-// inferred at that position, so no flag check is shown for it.
+// selected. The direction comes from the body facing at the state entering the
+// element: the hips carry the exit facing of the element before, so the
+// direction holds also when the element changes the foot, where the chosen foot
+// was free and keeps the entry orientation. The edge comes from the path
+// curvature at the element's end, unlike turns which read it at the start. A
+// null value cannot be inferred at that position, so no flag check is shown for
+// it.
 export type OneFootVariantValidity = {
   forward: boolean | null;
   inside: boolean | null;
@@ -54,12 +57,17 @@ function isFootOnIce(sequence: Sequence, footKey: FootKey, u: PathCoordinate): b
 }
 
 // The direction matches the getWorldForwardDirection construction used by the
-// trace drawing: the toe lies along the local positive x axis, rotated by the
-// interpolated foot then the path frame.
-function footPointsForward(sequence: Sequence, footKey: FootKey, u: PathCoordinate): boolean {
-  const footDirectionWorld = sequence.getWorldForwardDirection(footKey, u);
+// trace drawing: the toe or the hips facing lies along the local positive x
+// axis, rotated by the interpolated part then the path frame.
+function pointsForward(sequence: Sequence, partKey: "footL" | "footR" | "hips", u: PathCoordinate): boolean {
+  const partDirectionWorld = sequence.getWorldForwardDirection(partKey, u);
   const tangent = sequence.path.getDerivative(u).normalized();
-  return tangent.x * footDirectionWorld.x + tangent.y * footDirectionWorld.y > 0;
+  return tangent.x * partDirectionWorld.x + tangent.y * partDirectionWorld.y > 0;
+}
+
+// The body facing can be read when the hips keyframes set an orientation.
+function hasHipsFacing(sequence: Sequence): boolean {
+  return sequence.keyframes.hips.some((keyframe) => keyframe.data.orientation !== undefined);
 }
 
 // The path position of the state entering an element: the end of the element
@@ -113,7 +121,7 @@ export function checkTurnVariantValidity(sequence: Sequence, element: Element): 
 
   const footKey = onIceFeet[0]!;
   const left = footKey === "footL";
-  const forward = footPointsForward(sequence, footKey, enteringState);
+  const forward = pointsForward(sequence, footKey, enteringState);
   const inside = impliedEdge(footKey, forward, clampU(path)(element.start as number), path);
 
   return { left, forward, inside };
@@ -126,9 +134,9 @@ export function checkOneFootVariantValidity(
 ): OneFootVariantValidity {
   const unknown: OneFootVariantValidity = { forward: null, inside: null };
   const path = sequence.path;
-  if (path.curves.length === 0 || !hasTraceData(sequence, footKey)) return unknown;
+  if (path.curves.length === 0 || !hasHipsFacing(sequence)) return unknown;
 
-  const forward = footPointsForward(sequence, footKey, enteringU(sequence, element, path));
+  const forward = pointsForward(sequence, "hips", enteringU(sequence, element, path));
   const inside = impliedEdge(footKey, forward, clampU(path)(element.end as number), path);
   return { forward, inside };
 }

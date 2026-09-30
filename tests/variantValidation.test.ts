@@ -206,6 +206,83 @@ test("a selected foot without trace data computes no valid flags", () => {
   expect(checkOneFootVariantValidity(sequence, glide, "footR")).toEqual({ forward: null, inside: null });
 });
 
+test("a glide that changes the foot after a turn reads the exit facing", () => {
+  const path = clockwisePath();
+  const sequence = new Sequence(path);
+  const turn = new LeftForwardInsideThreeTurn(
+    "footL",
+    (path.length * 0.1) as PathCoordinate,
+    (path.length * 0.4) as PathCoordinate,
+  );
+  sequence.addElement(turn);
+
+  // The turn exits backward. The right foot was free during the turn and kept
+  // the entry orientation, so the direction comes from the hips instead.
+  const glide = new (glideConstructorsByType["RightBackwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => LeftForwardInsideGlide)(path.length * 0.5, path.length * 0.8);
+
+  expect(checkOneFootVariantValidity(sequence, glide, "footR")).toEqual({ forward: false, inside: true });
+});
+
+test("a glide that changes the foot after a backward turn reads the exit facing", () => {
+  const path = clockwisePath();
+  const sequence = new Sequence(path);
+  const turn = new LeftBackwardInsideThreeTurn(
+    "footL",
+    (path.length * 0.1) as PathCoordinate,
+    (path.length * 0.4) as PathCoordinate,
+  );
+  sequence.addElement(turn);
+
+  // The backward turn exits forward: the right foot kept the backward entry
+  // orientation, so the direction comes from the hips instead.
+  const glide = new (glideConstructorsByType["RightForwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => LeftForwardInsideGlide)(path.length * 0.5, path.length * 0.8);
+
+  expect(checkOneFootVariantValidity(sequence, glide, "footR")).toEqual({ forward: true, inside: false });
+});
+
+test("a stroke that changes the foot after a turn reads the exit facing", () => {
+  const path = clockwisePath();
+  const sequence = new Sequence(path);
+  const turn = new LeftForwardInsideThreeTurn(
+    "footL",
+    (path.length * 0.1) as PathCoordinate,
+    (path.length * 0.4) as PathCoordinate,
+  );
+  sequence.addElement(turn);
+
+  const stroke = new (glideConstructorsByType["RightNormalBackwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => LeftForwardInsideGlide)(path.length * 0.5, path.length * 0.8);
+
+  expect(checkOneFootVariantValidity(sequence, stroke, "footR")).toEqual({ forward: false, inside: true });
+});
+
+test("a glide on the back foot of a pose glide reads the body facing", () => {
+  const path = clockwisePath();
+  const sequence = new Sequence(path);
+  const pose = new (glideConstructorsByType["InaBauerRightFrontGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => LeftForwardInsideGlide)((path.length * 0.1) as PathCoordinate, (path.length * 0.4) as PathCoordinate);
+  sequence.addElement(pose);
+
+  // The back foot of the pose keeps a backward orientation; the hips face
+  // forward, so the proposed direction stays forward.
+  const glide = new (glideConstructorsByType["LeftForwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => LeftForwardInsideGlide)(path.length * 0.5, path.length * 0.8);
+
+  expect(checkOneFootVariantValidity(sequence, glide, "footL")).toEqual({ forward: true, inside: true });
+});
+
 test("the edge reads the curvature at the ending point instead of the start", () => {
   const path = new Path();
   path.addCurveEnd(getArcCurve(new Vector(0, -5), 5, (3 * Math.PI) / 2, Math.PI / 2));
