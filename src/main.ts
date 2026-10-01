@@ -14,6 +14,7 @@ import App from "./App.vue";
 import router from "./router";
 import { i18n } from "./i18n";
 import { useAppearanceStore } from "./stores/appearance";
+import { useInputModeStore } from "./stores/inputMode";
 import { useLocaleStore } from "./stores/locale";
 
 const appPreset = definePreset(Aura, {
@@ -38,6 +39,7 @@ const app = createApp(App);
 
 app.use(createPinia());
 useAppearanceStore();
+useInputModeStore();
 useLocaleStore();
 app.use(i18n);
 app.use(router);

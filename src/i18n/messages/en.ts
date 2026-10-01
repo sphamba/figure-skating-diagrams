@@ -112,7 +112,6 @@ const en = {
     descs: {
       moveView: "move the view",
       zoom: "zoom",
-      sameAsLeftClick: "same as a left click",
       pinchZoomDragView: "pinch to zoom and drag to move the view",
       togglePlayback: "toggle the playback",
       cursorBack: "move the time cursor back one video frame or 1/30 second",

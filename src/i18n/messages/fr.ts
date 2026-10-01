@@ -116,7 +116,6 @@ const fr = {
     descs: {
       moveView: "déplacer la vue",
       zoom: "zoomer",
-      sameAsLeftClick: "identique à un clic gauche",
       pinchZoomDragView: "pincer pour zoomer et glisser pour déplacer la vue",
       togglePlayback: "démarrer ou mettre en pause la lecture",
       cursorBack: "reculer le curseur temporel d'une image vidéo ou d'1/30 de seconde",

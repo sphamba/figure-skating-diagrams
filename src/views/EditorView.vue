@@ -542,8 +542,6 @@ const sharedHelpItems: HelpItem[] = [
   { keys: ["e"], descriptions: ["switchElements"] },
   { keys: ["t"], descriptions: ["switchTiming"] },
   { keys: ["a"], descriptions: ["switchAnnotations"] },
-  { keys: ["oneFinger"], descriptions: ["sameAsLeftClick"] },
-  { keys: ["twoFingers"], descriptions: ["pinchZoomDragView"] },
   { keys: ["space"], descriptions: ["togglePlayback"] },
   { keys: ["ctrl", "z"], descriptions: ["undo"] },
   { keys: ["ctrl", "y"], descriptions: ["redo"] },
@@ -552,7 +550,44 @@ const sharedHelpItems: HelpItem[] = [
   { keys: ["rightArrow"], descriptions: ["cursorForward"] },
 ];
 
-const helpItems = computed<HelpItem[]>(() =>
+// Touch gestures stand alone: one finger taps and drags like the primary
+// button, two fingers pinch to zoom and drag to move the view.
+const touchItems: Record<EditMode, HelpItem[]> = {
+  view: [{ keys: ["oneFinger"], descriptions: ["moveView"] }],
+  path: [
+    {
+      keys: ["oneFinger"],
+      descriptions: ["controlSelect", "lineSelect", "drawSelection", "curveMove", "pointsMove"],
+    },
+  ],
+  elements: [
+    {
+      keys: ["oneFinger"],
+      descriptions: ["elementCreate", "drawSelection", "elementCreateRange", "elementMove"],
+    },
+  ],
+  timing: [
+    {
+      keys: ["oneFinger"],
+      descriptions: ["timingSelect", "timingCreate", "drawSelection", "timingCreateRelease", "timingMove"],
+    },
+  ],
+  annotations: [
+    {
+      keys: ["oneFinger"],
+      descriptions: [
+        "annotationCreate",
+        "annotationSelect",
+        "drawSelection",
+        "annotationCreateRange",
+        "annotationMove",
+      ],
+    },
+  ],
+};
+const twoFingersItem: HelpItem = { keys: ["twoFingers"], descriptions: ["pinchZoomDragView"] };
+
+const modeHelpItems = computed<HelpItem[]>(() =>
   editMode.value === "view"
     ? [
         { keys: ["leftDrag"], descriptions: ["moveView"] },
@@ -574,8 +609,8 @@ const helpItems = computed<HelpItem[]>(() =>
           { keys: ["ctrl", "leftClick"], descriptions: ["selectionAddRemove"] },
           { keys: ["rightDrag"], descriptions: ["moveView"] },
           { keys: ["wheel"], descriptions: ["zoom"] },
-          { keys: ["+"], descriptions: ["timingOpenDialogPlus"] },
-          { keys: ["\u2212"], descriptions: ["timingRemove"] },
+          { keys: ["plus"], descriptions: ["timingOpenDialogPlus"] },
+          { keys: ["minus"], descriptions: ["timingRemove"] },
           { keys: ["cog"], descriptions: ["timingOpenDialogCog"] },
           ...sharedHelpItems,
         ]
@@ -593,8 +628,8 @@ const helpItems = computed<HelpItem[]>(() =>
             { keys: ["ctrl", "leftClick"], descriptions: ["selectionAddRemove"] },
             { keys: ["rightDrag"], descriptions: ["moveView"] },
             { keys: ["wheel"], descriptions: ["zoom"] },
-            { keys: ["+"], descriptions: ["annotationOpenDialogPlus"] },
-            { keys: ["\u2212"], descriptions: ["annotationRemove"] },
+            { keys: ["plus"], descriptions: ["annotationOpenDialogPlus"] },
+            { keys: ["minus"], descriptions: ["annotationRemove"] },
             { keys: ["cog"], descriptions: ["annotationOpenDialogCog"] },
             ...sharedHelpItems,
           ]
@@ -608,8 +643,8 @@ const helpItems = computed<HelpItem[]>(() =>
               { keys: ["drag"], descriptions: ["elementMove"] },
               { keys: ["rightDrag"], descriptions: ["moveView"] },
               { keys: ["wheel"], descriptions: ["zoom"] },
-              { keys: ["+"], descriptions: ["elementOpenDialogPlus"] },
-              { keys: ["\u2212"], descriptions: ["elementRemove"] },
+              { keys: ["plus"], descriptions: ["elementOpenDialogPlus"] },
+              { keys: ["minus"], descriptions: ["elementRemove"] },
               { keys: ["cog"], descriptions: ["elementOpenDialogCog"] },
               ...sharedHelpItems,
             ]
@@ -628,13 +663,15 @@ const helpItems = computed<HelpItem[]>(() =>
               { keys: ["rightDrag"], descriptions: ["moveView"] },
               { keys: ["wheel"], descriptions: ["zoom"] },
               {
-                keys: ["+"],
+                keys: ["plus"],
                 descriptions: ["addSegment", "splitCurve"],
               },
-              { keys: ["\u2212"], descriptions: ["pointRemove"] },
+              { keys: ["minus"], descriptions: ["pointRemove"] },
               ...sharedHelpItems,
             ],
 );
+
+const helpItems = computed<HelpItem[]>(() => [...modeHelpItems.value, ...touchItems[editMode.value], twoFingersItem]);
 
 let editor: Editor | null = null;
 const isTracking = ref(false);

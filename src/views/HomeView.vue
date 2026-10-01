@@ -273,7 +273,7 @@ const helpItems: HelpItem[] = [
   { keys: ["leftDrag"], descriptions: ["moveView"] },
   { keys: ["rightDrag"], descriptions: ["moveView"] },
   { keys: ["wheel"], descriptions: ["zoom"] },
-  { keys: ["oneFinger"], descriptions: ["sameAsLeftClick"] },
+  { keys: ["oneFinger"], descriptions: ["moveView"] },
   { keys: ["twoFingers"], descriptions: ["pinchZoomDragView"] },
   { keys: ["space"], descriptions: ["togglePlayback"] },
   { keys: ["leftArrow"], descriptions: ["cursorBack"] },

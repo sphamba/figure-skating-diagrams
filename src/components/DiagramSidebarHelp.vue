@@ -1,14 +1,27 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import Tag from "openvue/tag";
 import { useI18n } from "vue-i18n";
+import { useInputModeStore } from "@/stores/inputMode";
 import type { HelpItem } from "@/components/DiagramSidebar.vue";
 
-const { t } = useI18n();
+const props = defineProps<{ helpItems: HelpItem[] }>();
 
-defineProps<{ helpItems: HelpItem[] }>();
+const { t } = useI18n();
+const inputMode = useInputModeStore();
+
+// The oneFinger and twoFingers keys mark the touch rows; every other row maps
+// a mouse or keyboard input.
+const TOUCH_KEYS = new Set(["oneFinger", "twoFingers"]);
+
+const visibleHelpItems = computed(() =>
+  inputMode.mode === "touch"
+    ? props.helpItems.filter((item) => item.keys.some((key) => TOUCH_KEYS.has(key)))
+    : props.helpItems.filter((item) => !item.keys.some((key) => TOUCH_KEYS.has(key))),
+);
 
 // The icon is picked per key ID: mouse gestures, finger gestures, otherwise a keyboard key.
-// The UI button tags "+" and "\u2212" show no icon; the cog tag shows only a cog icon.
+// The UI button tags "+" and "−" show no icon; the cog tag shows only a cog icon.
 // Keys and descriptions are stable IDs translated through the i18n catalogs.
 function iconOf(key: string): "mouse" | "finger" | "twoFinger" | "keyboard" | "cog" | "none" {
   switch (key) {
@@ -24,8 +37,8 @@ function iconOf(key: string): "mouse" | "finger" | "twoFinger" | "keyboard" | "c
       return "mouse";
     case "cog":
       return "cog";
-    case "+":
-    case "\u2212":
+    case "plus":
+    case "minus":
       return "none";
     default:
       return "keyboard";
@@ -36,7 +49,7 @@ function iconOf(key: string): "mouse" | "finger" | "twoFinger" | "keyboard" | "c
 <template>
   <ul class="diagram-sidebar__hint">
     <li
-      v-for="(item, index) in helpItems"
+      v-for="(item, index) in visibleHelpItems"
       :key="`${index}-${item.descriptions.join('|')}`"
       class="diagram-sidebar__hint-item"
     >
