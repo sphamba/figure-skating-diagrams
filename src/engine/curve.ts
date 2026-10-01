@@ -68,28 +68,15 @@ export class Curve {
     this.updateLength();
   }
 
-  toJSON(): { p0: number[]; p1: number[]; p2: number[]; p3: number[] } {
+  toJSON(): { points: number[] } {
     return {
-      p0: this.p0.toJSON().data,
-      p1: this.p1.toJSON().data,
-      p2: this.p2.toJSON().data,
-      p3: this.p3.toJSON().data,
+      points: [...this.p0.toJSON().data, ...this.p1.toJSON().data, ...this.p2.toJSON().data, ...this.p3.toJSON().data],
     };
   }
 
-  static fromJSON(json: {
-    p0: number[] | { data: number[] };
-    p1: number[] | { data: number[] };
-    p2: number[] | { data: number[] };
-    p3: number[] | { data: number[] };
-  }): Curve {
-    const flat = (point: number[] | { data: number[] }): number[] => (Array.isArray(point) ? point : point.data);
-    return new Curve(
-      Vector.fromJSON({ data: flat(json.p0) }) as Vector<2>,
-      Vector.fromJSON({ data: flat(json.p1) }) as Vector<2>,
-      Vector.fromJSON({ data: flat(json.p2) }) as Vector<2>,
-      Vector.fromJSON({ data: flat(json.p3) }) as Vector<2>,
-    );
+  static fromJSON(json: { points: number[] }): Curve {
+    const point = (i: number): Vector<2> => Vector.fromJSON({ data: json.points.slice(i, i + 2) }) as Vector<2>;
+    return new Curve(point(0), point(2), point(4), point(6));
   }
 
   updateLength() {

@@ -146,7 +146,7 @@ const timedDiagramJSON = {
   sequences: [
     {
       name: "Timed",
-      path: { curves: [{ p0: [0, -1.2], p1: [0, -1.2], p2: [0, 1.2], p3: [0, 1.2] }] },
+      path: { curves: [{ points: [0, -1.2, 0, -1.2, 0, 1.2, 0, 1.2] }] },
       elements: [],
       keyframes: {
         footL: [],
@@ -165,7 +165,7 @@ const timedDiagramJSON = {
     },
     {
       name: "Later",
-      path: { curves: [{ p0: [0, -1.2], p1: [0, -1.2], p2: [0, 1.2], p3: [0, 1.2] }] },
+      path: { curves: [{ points: [0, -1.2, 0, -1.2, 0, 1.2, 0, 1.2] }] },
       elements: [],
       keyframes: {
         footL: [],

@@ -105,7 +105,7 @@ test("timing keyframes round path coordinate and value", () => {
 test("the stored and exported json carries at most 3 decimal places", () => {
   const json = {
     path: {
-      curves: [{ p0: [0.123456789, 0.987654321], p1: [1.1111111, 0], p2: [2.2222222, 0], p3: [3.3333333, 0] }],
+      curves: [{ points: [0.123456789, 0.987654321, 1.1111111, 0, 2.2222222, 0, 3.3333333, 0] }],
     },
     keyframes: {
       footL: [],

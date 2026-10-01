@@ -95,9 +95,9 @@ test("mirrorSequence mirrors the path x through the bounding box center and pers
   expect(curve.p3.y).toBeCloseTo(0, 10);
 
   const stored = JSON.parse(localStorage.getItem("sequence-editor") as string) as {
-    sequences?: { path?: { curves?: { p0?: number[] }[] }[] }[];
+    sequences?: { path?: { curves?: { points?: number[] }[] }[] }[];
   };
-  expect(stored.sequences![0]!.path!.curves![0]!.p0).toEqual([4, 0]);
+  expect(stored.sequences![0]!.path!.curves![0]!.points).toEqual([4, 0, 3, 2, 2, -1, 1, 0]);
 });
 
 test("mirrorSequence mirrors the path y through the bounding box center", () => {

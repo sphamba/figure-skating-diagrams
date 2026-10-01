@@ -266,7 +266,7 @@ test("structurally unequal joint coordinates stay separate objects", () => {
   const path = new Path();
   path.addCurveEnd(new Curve(new Vector(0, 0), new Vector(1 / 3, 0), new Vector(2 / 3, 0), new Vector(1, 0)));
   const json = path.toJSON();
-  json.curves.push({ p0: [2, 0], p1: [2 + 1 / 3, 0], p2: [2 + 2 / 3, 0], p3: [3, 0] });
+  json.curves.push({ points: [2, 0, 2 + 1 / 3, 0, 2 + 2 / 3, 0, 3, 0] });
 
   const reloaded = Path.fromJSON(json);
   expect(reloaded.curves[1]!.p0).not.toBe(reloaded.curves[0]!.p3);
