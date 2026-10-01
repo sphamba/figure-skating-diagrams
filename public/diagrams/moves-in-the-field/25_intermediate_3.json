@@ -1,0 +1,521 @@
+{
+  "name": "Intermediate 3 – Brackets in the Field Sequence",
+  "sequences": [
+    {
+      "name": "RFO-LBI",
+      "traceColorL": "#3030d2",
+      "traceColorR": "#9c0000",
+      "path": {
+        "curves": [
+          {
+            "points": [
+              -7.033,
+              27.416,
+              -3.624,
+              27.425,
+              -3.396,
+              20.547,
+              -7.077,
+              20.541
+            ]
+          },
+          {
+            "points": [
+              -7.077,
+              20.541,
+              -10.628,
+              20.535,
+              -10.854,
+              13.726,
+              -7.084,
+              13.665
+            ]
+          },
+          {
+            "points": [
+              -7.084,
+              13.665,
+              -3.548,
+              13.607,
+              -3.435,
+              6.826,
+              -7.077,
+              6.789
+            ]
+          },
+          {
+            "points": [
+              -7.077,
+              6.789,
+              -10.476,
+              6.754,
+              -10.93,
+              0.091,
+              -7.11,
+              0.118
+            ]
+          }
+        ]
+      },
+      "keyframes": {
+        "footL": [],
+        "footR": [],
+        "hips": [],
+        "time": [
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 0,
+            "data": {
+              "type": "time",
+              "value": 0
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 38.879,
+            "data": {
+              "type": "time",
+              "value": 10
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          }
+        ]
+      },
+      "elements": [
+        {
+          "type": "RightForwardOutsideBracket",
+          "start": 4.511,
+          "end": 5.183,
+          "shortName": "RFOB"
+        },
+        {
+          "type": "LeftNormalBackwardInsideGlide",
+          "start": 9.371,
+          "end": 10.046,
+          "shortName": ""
+        },
+        {
+          "type": "LeftBackwardInsideBracket",
+          "start": 14.25,
+          "end": 14.93,
+          "shortName": "LBIB"
+        },
+        {
+          "type": "RightNormalForwardOutsideGlide",
+          "start": 19.177,
+          "end": 19.864,
+          "shortName": ""
+        },
+        {
+          "type": "RightForwardOutsideBracket",
+          "start": 24.063,
+          "end": 24.758,
+          "shortName": "RFOB"
+        },
+        {
+          "type": "LeftNormalBackwardInsideGlide",
+          "start": 28.944,
+          "end": 29.643,
+          "shortName": ""
+        },
+        {
+          "type": "LeftBackwardInsideBracket",
+          "start": 33.79,
+          "end": 34.49,
+          "shortName": "LBIB"
+        }
+      ],
+      "annotations": []
+    },
+    {
+      "name": "LFO-RBI",
+      "traceColorL": "#3030d2",
+      "traceColorR": "#9c0000",
+      "path": {
+        "curves": [
+          {
+            "points": [
+              -7.058,
+              -0.378,
+              -10.552,
+              -0.346,
+              -10.996,
+              -7.124,
+              -7.031,
+              -7.158
+            ]
+          },
+          {
+            "points": [
+              -7.031,
+              -7.158,
+              -3.008,
+              -7.193,
+              -3.072,
+              -13.993,
+              -6.955,
+              -13.937
+            ]
+          },
+          {
+            "points": [
+              -6.955,
+              -13.937,
+              -10.869,
+              -13.881,
+              -10.631,
+              -20.655,
+              -6.871,
+              -20.716
+            ]
+          },
+          {
+            "points": [
+              -6.871,
+              -20.716,
+              -3.199,
+              -20.777,
+              -2.787,
+              -27.479,
+              -6.811,
+              -27.496
+            ]
+          }
+        ]
+      },
+      "keyframes": {
+        "footL": [],
+        "footR": [],
+        "hips": [],
+        "time": [
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 0,
+            "data": {
+              "type": "time",
+              "value": 10
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 39.84,
+            "data": {
+              "type": "time",
+              "value": 20
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          }
+        ]
+      },
+      "elements": [
+        {
+          "type": "LeftForwardOutsideBracket",
+          "start": 4.373,
+          "end": 5.173,
+          "shortName": "LFOB"
+        },
+        {
+          "type": "RightNormalBackwardInsideGlide",
+          "start": 9.392,
+          "end": 10.192,
+          "shortName": ""
+        },
+        {
+          "type": "RightBackwardInsideBracket",
+          "start": 14.497,
+          "end": 15.297,
+          "shortName": "RBIB"
+        },
+        {
+          "type": "LeftNormalForwardOutsideGlide",
+          "start": 19.534,
+          "end": 20.337,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardOutsideBracket",
+          "start": 24.606,
+          "end": 25.412,
+          "shortName": "LFOB"
+        },
+        {
+          "type": "RightNormalBackwardInsideGlide",
+          "start": 29.43,
+          "end": 30.234,
+          "shortName": ""
+        },
+        {
+          "type": "RightBackwardInsideBracket",
+          "start": 34.653,
+          "end": 35.453,
+          "shortName": "RBIB"
+        }
+      ],
+      "annotations": []
+    },
+    {
+      "name": "LFI-RBO",
+      "traceColorL": "#3030d2",
+      "traceColorR": "#9c0000",
+      "path": {
+        "curves": [
+          {
+            "points": [
+              7.195,
+              -27.33,
+              3.303,
+              -27.27,
+              3.6,
+              -20.654,
+              7.185,
+              -20.595
+            ]
+          },
+          {
+            "points": [
+              7.185,
+              -20.595,
+              10.817,
+              -20.536,
+              10.892,
+              -13.915,
+              7.134,
+              -13.861
+            ]
+          },
+          {
+            "points": [
+              7.134,
+              -13.861,
+              3.34,
+              -13.808,
+              3.265,
+              -7.188,
+              7.081,
+              -7.127
+            ]
+          },
+          {
+            "points": [
+              7.081,
+              -7.127,
+              10.706,
+              -7.069,
+              10.631,
+              -0.448,
+              7.058,
+              -0.393
+            ]
+          }
+        ]
+      },
+      "keyframes": {
+        "footL": [],
+        "footR": [],
+        "hips": [],
+        "time": [
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 0,
+            "data": {
+              "type": "time",
+              "value": 20
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 39.007,
+            "data": {
+              "type": "time",
+              "value": 30
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          }
+        ]
+      },
+      "elements": [
+        {
+          "type": "LeftForwardInsideBracket",
+          "start": 4.334,
+          "end": 5.133,
+          "shortName": "LFIB"
+        },
+        {
+          "type": "RightNormalBackwardOutsideGlide",
+          "start": 9.334,
+          "end": 10.141,
+          "shortName": ""
+        },
+        {
+          "type": "RightBackwardOutsideBracket",
+          "start": 14.2,
+          "end": 15.018,
+          "shortName": "RBOB"
+        },
+        {
+          "type": "LeftNormalForwardInsideGlide",
+          "start": 19.112,
+          "end": 19.922,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardInsideBracket",
+          "start": 24.068,
+          "end": 24.868,
+          "shortName": "LFIB"
+        },
+        {
+          "type": "RightNormalBackwardOutsideGlide",
+          "start": 28.995,
+          "end": 29.797,
+          "shortName": ""
+        },
+        {
+          "type": "RightBackwardOutsideBracket",
+          "start": 33.785,
+          "end": 34.588,
+          "shortName": "RBOB"
+        }
+      ],
+      "annotations": []
+    },
+    {
+      "name": "RFI-LBO",
+      "traceColorL": "#3030d2",
+      "traceColorR": "#9c0000",
+      "path": {
+        "curves": [
+          {
+            "points": [
+              7.058,
+              0.339,
+              10.743,
+              0.334,
+              10.781,
+              7.118,
+              7.079,
+              7.13
+            ]
+          },
+          {
+            "points": [
+              7.079,
+              7.13,
+              3.526,
+              7.142,
+              3.674,
+              13.893,
+              7.11,
+              13.922
+            ]
+          },
+          {
+            "points": [
+              7.11,
+              13.922,
+              10.482,
+              13.949,
+              10.854,
+              20.669,
+              7.146,
+              20.713
+            ]
+          },
+          {
+            "points": [
+              7.146,
+              20.713,
+              3.377,
+              20.757,
+              3.377,
+              27.491,
+              7.195,
+              27.504
+            ]
+          }
+        ]
+      },
+      "keyframes": {
+        "footL": [],
+        "footR": [],
+        "hips": [],
+        "time": [
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 0,
+            "data": {
+              "type": "time",
+              "value": 30
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 38.899,
+            "data": {
+              "type": "time",
+              "value": 40
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          }
+        ]
+      },
+      "elements": [
+        {
+          "type": "RightForwardInsideBracket",
+          "start": 4.381,
+          "end": 5.181,
+          "shortName": "RFIB"
+        },
+        {
+          "type": "LeftNormalBackwardOutsideGlide",
+          "start": 9.349,
+          "end": 10.149,
+          "shortName": ""
+        },
+        {
+          "type": "LeftBackwardOutsideBracket",
+          "start": 14.124,
+          "end": 14.924,
+          "shortName": "LBOB"
+        },
+        {
+          "type": "RightNormalForwardInsideGlide",
+          "start": 18.964,
+          "end": 19.764,
+          "shortName": ""
+        },
+        {
+          "type": "RightForwardInsideBracket",
+          "start": 23.709,
+          "end": 24.509,
+          "shortName": "RFIB"
+        },
+        {
+          "type": "LeftNormalBackwardOutsideGlide",
+          "start": 28.57,
+          "end": 29.37,
+          "shortName": ""
+        },
+        {
+          "type": "LeftBackwardOutsideBracket",
+          "start": 33.376,
+          "end": 34.176,
+          "shortName": "LBOB"
+        }
+      ],
+      "annotations": []
+    }
+  ]
+}

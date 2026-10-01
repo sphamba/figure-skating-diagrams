@@ -1,0 +1,467 @@
+{
+  "name": "Intermediate 1 – Backward Double Three-Turns",
+  "sequences": [
+    {
+      "name": "Outside",
+      "traceColorL": "#3030d2",
+      "traceColorR": "#9c0000",
+      "path": {
+        "curves": [
+          {
+            "points": [
+              -7.62,
+              27.999,
+              -15.033,
+              27.938,
+              -14.742,
+              16.879,
+              -7.587,
+              16.879
+            ]
+          },
+          {
+            "points": [
+              -7.587,
+              16.879,
+              -0.433,
+              16.879,
+              0.002,
+              5.787,
+              -7.786,
+              5.75
+            ]
+          },
+          {
+            "points": [
+              -7.786,
+              5.75,
+              -15.573,
+              5.712,
+              -14.945,
+              -5.837,
+              -7.75,
+              -5.886
+            ]
+          },
+          {
+            "points": [
+              -7.75,
+              -5.886,
+              -0.555,
+              -5.934,
+              -0.625,
+              -16.69,
+              -7.734,
+              -16.629
+            ]
+          },
+          {
+            "points": [
+              -7.734,
+              -16.629,
+              -14.844,
+              -16.569,
+              -14.816,
+              -27.931,
+              -7.473,
+              -27.931
+            ]
+          }
+        ]
+      },
+      "keyframes": {
+        "footL": [],
+        "footR": [],
+        "hips": [],
+        "time": [
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 0,
+            "data": {
+              "type": "time",
+              "value": 0
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 87.894,
+            "data": {
+              "type": "time",
+              "value": 20
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          }
+        ]
+      },
+      "elements": [
+        {
+          "type": "RightBackwardOutsideThreeTurn",
+          "start": 8.111,
+          "end": 8.911,
+          "shortName": "RBO3"
+        },
+        {
+          "type": "RightForwardInsideThreeTurn",
+          "start": 12.044,
+          "end": 12.844,
+          "shortName": "RFI3"
+        },
+        {
+          "type": "LeftNormalBackwardOutsideGlide",
+          "start": 17.351,
+          "end": 18.151,
+          "shortName": "LBO"
+        },
+        {
+          "type": "RightCrossedBackwardInsideGlide",
+          "start": 19.069,
+          "end": 19.869,
+          "shortName": "RBI"
+        },
+        {
+          "type": "LeftNormalBackwardOutsideGlide",
+          "start": 20.835,
+          "end": 21.635,
+          "shortName": ""
+        },
+        {
+          "type": "LeftBackwardOutsideThreeTurn",
+          "start": 25.758,
+          "end": 26.558,
+          "shortName": "LBO3"
+        },
+        {
+          "type": "LeftForwardInsideThreeTurn",
+          "start": 29.965,
+          "end": 30.765,
+          "shortName": "LFI3"
+        },
+        {
+          "type": "RightNormalBackwardOutsideGlide",
+          "start": 35.054,
+          "end": 35.854,
+          "shortName": "RBO"
+        },
+        {
+          "type": "LeftCrossedBackwardInsideGlide",
+          "start": 36.771,
+          "end": 37.571,
+          "shortName": "LBI"
+        },
+        {
+          "type": "RightNormalBackwardOutsideGlide",
+          "start": 38.522,
+          "end": 39.322,
+          "shortName": ""
+        },
+        {
+          "type": "RightBackwardOutsideThreeTurn",
+          "start": 43.77,
+          "end": 44.57,
+          "shortName": "RBO3"
+        },
+        {
+          "type": "RightForwardInsideThreeTurn",
+          "start": 48.212,
+          "end": 49.012,
+          "shortName": "RFI3"
+        },
+        {
+          "type": "LeftNormalBackwardOutsideGlide",
+          "start": 53.224,
+          "end": 54.024,
+          "shortName": "LBO"
+        },
+        {
+          "type": "RightCrossedBackwardInsideGlide",
+          "start": 54.983,
+          "end": 55.783,
+          "shortName": "RBI"
+        },
+        {
+          "type": "LeftNormalBackwardOutsideGlide",
+          "start": 56.78,
+          "end": 57.58,
+          "shortName": ""
+        },
+        {
+          "type": "LeftBackwardOutsideThreeTurn",
+          "start": 61.59,
+          "end": 62.39,
+          "shortName": "LBO3"
+        },
+        {
+          "type": "LeftForwardInsideThreeTurn",
+          "start": 65.739,
+          "end": 66.539,
+          "shortName": "LFI3"
+        },
+        {
+          "type": "RightNormalBackwardOutsideGlide",
+          "start": 70.22,
+          "end": 71.02,
+          "shortName": "RBO"
+        },
+        {
+          "type": "LeftCrossedBackwardInsideGlide",
+          "start": 72.171,
+          "end": 72.971,
+          "shortName": "LBI"
+        },
+        {
+          "type": "RightNormalBackwardOutsideGlide",
+          "start": 73.996,
+          "end": 74.796,
+          "shortName": ""
+        },
+        {
+          "type": "RightBackwardOutsideThreeTurn",
+          "start": 78.501,
+          "end": 79.301,
+          "shortName": "RBO3"
+        },
+        {
+          "type": "RightForwardInsideThreeTurn",
+          "start": 82.359,
+          "end": 83.159,
+          "shortName": "RFI3"
+        }
+      ],
+      "annotations": []
+    },
+    {
+      "name": "Inside",
+      "traceColorL": "#3030d2",
+      "traceColorR": "#9c0000",
+      "path": {
+        "curves": [
+          {
+            "points": [
+              7.888,
+              -28.015,
+              15.074,
+              -28.081,
+              15.067,
+              -16.998,
+              7.818,
+              -16.891
+            ]
+          },
+          {
+            "points": [
+              7.818,
+              -16.891,
+              0.568,
+              -16.784,
+              0.386,
+              -5.786,
+              7.726,
+              -5.72
+            ]
+          },
+          {
+            "points": [
+              7.726,
+              -5.72,
+              15.065,
+              -5.654,
+              15.065,
+              5.451,
+              7.632,
+              5.451
+            ]
+          },
+          {
+            "points": [
+              7.632,
+              5.451,
+              0.199,
+              5.451,
+              -0.037,
+              16.855,
+              7.487,
+              16.883
+            ]
+          },
+          {
+            "points": [
+              7.487,
+              16.883,
+              15.011,
+              16.912,
+              15.13,
+              27.858,
+              7.422,
+              27.989
+            ]
+          }
+        ]
+      },
+      "keyframes": {
+        "footL": [],
+        "footR": [],
+        "hips": [],
+        "time": [
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 0,
+            "data": {
+              "type": "time",
+              "value": 20
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 88.312,
+            "data": {
+              "type": "time",
+              "value": 40
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          }
+        ]
+      },
+      "elements": [
+        {
+          "type": "LeftBackwardInsideThreeTurn",
+          "start": 7.955,
+          "end": 8.755,
+          "shortName": "LBI3"
+        },
+        {
+          "type": "LeftForwardOutsideThreeTurn",
+          "start": 12.155,
+          "end": 12.955,
+          "shortName": "LFO3"
+        },
+        {
+          "type": "BothBackwardGlide",
+          "start": 16.217,
+          "end": 17.582,
+          "shortName": "2 FEET"
+        },
+        {
+          "type": "RightCrossedBackwardInsideGlide",
+          "start": 20.714,
+          "end": 21.561,
+          "shortName": ""
+        },
+        {
+          "type": "RightBackwardInsideThreeTurn",
+          "start": 25.718,
+          "end": 26.518,
+          "shortName": "RBI3"
+        },
+        {
+          "type": "RightForwardOutsideThreeTurn",
+          "start": 29.922,
+          "end": 30.722,
+          "shortName": "RFO3"
+        },
+        {
+          "type": "BothBackwardGlide",
+          "start": 33.651,
+          "end": 34.96,
+          "shortName": "2 FEET"
+        },
+        {
+          "type": "LeftCrossedBackwardInsideGlide",
+          "start": 38.247,
+          "end": 39.047,
+          "shortName": ""
+        },
+        {
+          "type": "LeftBackwardInsideThreeTurn",
+          "start": 43.328,
+          "end": 44.128,
+          "shortName": "LBI3"
+        },
+        {
+          "type": "LeftForwardOutsideThreeTurn",
+          "start": 47.466,
+          "end": 48.266,
+          "shortName": "LFO3"
+        },
+        {
+          "type": "BothBackwardGlide",
+          "start": 51.145,
+          "end": 52.589,
+          "shortName": "2 FEET"
+        },
+        {
+          "type": "RightCrossedBackwardInsideGlide",
+          "start": 56.066,
+          "end": 56.866,
+          "shortName": ""
+        },
+        {
+          "type": "RightBackwardInsideThreeTurn",
+          "start": 61.092,
+          "end": 61.892,
+          "shortName": "RBI3"
+        },
+        {
+          "type": "RightForwardOutsideThreeTurn",
+          "start": 65.495,
+          "end": 66.295,
+          "shortName": "RFO3"
+        },
+        {
+          "type": "BothBackwardGlide",
+          "start": 68.946,
+          "end": 70.517,
+          "shortName": "2 FEET"
+        },
+        {
+          "type": "LeftCrossedBackwardInsideGlide",
+          "start": 74.4,
+          "end": 75.2,
+          "shortName": ""
+        },
+        {
+          "type": "LeftBackwardInsideThreeTurn",
+          "start": 78.818,
+          "end": 79.618,
+          "shortName": "LBI3"
+        },
+        {
+          "type": "LeftForwardOutsideThreeTurn",
+          "start": 83.231,
+          "end": 84.031,
+          "shortName": "LFO3"
+        },
+        {
+          "type": "BothBackwardGlide",
+          "start": 18.842,
+          "end": 19.642,
+          "shortName": ""
+        },
+        {
+          "type": "BothBackwardGlide",
+          "start": 36.344,
+          "end": 37.144,
+          "shortName": ""
+        },
+        {
+          "type": "BothBackwardGlide",
+          "start": 53.92,
+          "end": 54.72,
+          "shortName": ""
+        },
+        {
+          "type": "BothBackwardGlide",
+          "start": 72.203,
+          "end": 73.003,
+          "shortName": ""
+        }
+      ],
+      "annotations": []
+    }
+  ]
+}

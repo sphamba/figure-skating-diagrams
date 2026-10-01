@@ -1,0 +1,810 @@
+{
+  "name": "Intermediate 4 – Forward Twizzles",
+  "symmetric": false,
+  "sequences": [
+    {
+      "name": "RFO",
+      "traceColorL": "#3030d2",
+      "traceColorR": "#9c0000",
+      "path": {
+        "curves": [
+          {
+            "points": [
+              -13.348,
+              13.492,
+              -12.345,
+              12.268,
+              -11.578,
+              12.308,
+              -10.818,
+              13.547
+            ]
+          },
+          {
+            "points": [
+              -10.818,
+              13.547,
+              -10.035,
+              14.826,
+              -6.239,
+              14.909,
+              -5.414,
+              13.506
+            ]
+          },
+          {
+            "points": [
+              -5.414,
+              13.506,
+              -4.642,
+              12.194,
+              -3.569,
+              12.28,
+              -2.897,
+              13.465
+            ]
+          },
+          {
+            "points": [
+              -2.897,
+              13.465,
+              -2.196,
+              14.702,
+              1.971,
+              15.032,
+              2.837,
+              13.588
+            ]
+          },
+          {
+            "points": [
+              2.837,
+              13.588,
+              3.597,
+              12.322,
+              4.727,
+              12.454,
+              5.354,
+              13.465
+            ]
+          },
+          {
+            "points": [
+              5.354,
+              13.465,
+              6.097,
+              14.661,
+              10.016,
+              14.744,
+              10.759,
+              13.465
+            ]
+          },
+          {
+            "points": [
+              10.759,
+              13.465,
+              11.484,
+              12.216,
+              12.533,
+              12.351,
+              13.234,
+              13.506
+            ]
+          }
+        ]
+      },
+      "keyframes": {
+        "footL": [],
+        "footR": [],
+        "hips": [],
+        "time": [
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 0,
+            "data": {
+              "type": "time",
+              "value": 0
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 31.137,
+            "data": {
+              "type": "time",
+              "value": 10
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          }
+        ]
+      },
+      "elements": [
+        {
+          "type": "LeftNormalForwardOutsideGlide",
+          "start": 0,
+          "end": 0.39,
+          "shortName": "LFO"
+        },
+        {
+          "type": "RightCrossedForwardOutsideGlide",
+          "start": 2.874,
+          "end": 3.789,
+          "shortName": ""
+        },
+        {
+          "type": "RightForwardOutsideTwizzle1.5",
+          "start": 5.328,
+          "end": 6.964,
+          "shortName": "RFO 1½ Tw"
+        },
+        {
+          "type": "LeftForwardOutsideGlide",
+          "start": 9.872,
+          "end": 10.07,
+          "shortName": "LFO"
+        },
+        {
+          "type": "RightBackwardClosedMohawk",
+          "start": 9.143,
+          "end": 9.872,
+          "shortName": ""
+        },
+        {
+          "type": "RightCrossedForwardOutsideGlide",
+          "start": 12.155,
+          "end": 13.019,
+          "shortName": ""
+        },
+        {
+          "type": "RightForwardOutsideTwizzle1.5",
+          "start": 15.105,
+          "end": 16.684,
+          "shortName": "RFO 1½ Tw"
+        },
+        {
+          "type": "RightBackwardClosedMohawk",
+          "start": 18.691,
+          "end": 19.491,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardOutsideGlide",
+          "start": 19.491,
+          "end": 19.732,
+          "shortName": "LFO"
+        },
+        {
+          "type": "RightCrossedForwardOutsideGlide",
+          "start": 21.654,
+          "end": 22.552,
+          "shortName": ""
+        },
+        {
+          "type": "RightForwardOutsideTwizzle1.5",
+          "start": 24.19,
+          "end": 25.808,
+          "shortName": "RFO 1½ Tw"
+        },
+        {
+          "type": "RightBackwardClosedMohawk",
+          "start": 27.645,
+          "end": 28.445,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardOutsideGlide",
+          "start": 28.445,
+          "end": 28.669,
+          "shortName": "LFO"
+        }
+      ],
+      "annotations": []
+    },
+    {
+      "name": "LFO",
+      "traceColorL": "#3030d2",
+      "traceColorR": "#9c0000",
+      "path": {
+        "curves": [
+          {
+            "points": [
+              13.189,
+              4.354,
+              12.186,
+              3.13,
+              11.419,
+              3.17,
+              10.659,
+              4.409
+            ]
+          },
+          {
+            "points": [
+              10.659,
+              4.409,
+              9.876,
+              5.688,
+              6.08,
+              5.771,
+              5.255,
+              4.368
+            ]
+          },
+          {
+            "points": [
+              5.255,
+              4.368,
+              4.483,
+              3.056,
+              3.41,
+              3.142,
+              2.738,
+              4.327
+            ]
+          },
+          {
+            "points": [
+              2.738,
+              4.327,
+              2.037,
+              5.564,
+              -2.13,
+              5.894,
+              -2.996,
+              4.45
+            ]
+          },
+          {
+            "points": [
+              -2.996,
+              4.45,
+              -3.756,
+              3.184,
+              -4.886,
+              3.316,
+              -5.513,
+              4.327
+            ]
+          },
+          {
+            "points": [
+              -5.513,
+              4.327,
+              -6.256,
+              5.523,
+              -10.175,
+              5.606,
+              -10.918,
+              4.327
+            ]
+          },
+          {
+            "points": [
+              -10.918,
+              4.327,
+              -11.643,
+              3.078,
+              -12.692,
+              3.213,
+              -13.393,
+              4.368
+            ]
+          }
+        ]
+      },
+      "keyframes": {
+        "footL": [],
+        "footR": [],
+        "hips": [],
+        "time": [
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 0,
+            "data": {
+              "type": "time",
+              "value": 10
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 31.137,
+            "data": {
+              "type": "time",
+              "value": 20
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          }
+        ]
+      },
+      "elements": [
+        {
+          "type": "RightNormalForwardOutsideGlide",
+          "start": 0,
+          "end": 0.39,
+          "shortName": "RFO"
+        },
+        {
+          "type": "LeftCrossedForwardOutsideGlide",
+          "start": 2.874,
+          "end": 3.789,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardOutsideTwizzle1.5",
+          "start": 5.328,
+          "end": 6.964,
+          "shortName": "LFO 1½ Tw"
+        },
+        {
+          "type": "RightForwardOutsideGlide",
+          "start": 9.872,
+          "end": 10.07,
+          "shortName": "RFO"
+        },
+        {
+          "type": "LeftBackwardClosedMohawk",
+          "start": 9.143,
+          "end": 9.872,
+          "shortName": ""
+        },
+        {
+          "type": "LeftCrossedForwardOutsideGlide",
+          "start": 12.155,
+          "end": 13.019,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardOutsideTwizzle1.5",
+          "start": 15.105,
+          "end": 16.684,
+          "shortName": "LFO 1½ Tw"
+        },
+        {
+          "type": "LeftBackwardClosedMohawk",
+          "start": 18.691,
+          "end": 19.491,
+          "shortName": ""
+        },
+        {
+          "type": "RightForwardOutsideGlide",
+          "start": 19.491,
+          "end": 19.732,
+          "shortName": "RFO"
+        },
+        {
+          "type": "LeftCrossedForwardOutsideGlide",
+          "start": 21.654,
+          "end": 22.552,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardOutsideTwizzle1.5",
+          "start": 24.19,
+          "end": 25.808,
+          "shortName": "LFO 1½ Tw"
+        },
+        {
+          "type": "LeftBackwardClosedMohawk",
+          "start": 27.645,
+          "end": 28.445,
+          "shortName": ""
+        },
+        {
+          "type": "RightForwardOutsideGlide",
+          "start": 28.445,
+          "end": 28.669,
+          "shortName": "RFO"
+        }
+      ],
+      "annotations": []
+    },
+    {
+      "name": "RFI",
+      "traceColorL": "#3030d2",
+      "traceColorR": "#9c0000",
+      "path": {
+        "curves": [
+          {
+            "points": [
+              -13.358,
+              -4.34,
+              -12.355,
+              -3.116,
+              -11.588,
+              -3.156,
+              -10.828,
+              -4.395
+            ]
+          },
+          {
+            "points": [
+              -10.828,
+              -4.395,
+              -10.045,
+              -5.674,
+              -6.249,
+              -5.757,
+              -5.424,
+              -4.354
+            ]
+          },
+          {
+            "points": [
+              -5.424,
+              -4.354,
+              -4.652,
+              -3.042,
+              -3.579,
+              -3.128,
+              -2.907,
+              -4.313
+            ]
+          },
+          {
+            "points": [
+              -2.907,
+              -4.313,
+              -2.206,
+              -5.55,
+              1.961,
+              -5.88,
+              2.827,
+              -4.436
+            ]
+          },
+          {
+            "points": [
+              2.827,
+              -4.436,
+              3.587,
+              -3.17,
+              4.717,
+              -3.302,
+              5.344,
+              -4.313
+            ]
+          },
+          {
+            "points": [
+              5.344,
+              -4.313,
+              6.087,
+              -5.509,
+              10.006,
+              -5.592,
+              10.749,
+              -4.313
+            ]
+          },
+          {
+            "points": [
+              10.749,
+              -4.313,
+              11.474,
+              -3.064,
+              12.523,
+              -3.199,
+              13.224,
+              -4.354
+            ]
+          }
+        ]
+      },
+      "keyframes": {
+        "footL": [],
+        "footR": [],
+        "hips": [],
+        "time": [
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 0,
+            "data": {
+              "type": "time",
+              "value": 20
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 31.137,
+            "data": {
+              "type": "time",
+              "value": 30
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          }
+        ]
+      },
+      "elements": [
+        {
+          "type": "LeftNormalForwardInsideGlide",
+          "start": 0,
+          "end": 0.39,
+          "shortName": "LFI"
+        },
+        {
+          "type": "RightNormalForwardInsideGlide",
+          "start": 2.874,
+          "end": 3.789,
+          "shortName": ""
+        },
+        {
+          "type": "RightForwardInsideTwizzle1.5",
+          "start": 5.328,
+          "end": 6.964,
+          "shortName": "RFI 1½ Tw"
+        },
+        {
+          "type": "RightNormalForwardInsideGlide",
+          "start": 12.092,
+          "end": 13.019,
+          "shortName": ""
+        },
+        {
+          "type": "RightForwardInsideTwizzle1.5",
+          "start": 15.105,
+          "end": 16.684,
+          "shortName": "RFI 1½ Tw"
+        },
+        {
+          "type": "RightBackwardClosedChoctaw",
+          "start": 18.691,
+          "end": 19.185,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardInsideGlide",
+          "start": 19.597,
+          "end": 19.838,
+          "shortName": "LFI"
+        },
+        {
+          "type": "RightNormalForwardInsideGlide",
+          "start": 21.418,
+          "end": 22.552,
+          "shortName": ""
+        },
+        {
+          "type": "RightForwardInsideTwizzle1.5",
+          "start": 24.19,
+          "end": 25.808,
+          "shortName": "RFI 1½ Tw"
+        },
+        {
+          "type": "RightBackwardClosedChoctaw",
+          "start": 27.645,
+          "end": 28.212,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardInsideGlide",
+          "start": 28.594,
+          "end": 28.818,
+          "shortName": "LFI"
+        },
+        {
+          "type": "RightBackwardClosedChoctaw",
+          "start": 8.858,
+          "end": 9.382,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardInsideGlide",
+          "start": 9.748,
+          "end": 10.029,
+          "shortName": "LFI"
+        }
+      ],
+      "annotations": []
+    },
+    {
+      "name": "LFI",
+      "traceColorL": "#3030d2",
+      "traceColorR": "#9c0000",
+      "path": {
+        "curves": [
+          {
+            "points": [
+              13.227,
+              -13.128,
+              12.224,
+              -11.904,
+              11.457,
+              -11.944,
+              10.697,
+              -13.183
+            ]
+          },
+          {
+            "points": [
+              10.697,
+              -13.183,
+              9.914,
+              -14.462,
+              6.118,
+              -14.545,
+              5.293,
+              -13.142
+            ]
+          },
+          {
+            "points": [
+              5.293,
+              -13.142,
+              4.521,
+              -11.83,
+              3.448,
+              -11.916,
+              2.776,
+              -13.101
+            ]
+          },
+          {
+            "points": [
+              2.776,
+              -13.101,
+              2.075,
+              -14.338,
+              -2.092,
+              -14.668,
+              -2.958,
+              -13.224
+            ]
+          },
+          {
+            "points": [
+              -2.958,
+              -13.224,
+              -3.718,
+              -11.958,
+              -4.848,
+              -12.09,
+              -5.475,
+              -13.101
+            ]
+          },
+          {
+            "points": [
+              -5.475,
+              -13.101,
+              -6.218,
+              -14.297,
+              -10.137,
+              -14.38,
+              -10.88,
+              -13.101
+            ]
+          },
+          {
+            "points": [
+              -10.88,
+              -13.101,
+              -11.605,
+              -11.852,
+              -12.654,
+              -11.987,
+              -13.355,
+              -13.142
+            ]
+          }
+        ]
+      },
+      "keyframes": {
+        "footL": [],
+        "footR": [],
+        "hips": [],
+        "time": [
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 0,
+            "data": {
+              "type": "time",
+              "value": 30
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 31.137,
+            "data": {
+              "type": "time",
+              "value": 40
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          }
+        ]
+      },
+      "elements": [
+        {
+          "type": "RightNormalForwardInsideGlide",
+          "start": 0,
+          "end": 0.39,
+          "shortName": "RFI"
+        },
+        {
+          "type": "LeftNormalForwardInsideGlide",
+          "start": 2.874,
+          "end": 3.789,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardInsideTwizzle1.5",
+          "start": 5.328,
+          "end": 6.964,
+          "shortName": "LFI 1½ Tw"
+        },
+        {
+          "type": "LeftNormalForwardInsideGlide",
+          "start": 12.092,
+          "end": 13.019,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardInsideTwizzle1.5",
+          "start": 15.105,
+          "end": 16.684,
+          "shortName": "LFI 1½ Tw"
+        },
+        {
+          "type": "LeftBackwardClosedChoctaw",
+          "start": 18.691,
+          "end": 19.185,
+          "shortName": ""
+        },
+        {
+          "type": "RightForwardInsideGlide",
+          "start": 19.597,
+          "end": 19.838,
+          "shortName": "RFI"
+        },
+        {
+          "type": "LeftNormalForwardInsideGlide",
+          "start": 21.418,
+          "end": 22.552,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardInsideTwizzle1.5",
+          "start": 24.19,
+          "end": 25.808,
+          "shortName": "LFI 1½ Tw"
+        },
+        {
+          "type": "LeftBackwardClosedChoctaw",
+          "start": 27.645,
+          "end": 28.212,
+          "shortName": ""
+        },
+        {
+          "type": "RightForwardInsideGlide",
+          "start": 28.594,
+          "end": 28.818,
+          "shortName": "RFI"
+        },
+        {
+          "type": "LeftBackwardClosedChoctaw",
+          "start": 8.858,
+          "end": 9.382,
+          "shortName": ""
+        },
+        {
+          "type": "RightForwardInsideGlide",
+          "start": 9.748,
+          "end": 10.029,
+          "shortName": "RFI"
+        }
+      ],
+      "annotations": []
+    }
+  ]
+}
