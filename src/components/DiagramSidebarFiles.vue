@@ -7,6 +7,7 @@ import { useConfirm } from "openvue/useconfirm";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import DiagramTree, { type DiagramTreeSource } from "@/components/DiagramTree.vue";
+import { decodeJsonFile, encodeJsonFile, gzipFileName } from "@/utils/jsonGzip";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import type { PatternJSON } from "@/engine/pattern";
 import type { DiagramJSON } from "@/engine/diagram";
@@ -83,7 +84,7 @@ async function onFileSelected(event: Event) {
   if (!file) return;
   loadFailed.value = false;
   try {
-    const json = JSON.parse(await file.text()) as PatternJSON | DiagramJSON | SequenceJSON;
+    const json = (await decodeJsonFile(await file.arrayBuffer())) as PatternJSON | DiagramJSON | SequenceJSON;
     emit("load-start");
     store.setSaveFilename(file.name);
     loadIntoStore(json);
@@ -101,7 +102,7 @@ async function loadDiagramSource({ path }: DiagramTreeSource) {
   try {
     const response = await fetch(`${import.meta.env.BASE_URL}${path}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const json = JSON.parse(await response.text()) as PatternJSON | DiagramJSON | SequenceJSON;
+    const json = (await decodeJsonFile(await response.arrayBuffer())) as PatternJSON | DiagramJSON | SequenceJSON;
     emit("load-start");
     store.setSaveFilename(path.split("/").pop() ?? "");
     loadIntoStore(json);
@@ -132,12 +133,12 @@ function openDiagramSource(source: DiagramTreeSource) {
   });
 }
 
-function downloadFile() {
-  const blob = new Blob([store.toJSON()], { type: "application/json" });
+async function downloadFile() {
+  const blob = await encodeJsonFile(store.toJSON());
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = store.getSaveFilename();
+  anchor.download = gzipFileName(store.getSaveFilename());
   anchor.click();
   URL.revokeObjectURL(url);
   store.markSaved();
@@ -217,7 +218,13 @@ function leaveEditor() {
       <Button :label="$t('files.leaveEditor')" icon="pi pi-arrow-left" class="w-full" @click="leaveEditor" />
     </template>
     <Button v-else :label="$t('files.openInEditor')" icon="pi pi-pencil" class="w-full" @click="openEditor" />
-    <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFileSelected" />
+    <input
+      ref="fileInput"
+      type="file"
+      accept="application/json,.json,.gz,application/gzip"
+      hidden
+      @change="onFileSelected"
+    />
     <ConfirmDialog group="diagram-sidebar-open-file" />
     <ConfirmDialog group="diagram-sidebar-open-tree" />
     <ConfirmDialog group="diagram-sidebar-new" />

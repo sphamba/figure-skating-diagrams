@@ -221,10 +221,9 @@ test("downloading the diagram clears the unsaved mark", async () => {
   const download = wrapper.findAll("button").find((button) => button.text().includes("Download JSON"));
   expect(download, "the download button should mount").not.toBeUndefined();
   await download!.trigger("click");
+  await vi.waitFor(() => expect(click).toHaveBeenCalled());
+  await vi.waitFor(() => expect(store.isUnsaved()).toBe(false));
   await nextTick();
-
-  expect(click).toHaveBeenCalled();
-  expect(store.isUnsaved()).toBe(false);
   const tag = wrapper.find(".diagram-sidebar__unsaved-tag");
   expect(tag.text()).toBe("Saved");
   click.mockRestore();

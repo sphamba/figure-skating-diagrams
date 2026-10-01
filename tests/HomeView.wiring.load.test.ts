@@ -182,11 +182,10 @@ test("the tree loader mounts the player and fills the url", async () => {
   const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
   const store = useSequenceEditorStore();
   await wrapper.find('[data-test="tree-open"]').trigger("click");
+  await vi.waitFor(() => expect(store.getDiagram().videoUrl).toBe("https://example.com/video.mp4"));
   await nextTick();
   await nextTick();
   await nextTick();
-
-  expect(store.getDiagram().videoUrl, "the store must keep the url").toBe("https://example.com/video.mp4");
   expect(store.getDiagram().bpm).toBe(110);
   const video = document.querySelector("video");
   expect(video, "the player should mount after load").not.toBeNull();
@@ -199,9 +198,7 @@ test("the tree loader mounts the player and fills the url", async () => {
 test("a failed tree load clears the select and shows an error", async () => {
   const wrapper = await mountHomeView("diagrams/bad-file.json", false, videoFile);
   await wrapper.find('[data-test="tree-open"]').trigger("click");
-  await nextTick();
-  await nextTick();
-  await nextTick();
+  await vi.waitFor(() => expect(document.querySelector(".diagram-sidebar__load-error")).not.toBeNull());
   const small = document.querySelector(".diagram-sidebar__load-error");
   expect(small !== null).toBe(true);
   wrapper.unmount();
@@ -211,9 +208,7 @@ test("a failed tree load clears the select and shows an error", async () => {
 test("loading the video snaps the timestamp to the earliest time keyframe", async () => {
   const wrapper = await mountHomeView("diagrams/test-video.json", true, timedVideoFile);
   await wrapper.find('[data-test="tree-open"]').trigger("click");
-  await nextTick();
-  await nextTick();
-  await nextTick();
+  await vi.waitFor(() => expect(document.querySelector("video")).not.toBeNull());
   const video = document.querySelector("video");
   expect(video, "the player should mount after load").not.toBeNull();
   video!.dispatchEvent(new Event("loadeddata"));
@@ -226,9 +221,7 @@ test("loading the video snaps the timestamp to the earliest time keyframe", asyn
 test("loading the video without time keyframes keeps the timestamp", async () => {
   const wrapper = await mountHomeView("diagrams/test-video.json", true, videoFile);
   await wrapper.find('[data-test="tree-open"]').trigger("click");
-  await nextTick();
-  await nextTick();
-  await nextTick();
+  await vi.waitFor(() => expect(document.querySelector("video")).not.toBeNull());
   const video = document.querySelector("video");
   expect(video, "the player should mount after load").not.toBeNull();
   video!.dispatchEvent(new Event("loadeddata"));
@@ -259,8 +252,7 @@ test("loading a diagram with a video re-creates the editor on the new canvas", a
   expect(recorder.constructorArgs).toHaveLength(1);
 
   await wrapper.find('[data-test="tree-open"]').trigger("click");
-  await nextTick();
-  await nextTick();
+  await vi.waitFor(() => expect(recorder.destroyed).toBeGreaterThanOrEqual(1));
   await nextTick();
 
   expect(recorder.destroyed).toBeGreaterThanOrEqual(1);
