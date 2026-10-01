@@ -1,4 +1,5 @@
 import type { CanvasRenderingContext2DSized } from "./rinkCanvas.js";
+import { roundVector2 } from "./round.js";
 import { Vector } from "./vector.js";
 
 export type Curvilinear = number & { readonly __tag: unique symbol };
@@ -14,18 +15,53 @@ const ds = 0.001 as Curvilinear; // fine curvilinear step for arc-length samplin
 const ARC_LENGTH_SAMPLES = 128; // integration steps per curve for the arc-length lookup
 
 export class Curve {
-  p0: Vector<2>;
-  p1: Vector<2>;
-  p2: Vector<2>;
-  p3: Vector<2>;
+  // The setters round, so every stored control point carries at most 3 decimal
+  // places. roundVector2 keeps the same object for already rounded vectors, so
+  // assigning a shared joint through a setter never breaks its identity.
+  private _p0: Vector<2>;
+  private _p1: Vector<2>;
+  private _p2: Vector<2>;
+  private _p3: Vector<2>;
   uniformCoordinates: number[];
   length: number;
 
+  get p0(): Vector<2> {
+    return this._p0;
+  }
+
+  set p0(value: Vector<2>) {
+    this._p0 = roundVector2(value);
+  }
+
+  get p1(): Vector<2> {
+    return this._p1;
+  }
+
+  set p1(value: Vector<2>) {
+    this._p1 = roundVector2(value);
+  }
+
+  get p2(): Vector<2> {
+    return this._p2;
+  }
+
+  set p2(value: Vector<2>) {
+    this._p2 = roundVector2(value);
+  }
+
+  get p3(): Vector<2> {
+    return this._p3;
+  }
+
+  set p3(value: Vector<2>) {
+    this._p3 = roundVector2(value);
+  }
+
   constructor(p0: Vector<2>, p1: Vector<2>, p2: Vector<2>, p3: Vector<2>) {
-    this.p0 = p0;
-    this.p1 = p1;
-    this.p2 = p2;
-    this.p3 = p3;
+    this._p0 = roundVector2(p0);
+    this._p1 = roundVector2(p1);
+    this._p2 = roundVector2(p2);
+    this._p3 = roundVector2(p3);
 
     this.uniformCoordinates = [];
     this.length = 0;

@@ -206,7 +206,9 @@ test("foot trace culling skips curves outside the viewport", () => {
   expect(culled.strokes.length).toBeLessThan(full.strokes.length);
   for (const line of [...culled.lines]) {
     expect(Math.max(line.x1, line.x2)).toBeLessThanOrEqual(1);
-    expect(Math.max(line.x1, line.x2)).toBeLessThanOrEqual(0.7 + 0.25 + 0.03);
+    // Rounded keyframe positions shift the contact points, so a boundary line
+    // may poke one rounding unit past the culling margin.
+    expect(Math.max(line.x1, line.x2)).toBeLessThanOrEqual(0.7 + 0.25 + 0.03 + 1e-6);
   }
 });
 

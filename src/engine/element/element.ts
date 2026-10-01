@@ -1,9 +1,26 @@
 import type { PathCoordinate } from "../coordinates.js";
 import type { FootKeyframe, HipsKeyframe } from "../keyframe.js";
+import { round3 } from "../round.js";
 
 export abstract class Element {
-  start: PathCoordinate;
-  end: PathCoordinate;
+  private _start: PathCoordinate;
+  private _end: PathCoordinate;
+
+  get start(): PathCoordinate {
+    return this._start;
+  }
+
+  set start(value: PathCoordinate) {
+    this._start = round3(value) as PathCoordinate;
+  }
+
+  get end(): PathCoordinate {
+    return this._end;
+  }
+
+  set end(value: PathCoordinate) {
+    this._end = round3(value) as PathCoordinate;
+  }
 
   abstract get type(): string;
 
@@ -16,8 +33,8 @@ export abstract class Element {
   }
 
   constructor(start: PathCoordinate, end: PathCoordinate) {
-    this.start = start;
-    this.end = end;
+    this._start = round3(start) as PathCoordinate;
+    this._end = round3(end) as PathCoordinate;
     // TS rejects abstract access through `this` in its own body, hence the cast.
     this.shortName = (this as { defaultShortName: string }).defaultShortName;
   }

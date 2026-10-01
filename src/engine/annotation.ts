@@ -1,4 +1,5 @@
 import type { PathCoordinate } from "./coordinates.js";
+import { round3 } from "./round.js";
 
 export const DEFAULT_ANNOTATION_COLOR = "#ffff00";
 
@@ -11,11 +12,27 @@ export interface AnnotationJSON {
 }
 
 export class Annotation {
-  start: PathCoordinate;
-  end: PathCoordinate;
+  private _start: PathCoordinate;
+  private _end: PathCoordinate;
   title: string;
   description: string;
   color: string;
+
+  get start(): PathCoordinate {
+    return this._start;
+  }
+
+  set start(value: PathCoordinate) {
+    this._start = round3(value) as PathCoordinate;
+  }
+
+  get end(): PathCoordinate {
+    return this._end;
+  }
+
+  set end(value: PathCoordinate) {
+    this._end = round3(value) as PathCoordinate;
+  }
 
   constructor(
     start: PathCoordinate,
@@ -24,8 +41,8 @@ export class Annotation {
     description: string = "",
     color: string = DEFAULT_ANNOTATION_COLOR,
   ) {
-    this.start = start;
-    this.end = end;
+    this._start = round3(start) as PathCoordinate;
+    this._end = round3(end) as PathCoordinate;
     this.title = title;
     this.description = description;
     this.color = color;

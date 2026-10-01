@@ -1353,7 +1353,12 @@ export function hasTimeEvolution(sequence: Sequence): boolean {
 
 export function sequenceTimeRange(sequence: Sequence, bpm: number = DEFAULT_BPM): [Time, Time] | null {
   if (sequence.path.curves.length === 0) return null;
-  const start = sequence.getTimeFromPathCoordinate(0 as PathCoordinate, bpm);
-  const end = sequence.getTimeFromPathCoordinate(sequence.path.length as PathCoordinate, bpm);
+  // The path ends hold the first and last keyframe times exactly: mapping the
+  // derived path length through the interpolation would sit a rounding step
+  // short of the end keyframe, whose coordinate rounds past the path end.
+  const resolved = sequence.resolveTimes(bpm);
+  if (resolved.length === 0) return null;
+  const start = resolved[0]!.time as Time;
+  const end = resolved[resolved.length - 1]!.time as Time;
   return [start < end ? start : end, start < end ? end : start];
 }

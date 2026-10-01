@@ -123,7 +123,11 @@ test("the loop window ranges the traces with or without the time range limit", (
   // The armed span stays whole: no four-second intersection while arming.
   editor.loopTimeBounds = () => null;
   editor.loopDrawWindow = () => [-5, 20];
-  expect(window()).toEqual([0, 10]);
+  // The time keyframe at the path end rounds, so the end time sits one
+  // integration step short of 10.
+  const armed = window();
+  expect(armed?.[0]).toBe(0);
+  expect(armed?.[1]).toBeCloseTo(10, 6);
   // The armed range collapses onto the cursor before point B exists.
   editor.loopDrawWindow = () => [5, 5];
   expect(window()).toEqual([5, 5]);

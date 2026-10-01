@@ -10,6 +10,7 @@ import type { Path } from "../path.js";
 import { LENGTH, WIDTH, CORNER_RADIUS } from "../rink.js";
 import type { CanvasRenderingContext2DSized } from "../rinkCanvas.js";
 import { canvasFontReady } from "../font.js";
+import { round3 } from "../round.js";
 import { createDefaultFootTurn, isJumpType } from "../element/turnTypes.js";
 import { OneFootTurn } from "../element/oneFootTurn.js";
 import { Choctaw } from "../element/choctaw.js";
@@ -4123,8 +4124,8 @@ export class Editor {
 
         const world = this.screenToWorld(screenX, screenY);
         const delta = world.minus(point);
-        point.x = world.x;
-        point.y = world.y;
+        point.x = round3(world.x);
+        point.y = round3(world.y);
         this.alignNeighbors(sequence, curveIndex, pointKey, delta);
         sequence.path.updateLength();
         // Move the points selected on the other sequences by the same movement so a
@@ -4180,8 +4181,8 @@ export class Editor {
       if (point) moved.add(point);
     }
     for (const point of moved) {
-      point.x += delta.x;
-      point.y += delta.y;
+      point.x = round3(point.x + delta.x);
+      point.y = round3(point.y + delta.y);
     }
 
     sequence.path.updateLength();
@@ -4206,8 +4207,8 @@ export class Editor {
       }
 
       for (const point of moved) {
-        point.x += delta.x;
-        point.y += delta.y;
+        point.x = round3(point.x + delta.x);
+        point.y = round3(point.y + delta.y);
       }
 
       sequence.path.updateLength();

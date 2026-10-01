@@ -127,7 +127,7 @@ test("The on-ice foot keyframes stay evenly spaced over the span", () => {
   const step = (0.75 - 0.25) / 8;
 
   for (let i = 0; i < 9; i++) {
-    expect(keyframes[i]!.coordinate).toBeCloseTo(0.25 + step * i, 10);
+    expect(keyframes[i]!.coordinate).toBeCloseTo(0.25 + step * i, 2);
   }
 });
 

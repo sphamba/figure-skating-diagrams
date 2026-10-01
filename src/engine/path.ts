@@ -1,5 +1,6 @@
 import { Curve, type AxisRect, type Curvilinear } from "./curve.js";
 import type { PathCoordinate } from "./coordinates.js";
+import { roundVector2 } from "./round.js";
 import type { CanvasRenderingContext2DSized } from "./rinkCanvas.js";
 import { Vector } from "./vector.js";
 
@@ -49,19 +50,23 @@ export class Path {
       throw new Error("Path has no curve.");
     }
 
-    if (u < 0 || u > this.length) {
+    // The length is a numerical estimate, and a rounded coordinate can sit up
+    // to one rounding unit past it, so near-range values clamp, not throw.
+    const tolerance = 0.001;
+    if (u < -tolerance || u > this.length + tolerance) {
       throw new RangeError("Uniform coordinate out of range.");
     }
+    const uu = Math.min(Math.max(u, 0), this.length) as PathCoordinate;
 
     let cumulatedLength = 0;
     let curve = this.curves[0]!;
     for (curve of this.curves) {
-      if (u - cumulatedLength < curve.length) break;
+      if (uu - cumulatedLength < curve.length) break;
       if (curve == this.curves[this.curves.length - 1]) break;
       cumulatedLength += curve.length;
     }
 
-    const uniformCoordinate = u - cumulatedLength;
+    const uniformCoordinate = uu - cumulatedLength;
     const curvilinearCoordinate = curve.getCurvilinearCoordFromUniform(uniformCoordinate);
 
     return [curve, curvilinearCoordinate];
@@ -318,7 +323,9 @@ export class Path {
     const transformed = new Map<Vector<2>, Vector<2>>();
     for (const curve of this.curves) {
       for (const point of [curve.p0, curve.p1, curve.p2, curve.p3]) {
-        if (!transformed.has(point)) transformed.set(point, transform(point));
+        // Rounded before the map insert, so curves sharing a joint map to one
+        // rounded object and the Curve setter keeps their identity.
+        if (!transformed.has(point)) transformed.set(point, roundVector2(transform(point)));
       }
     }
     for (const curve of this.curves) {

@@ -90,15 +90,15 @@ test("toe-pick mark crosses account for the foot position and orientation", () =
   const dx = markSize / 2 / Math.SQRT2;
   // Canvas y is the negated world y. The first stroke runs from canvas (worldX - dx, -(worldY - dx))
   // to (worldX + dx, -(worldY + dx)), the second one crosses it the other way.
-  expect(diagonalDown[0]!.x).toBeCloseTo(worldX - dx, 10);
-  expect(diagonalDown[0]!.y).toBeCloseTo(-worldY + dx, 10);
-  expect(diagonalDown[1]!.x).toBeCloseTo(worldX + dx, 10);
-  expect(diagonalDown[1]!.y).toBeCloseTo(-worldY - dx, 10);
+  expect(diagonalDown[0]!.x).toBeCloseTo(worldX - dx, 5);
+  expect(diagonalDown[0]!.y).toBeCloseTo(-worldY + dx, 5);
+  expect(diagonalDown[1]!.x).toBeCloseTo(worldX + dx, 5);
+  expect(diagonalDown[1]!.y).toBeCloseTo(-worldY - dx, 5);
 
-  expect(diagonalUp[0]!.x).toBeCloseTo(worldX - dx, 10);
-  expect(diagonalUp[0]!.y).toBeCloseTo(-worldY - dx, 10);
-  expect(diagonalUp[1]!.x).toBeCloseTo(worldX + dx, 10);
-  expect(diagonalUp[1]!.y).toBeCloseTo(-worldY + dx, 10);
+  expect(diagonalUp[0]!.x).toBeCloseTo(worldX - dx, 5);
+  expect(diagonalUp[0]!.y).toBeCloseTo(-worldY - dx, 5);
+  expect(diagonalUp[1]!.x).toBeCloseTo(worldX + dx, 5);
+  expect(diagonalUp[1]!.y).toBeCloseTo(-worldY + dx, 5);
 });
 
 test("cross size keeps the minimum mark size and freezes with the blade scaling", () => {
@@ -175,6 +175,6 @@ test("a partial position of a toe-pick keyframe completes from the interpolated 
   const [a, b] = marks[0] as unknown as [{ x: number; y: number }, { x: number; y: number }];
   const center = { x: (a.x + b.x) / 2, y: -((a.y + b.y) / 2) };
   const relativeX = (1 - 0.5) * bladeLength;
-  expect(center.x).toBeCloseTo((1 as number) - relativeX, 10);
-  expect(center.y).toBeCloseTo(-1, 10);
+  expect(center.x).toBeCloseTo((1 as number) - relativeX, 5);
+  expect(center.y).toBeCloseTo(-1, 5);
 });

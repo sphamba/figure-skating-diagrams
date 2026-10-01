@@ -306,7 +306,7 @@ test("several spins draw one circle per revolution, spanning the element from st
   for (let i = 0; i < 3; i++) {
     const circle = circles[i]!;
     expect(circle.r).toBeCloseTo(radius, 10);
-    expect(circle.x).toBeCloseTo(expectedX[i]!, 10);
+    expect(circle.x).toBeCloseTo(expectedX[i]!, 5);
     expect(circle.y).toBeCloseTo(-radius, 10);
   }
 });
@@ -325,7 +325,7 @@ test("a negative spins count draws abs(spins) circles", () => {
   for (let i = 0; i < 2; i++) {
     const circle = circles[i]!;
     expect(circle.r).toBeCloseTo(radius, 10);
-    expect(circle.x).toBeCloseTo(expectedX[i]!, 10);
+    expect(circle.x).toBeCloseTo(expectedX[i]!, 5);
     expect(circle.y).toBeCloseTo(-radius, 10);
   }
 });
@@ -346,7 +346,7 @@ test("a spin element with three revolutions draws three circles spanning the ele
   for (let i = 0; i < 3; i++) {
     const circle = circles[i]!;
     expect(circle.r).toBeCloseTo(radius, 10);
-    expect(circle.x).toBeCloseTo(expectedX[i]!, 10);
+    expect(circle.x).toBeCloseTo(expectedX[i]!, 5);
     expect(circle.y).toBeCloseTo(-radius, 10);
   }
 });

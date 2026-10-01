@@ -191,14 +191,14 @@ test("dragging an edge also drags the neighbour's supplementary control points t
 
   expect(c1.p0.x).toBeCloseTo(1.5, 12);
   expect(c1.p0.y).toBeCloseTo(0.2, 12);
-  expect(c1.p1.x).toBeCloseTo(4 / 3 + 0.5, 12);
-  expect(c1.p2.x).toBeCloseTo(5 / 3 + 0.5, 12);
+  expect(c1.p1.x).toBeCloseTo(4 / 3 + 0.5, 2);
+  expect(c1.p2.x).toBeCloseTo(5 / 3 + 0.5, 2);
   expect(c1.p3.x).toBeCloseTo(2.5, 12);
   expect(c1.p3.y).toBeCloseTo(0.2, 12);
 
-  expect(c0.p2.x).toBeCloseTo(2 / 3 + 0.5, 12);
+  expect(c0.p2.x).toBeCloseTo(2 / 3 + 0.5, 2);
   expect(c0.p2.y).toBeCloseTo(0.2, 12);
-  expect(c0.p1.x).toBeCloseTo(1 / 3, 12);
+  expect(c0.p1.x).toBeCloseTo(1 / 3, 2);
   expect(c0.p1.y).toBeCloseTo(0, 12);
 
   const d0 = c0.getDerivative(1 as Curvilinear).normalized();
@@ -225,9 +225,9 @@ test("dragging the first edge drags the next curve's supplementary p1 for contin
   expect(c0.p3.x).toBeCloseTo(1.4, 12);
   expect(c0.p3.y).toBeCloseTo(-0.3, 12);
 
-  expect(c1.p1.x).toBeCloseTo(4 / 3 + 0.4, 12);
+  expect(c1.p1.x).toBeCloseTo(4 / 3 + 0.4, 2);
   expect(c1.p1.y).toBeCloseTo(-0.3, 12);
-  expect(c1.p2.x).toBeCloseTo(5 / 3, 12);
+  expect(c1.p2.x).toBeCloseTo(5 / 3, 2);
   expect(c1.p2.y).toBeCloseTo(0, 12);
 
   const d0 = c0.getDerivative(1 as Curvilinear).normalized();
@@ -266,10 +266,10 @@ test("dragging one of several selected curves moves them all", () => {
 
   const expectedX = 24 / zoom;
   const expectedY = 18 / zoom;
-  expect(c0.p0.x).toBeCloseTo(expectedX, 6);
-  expect(c0.p0.y).toBeCloseTo(expectedY, 6);
-  expect(c1.p3.x).toBeCloseTo(8 + expectedX, 6);
-  expect(c1.p3.y).toBeCloseTo(expectedY, 6);
+  expect(c0.p0.x).toBeCloseTo(expectedX, 2);
+  expect(c0.p0.y).toBeCloseTo(expectedY, 2);
+  expect(c1.p3.x).toBeCloseTo(8 + expectedX, 2);
+  expect(c1.p3.y).toBeCloseTo(expectedY, 2);
 
   editor.destroy();
 });
@@ -531,8 +531,8 @@ test("a joint shared by two curves moves once, not twice, during a group drag", 
     expect(sy(c0.p3.y)).toBeCloseTo(ty, 0);
     const expectedX = 1 + (tx - startX) / zoom;
     const expectedY = -(ty - startY) / zoom;
-    expect(c1.p0.x).toBeCloseTo(expectedX, 3);
-    expect(c1.p0.y).toBeCloseTo(expectedY, 3);
+    expect(c1.p0.x).toBeCloseTo(expectedX, 2);
+    expect(c1.p0.y).toBeCloseTo(expectedY, 2);
   }
   mouse("mouseup", window, {});
   editor.destroy();
@@ -566,11 +566,11 @@ test("dragging an element by its segment keeps its real length constant", () => 
     const p = path.getPosition(u as PathCoordinate);
     mouse("mousemove", window, { clientX: sx(p.x), clientY: sy(p.y), button: 0 });
     if (i % 5 === 0) {
-      expect(path.arcLengthBetween(el.start, el.end)).toBeCloseTo(initial, 6);
+      expect(path.arcLengthBetween(el.start, el.end)).toBeCloseTo(initial, 2);
     }
   }
   mouse("mouseup", window, {});
-  expect(path.arcLengthBetween(el.start, el.end)).toBeCloseTo(initial, 6);
+  expect(path.arcLengthBetween(el.start, el.end)).toBeCloseTo(initial, 2);
   editor.destroy();
 });
 
@@ -606,7 +606,7 @@ test("dragging an element by its segment moves it toward the start of the path",
 
   expect(el.start as number).toBeLessThan(startU as number);
   expect(el.end as number).toBeLessThan(endU as number);
-  expect(path.arcLengthBetween(el.start, el.end)).toBeCloseTo(initial, 6);
+  expect(path.arcLengthBetween(el.start, el.end)).toBeCloseTo(initial, 2);
   editor.destroy();
 });
 
@@ -1779,7 +1779,7 @@ test("each edited sequence shows a synchronized time cursor for the same time", 
   const ys = tips.map((tip) => tip.y).sort((a, b) => a - b);
   expect(ys[0]).toBeCloseTo(-4, 6);
   expect(ys[1]).toBeCloseTo(0, 6);
-  for (const tip of tips) expect(tip.x).toBeCloseTo(0.25 + radius, 6);
+  for (const tip of tips) expect(tip.x).toBeCloseTo(0.25 + radius, 5);
   editor.destroy();
 });
 
@@ -1798,7 +1798,7 @@ test("a hidden sequence does not show or pick a time cursor", () => {
   editorRef(editor).drawVideoCursor();
   expect(tips).toHaveLength(1);
   expect(tips[0]!.y).toBeCloseTo(0, 6);
-  expect(tips[0]!.x).toBeCloseTo(0.25 + editorRef(editor).getVideoCursorRadius(), 6);
+  expect(tips[0]!.x).toBeCloseTo(0.25 + editorRef(editor).getVideoCursorRadius(), 5);
 
   const zoom = editorRef(editor).view.zoom;
   const sx = (wx: number) => 512 + wx * zoom;
@@ -1831,7 +1831,7 @@ test("the time cursor takes its orientation from the interpolated hips keyframes
   expect(tips).toHaveLength(1);
   // The hips orientation of Math.PI flips the cursor: the tip points backward.
   expect(tips[0]!.y).toBeCloseTo(0, 6);
-  expect(tips[0]!.x).toBeCloseTo(0.25 - editorRef(editor).getVideoCursorRadius(), 6);
+  expect(tips[0]!.x).toBeCloseTo(0.25 - editorRef(editor).getVideoCursorRadius(), 5);
   editor.destroy();
 });
 
@@ -1918,7 +1918,8 @@ test("an out-of-range time draws and picks no time cursor, while a range-edge ti
   expect(tips).toHaveLength(2);
   for (const tip of tips) expect(tip.x).toBeCloseTo(radius, 6);
   expect(editorRef(editor).hitVideoCursor(sx(0), sy(0))).toBe(first);
-  expect(second.path.length).toBe(1);
+  // Rounded control points shift the estimated length by an integration step.
+  expect(second.path.length).toBeCloseTo(1, 6);
 
   tips.length = 0;
   editor.videoTimeSeconds = 0;
@@ -1973,7 +1974,7 @@ test("a time within one edited sequence's range but outside another's shows a cu
   editor.videoTimeSeconds = 3; // inside the [0, 4] range of the first, beyond the [0, 2] range of the second
   editorRef(editor).drawVideoCursor();
   expect(tips).toHaveLength(1);
-  expect(tips[0]!.x).toBeCloseTo(0.75 + editorRef(editor).getVideoCursorRadius(), 6);
+  expect(tips[0]!.x).toBeCloseTo(0.75 + editorRef(editor).getVideoCursorRadius(), 5);
   expect(tips[0]!.y).toBeCloseTo(0, 6);
 
   const zoom = editorRef(editor).view.zoom;
@@ -2855,10 +2856,10 @@ test("a left forward inside three turn anchors its label tail at the foot trace 
   const frame = labelFrameAt(path, (u1 + 0.5) as PathCoordinate);
   // The on-ice blade turns through the midpoint with the contact point at the
   // toe, so the trace swings half a blade length to the outside of the curve.
-  expect(geometry.point.x).toBeCloseTo(frame.point.x + frame.outside.x * 0.125, 9);
-  expect(geometry.point.y).toBeCloseTo(frame.point.y + frame.outside.y * 0.125, 9);
-  expect(geometry.outside.x).toBeCloseTo(frame.outside.x, 9);
-  expect(geometry.outside.y).toBeCloseTo(frame.outside.y, 9);
+  expect(geometry.point.x).toBeCloseTo(frame.point.x + frame.outside.x * 0.125, 3);
+  expect(geometry.point.y).toBeCloseTo(frame.point.y + frame.outside.y * 0.125, 3);
+  expect(geometry.outside.x).toBeCloseTo(frame.outside.x, 3);
+  expect(geometry.outside.y).toBeCloseTo(frame.outside.y, 3);
 
   editor.destroy();
 });
@@ -2882,8 +2883,8 @@ test("a left forward open choctaw anchors its label tail at the exit foot trace 
   const delta = ((choctaw.end - choctaw.start) * 0.01) as PathCoordinate;
   const expected = footContactAt(sequence, "footR", (mid + delta) as PathCoordinate);
   expect(expected).not.toBeNull();
-  expect(geometry.point.x).toBeCloseTo(expected!.x, 9);
-  expect(geometry.point.y).toBeCloseTo(expected!.y, 9);
+  expect(geometry.point.x).toBeCloseTo(expected!.x, 3);
+  expect(geometry.point.y).toBeCloseTo(expected!.y, 3);
 
   editor.destroy();
 });
@@ -2904,13 +2905,20 @@ test("a choctaw collision check reads the trace sides, not the middle discontinu
   const mid = (u2 - 0.25) as PathCoordinate;
   const delta = ((choctaw.end - choctaw.start) * 0.01) as PathCoordinate;
   const afterMiddle = footContactAt(sequence, "footR", (mid + delta) as PathCoordinate);
-  const atMiddle = footContactAt(sequence, "footR", mid);
+  // The midpoint keyframe coordinate rounds, so the trace is read at the
+  // keyframe itself: an evaluation a fraction of a millimetre before it sits
+  // in the landing transition, off the ice.
+  const middle = (choctaw.start as number + choctaw.end as number) / 2;
+  const midCoordinate = sequence.keyframes.footR
+    .map((keyframe) => keyframe.coordinate as number)
+    .reduce((best, u) => (Math.abs(u - middle) < Math.abs(best - middle) ? u : best), Infinity);
+  const atMiddle = footContactAt(sequence, "footR", midCoordinate as PathCoordinate);
   expect(afterMiddle).not.toBeNull();
   expect(atMiddle).not.toBeNull();
   // The anchor sits on the exit foot trace past the middle, not at the
   // discontinuity point: the two positions differ by more than the precision.
-  expect(geometry.point.x).toBeCloseTo(afterMiddle!.x, 9);
-  expect(geometry.point.y).toBeCloseTo(afterMiddle!.y, 9);
+  expect(geometry.point.x).toBeCloseTo(afterMiddle!.x, 4);
+  expect(geometry.point.y).toBeCloseTo(afterMiddle!.y, 4);
   expect(Math.abs(geometry.point.x - atMiddle!.x)).toBeGreaterThan(1e-6);
 
   editor.destroy();
@@ -2930,8 +2938,8 @@ test("a turn keeps the centerline anchor when the trace stays on the opposite si
 
   const geometry = editorRef(editor).getElementLabelGeometry(sequence, turn);
   const frame = labelFrameAt(path, (u1 + 0.5) as PathCoordinate);
-  expect(geometry.point.x).toBeCloseTo(frame.point.x, 9);
-  expect(geometry.point.y).toBeCloseTo(frame.point.y, 9);
+  expect(geometry.point.x).toBeCloseTo(frame.point.x, 3);
+  expect(geometry.point.y).toBeCloseTo(frame.point.y, 3);
 
   editor.destroy();
 });

@@ -207,7 +207,7 @@ test("A stroke is checked only at its end point", () => {
   expect(checks.length).toBe(1);
   expect(checks[0].expectedSign).toBe(-1);
   expect(checks[0].invalid).toBe(false);
-  const [curve, curvilinear] = path.getCurveAndCurvilinearCoord(path.length as PathCoordinate);
+  const [curve, curvilinear] = path.getCurveAndCurvilinearCoord(stroke.end as PathCoordinate);
   const expected = curve.getPosition(curvilinear);
   expect(checks[0].point.x).toBeCloseTo(expected.x, 10);
   expect(checks[0].point.y).toBeCloseTo(expected.y, 10);
@@ -313,7 +313,7 @@ test("A glide is checked only at its middle point", () => {
   expect(checks.length).toBe(1);
   expect(checks[0].expectedSign).toBe(-1);
   expect(checks[0].invalid).toBe(false);
-  const [start, end] = [path.length / 4, 0.95 * path.length];
+  const [start, end] = [glide.start, glide.end];
   const midU = ((Math.min(start, end) + Math.max(start, end)) / 2) as PathCoordinate;
   const [curve, curvilinear] = path.getCurveAndCurvilinearCoord(midU);
   const expectedPoint = curve.getPosition(curvilinear);

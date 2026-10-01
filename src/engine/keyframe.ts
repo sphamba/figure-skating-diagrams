@@ -1,6 +1,7 @@
 import type { Interpolable } from "./interpolate.js";
 import type { PathCoordinate, Time } from "./coordinates.js";
 import { Quaternion } from "./quaternion.js";
+import { round3, roundPosition3 } from "./round.js";
 import { PartialVector, Vector } from "./vector.js";
 
 export type Transition = "linear" | "smooth";
@@ -88,10 +89,18 @@ export interface TimingKeyframeJSON {
 }
 
 class Keyframe<DataType extends KeyframeData, Coordinate extends number = number> {
-  coordinate: Coordinate;
+  private _coordinate: Coordinate;
   data: DataType;
   transitionIn: Transition;
   transitionOut: Transition;
+
+  get coordinate(): Coordinate {
+    return this._coordinate;
+  }
+
+  set coordinate(value: Coordinate) {
+    this._coordinate = round3(value) as Coordinate;
+  }
 
   constructor(
     coordinate: Coordinate,
@@ -99,14 +108,34 @@ class Keyframe<DataType extends KeyframeData, Coordinate extends number = number
     transitionIn: Transition = "linear",
     transitionOut: Transition = "linear",
   ) {
-    this.coordinate = coordinate;
+    this._coordinate = round3(coordinate) as Coordinate;
     this.data = data;
     this.transitionIn = transitionIn;
     this.transitionOut = transitionOut;
   }
 }
 
+// A rounded copy of the foot data: the position, the contact point and the
+// spin shift carry at most 3 decimal places. Orientation, toePick and spins
+// stay untouched.
+function roundFootData(data: FootData): FootData {
+  const rounded: FootData = { ...data };
+  if (data.position) rounded.position = roundPosition3(data.position);
+  if (data.contactPoint !== undefined) rounded.contactPoint = round3(data.contactPoint);
+  if (data.spinShift !== undefined) rounded.spinShift = round3(data.spinShift);
+  return rounded;
+}
+
 export class FootKeyframe extends Keyframe<FootData, PathCoordinate> {
+  constructor(
+    coordinate: PathCoordinate,
+    data: FootData,
+    transitionIn: Transition = "linear",
+    transitionOut: Transition = "linear",
+  ) {
+    super(coordinate, roundFootData(data), transitionIn, transitionOut);
+  }
+
   toJSON(): FootKeyframeJSON {
     return {
       kind: "FootKeyframe",
@@ -137,6 +166,17 @@ export class FootKeyframe extends Keyframe<FootData, PathCoordinate> {
 }
 
 export class HipsKeyframe extends Keyframe<PositionAndOrientation3D, PathCoordinate> {
+  constructor(
+    coordinate: PathCoordinate,
+    data: PositionAndOrientation3D,
+    transitionIn: Transition = "linear",
+    transitionOut: Transition = "linear",
+  ) {
+    const rounded: PositionAndOrientation3D = { ...data };
+    if (data.position) rounded.position = roundPosition3(data.position);
+    super(coordinate, rounded, transitionIn, transitionOut);
+  }
+
   toJSON(): HipsKeyframeJSON {
     return {
       kind: "HipsKeyframe",
@@ -159,15 +199,31 @@ export class HipsKeyframe extends Keyframe<PositionAndOrientation3D, PathCoordin
 }
 
 export class TimingKeyframe {
-  pathCoordinate: PathCoordinate;
+  private _pathCoordinate: PathCoordinate;
   kind: TimingKind;
-  value: number; // seconds for kind "time", beat count for kind "beats"
+  private _value: number; // seconds for kind "time", beat count for kind "beats"
   transitionIn: Transition;
   transitionOut: Transition;
 
   // Keeps addKeyframe sorting by coordinate working for this class too.
   get coordinate(): PathCoordinate {
     return this.pathCoordinate;
+  }
+
+  get pathCoordinate(): PathCoordinate {
+    return this._pathCoordinate;
+  }
+
+  set pathCoordinate(value: PathCoordinate) {
+    this._pathCoordinate = round3(value) as PathCoordinate;
+  }
+
+  get value(): number {
+    return this._value;
+  }
+
+  set value(value: number) {
+    this._value = round3(value);
   }
 
   constructor(
@@ -177,9 +233,9 @@ export class TimingKeyframe {
     transitionIn: Transition = "linear",
     transitionOut: Transition = "linear",
   ) {
-    this.pathCoordinate = pathCoordinate;
+    this._pathCoordinate = round3(pathCoordinate) as PathCoordinate;
     this.kind = kind;
-    this.value = value;
+    this._value = round3(value);
     this.transitionIn = transitionIn;
     this.transitionOut = transitionOut;
   }
