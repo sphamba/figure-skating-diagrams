@@ -1,6 +1,6 @@
 import { Curve, type Curvilinear } from "../curve.js";
 import { type AxisRect } from "../curve.js";
-import { bladeLength, CANVAS_SCALE, RINK_COLOR, WHEEL_SENSITIVITY } from "../constants.js";
+import { bladeLength, CANVAS_SCALE, PRIMARY_COLOR, RINK_COLOR, WHEEL_SENSITIVITY } from "../constants.js";
 import type { PathCoordinate, Time } from "../coordinates.js";
 import { fullTimeExtentSeconds } from "../diagram.js";
 import { Annotation } from "../annotation.js";
@@ -48,6 +48,7 @@ const OUTSIDE_DRAW_RANGE_ALPHA = 0.3; // path opacity outside the rendered draw 
 const SYMMETRIC_GHOST_ALPHA = 0.3; // edit-mode ghost opacity of the mirrored traces and path lines
 const OUTSIDE_DRAW_RANGE_COLOR = "#000";
 const ANNOTATION_LABEL_ALPHA = 0.3; // annotation labels dim to this opacity
+const ANNOTATION_LABEL_BACKGROUND_ALPHA = 0.8; // annotation pill backgrounds dim to this alpha
 const ANNOTATION_LABEL_TEXT_ALPHA = 0.6; // annotation label text dims to this opacity
 
 export type ControlPointKey = "p0" | "p1" | "p2" | "p3";
@@ -2592,6 +2593,7 @@ export class Editor {
       rotation: this.view.rotation,
       extraOffset: extraOffset,
       alpha: ANNOTATION_LABEL_ALPHA,
+      backgroundAlpha: ANNOTATION_LABEL_BACKGROUND_ALPHA,
       background: annotation.color,
       textColor: "#000",
       textAlpha: ANNOTATION_LABEL_TEXT_ALPHA,
@@ -2622,6 +2624,8 @@ export class Editor {
         new PillLabel("start", geometry.point, geometry.outside, this.view.zoom, {
           connector: true,
           rotation: this.view.rotation,
+          background: PRIMARY_COLOR,
+          textColor: "#000",
         }),
       );
     }

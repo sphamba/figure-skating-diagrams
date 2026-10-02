@@ -119,7 +119,7 @@ describe("CanvasLabel draw", () => {
     // The backdrop is 1 screen px larger in radius, at the same configured
     // opacity as the pill background.
     expect(captured[0]!.kind).toBe("stroke");
-    expect(captured[0]!.alpha).toBeCloseTo(0.24, 9);
+    expect(captured[0]!.alpha).toBeCloseTo(0.3, 9);
     expect(captured[0]!.strokeStyle).toBe(RINK_COLOR);
     // halfB = half text height times the size factor, plus the pill padding.
     expect(captured[0]!.lineWidth).toBeCloseTo(
@@ -130,7 +130,7 @@ describe("CanvasLabel draw", () => {
       9,
     );
     expect(captured[1]!.kind).toBe("stroke");
-    expect(captured[1]!.alpha).toBeCloseTo(0.24, 9);
+    expect(captured[1]!.alpha).toBeCloseTo(0.3, 9);
     expect(captured[1]!.strokeStyle).toBe(PILL_COLOR);
     expect(captured[1]!.lineWidth).toBeCloseTo(2 * (5 * PILL_SIZE_FACTOR + (PILL_PADDING * CANVAS_SCALE) / ZOOM), 9);
     expect(captured[2]!.kind).toBe("text");

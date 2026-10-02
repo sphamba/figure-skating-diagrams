@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { bladeLength, CANVAS_SCALE } from "../src/engine/constants";
+import { bladeLength, CANVAS_SCALE, PRIMARY_COLOR } from "../src/engine/constants";
 import { Curve } from "../src/engine/curve";
 import type { Curvilinear } from "../src/engine/curve";
 import { Path } from "../src/engine/path";
@@ -2338,6 +2338,23 @@ test("action buttons sit above the labels in the draw layer", () => {
   editor.draw();
   expect(layer.filter((label) => label instanceof PillLabel).length).toBeGreaterThanOrEqual(1);
   expect(layer[layer.length - 1]).toBeInstanceOf(ActionButtonLabel);
+  editor.destroy();
+});
+
+test("the start label draws a primary pill with black text", () => {
+  const { editor } = makeEditor();
+  editor.draw();
+  // The layer array is replaced at each frame end, so a captured reference
+  // keeps the collected order of the next frame.
+  const layer = editorRef(editor).labelLayer.labels as unknown[];
+  editor.draw();
+  const startLabel = layer.find(
+    (label) => label instanceof PillLabel && (label as PillLabel).text === "start",
+  ) as unknown as { backgroundColor: string; textColor: string; backgroundAlpha: number } | undefined;
+  expect(startLabel).toBeDefined();
+  expect(startLabel!.backgroundColor).toBe(PRIMARY_COLOR);
+  expect(startLabel!.textColor).toBe("#000");
+  expect(startLabel!.backgroundAlpha).toBe(1);
   editor.destroy();
 });
 

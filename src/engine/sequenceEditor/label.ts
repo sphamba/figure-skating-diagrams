@@ -6,10 +6,9 @@ export const LABEL_FONT_SIZE = 12; // px
 export const LABEL_FONT_SIZE_SMALL = 10; // px
 export const LABEL_OFFSET = 12; // px, screen distance from the anchor along the direction
 
-// Default pill background, #fafafb at 80% opacity, so foot traces stay readable
-// underneath.
+// Default pill background, #fafafb, opaque so labels stay readable over foot traces.
 export const PILL_COLOR = "#fafafb";
-export const PILL_OPACITY = 0.8;
+export const PILL_OPACITY = 1;
 
 // Text color of every label.
 const LABEL_TEXT_COLOR = "#444";
