@@ -2,9 +2,9 @@ import { CANVAS_FONT, CANVAS_SCALE, RINK_COLOR } from "../constants.js";
 import type { CanvasRenderingContext2DSized } from "../rinkCanvas.js";
 import { Vector } from "../vector.js";
 
-export const LABEL_FONT_SIZE = 12; // px
-export const LABEL_FONT_SIZE_SMALL = 10; // px
-export const LABEL_OFFSET = 12; // px, screen distance from the anchor along the direction
+export const LABEL_FONT_SIZE = 10; // px
+export const LABEL_FONT_SIZE_SMALL = 8.5; // px
+export const LABEL_OFFSET = 4; // px, screen distance from the anchor along the direction
 
 // Default pill background, #fafafb, opaque so labels stay readable over foot traces.
 export const PILL_COLOR = "#fafafb";
@@ -13,17 +13,17 @@ export const PILL_OPACITY = 1;
 // Text color of every label.
 const LABEL_TEXT_COLOR = "#444";
 // Screen padding between the text and a pill background.
-export const PILL_PADDING = 5; // px
+export const PILL_PADDING = 4; // px
 // Pill backdrops grow the pill by this on each side, in the rink color.
 export const PILL_BACKDROP_PADDING = 1; // px
 // Base length of the triangle connector between the anchor and the pill.
-export const PILL_CONNECTOR_BASE = 8; // px
+export const PILL_CONNECTOR_BASE = 10; // px
 // Pill backgrounds are 20% larger than the text.
 export const PILL_SIZE_FACTOR = 1.2;
 // Scale and screen padding of the smaller-font labels, e.g. the timing labels:
 // the pill hugs the smaller text, including the circle labels.
 export const PILL_SIZE_FACTOR_SMALL = 1.1;
-export const PILL_PADDING_SMALL = 4; // px
+export const PILL_PADDING_SMALL = 3.5; // px
 // Minimum background radius of a circle label.
 export const CIRCLE_LABEL_MIN_RADIUS = 6; // px
 // Extra collision radius beyond the background, screen px, so labels keep a

@@ -6,7 +6,7 @@ import { Path } from "../src/engine/path";
 import { Sequence } from "../src/engine/sequence";
 import type { PathCoordinate } from "../src/engine/coordinates";
 import { Vector } from "../src/engine/vector";
-import { LABEL_FONT_SIZE, PILL_PADDING, PILL_SIZE_FACTOR } from "../src/engine/sequenceEditor/label";
+import { LABEL_FONT_SIZE, LABEL_FONT_SIZE_SMALL, PILL_PADDING, PILL_SIZE_FACTOR } from "../src/engine/sequenceEditor/label";
 import { LeftForwardOutsideThreeTurn, LeftForwardInsideThreeTurn } from "../src/engine/element/threeTurn";
 import { LeftForwardOpenChoctaw } from "../src/engine/element/choctaw";
 import { glideConstructorsByType, LeftForwardOutsideGlide } from "../src/engine/element/glide";
@@ -695,7 +695,7 @@ test("a stroke with no following element anchors its label at the path end", () 
   editor.destroy();
 });
 
-test("a crossed stroke draws a second 10px label anchored to the element start, shifted inside", () => {
+test("a crossed stroke draws a second 8.5px label anchored to the element start, shifted inside", () => {
   const { editor, canvas } = makeEditor();
   editorRef(editor).mode = "elements";
   const ctx = canvas.getContext() as unknown as Record<string, unknown>;
@@ -725,16 +725,18 @@ test("a crossed stroke draws a second 10px label anchored to the element start, 
   const mainLabels = drawn.filter((label) => label.text === "LBI");
   expect(mainLabels.length).toBe(2);
   const px = (font: string) => Number(font.replace(/px.*$/, ""));
-  expect(px(crossedLabels[0]!.font) * 12).toBeCloseTo(px(mainLabels[0]!.font) * 10, 9);
+  expect(px(crossedLabels[0]!.font) * LABEL_FONT_SIZE).toBeCloseTo(px(mainLabels[0]!.font) * LABEL_FONT_SIZE_SMALL, 9);
 
   // Anchors sit on the path line at the element start, so the inside shift
   // mirrors the main label: the crossed label is on the opposite side of the
   // path. Collision resolution may push labels apart, so the anchor only bounds
   // the resolved position and the push may change the exact mirrored y values.
-  expect(Math.abs(crossedLabels[0]!.x - 0.2 * 20)).toBeLessThanOrEqual(
+  expect(Math.abs(crossedLabels[0]!.x - 0.2 * CANVAS_SCALE)).toBeLessThanOrEqual(
     LABEL_ANCHOR_LIMIT * halfB(editorRef(editor).view.zoom),
   );
-  expect(Math.abs(crossedLabels[0]!.x - 0.2 * 20)).toBeLessThan(Math.abs(crossedLabels[0]!.x - 0.4 * 20));
+  expect(Math.abs(crossedLabels[0]!.x - 0.2 * CANVAS_SCALE)).toBeLessThan(
+    Math.abs(crossedLabels[0]!.x - 0.4 * CANVAS_SCALE),
+  );
   mainLabels.forEach((label, index) => {
     expect(crossedLabels[index]!.y).toBeGreaterThan(0); // opposite sides of the path line
     expect(label.y).toBeLessThan(0);
@@ -838,7 +840,7 @@ test("an uncovered inflection point draws one small inflection label", () => {
   const px = (font: string) => Number(font.replace(/px.*$/, ""));
   const mainLabels = drawn.filter((label) => label.text === "LFO");
   expect(mainLabels.length).toBeGreaterThan(0);
-  expect(px(inflectionLabels[0]!.font) * 12).toBeCloseTo(px(mainLabels[0]!.font) * 10, 9);
+  expect(px(inflectionLabels[0]!.font) * LABEL_FONT_SIZE).toBeCloseTo(px(mainLabels[0]!.font) * LABEL_FONT_SIZE_SMALL, 9);
 
   editor.destroy();
 });
@@ -1150,7 +1152,7 @@ test("a jump label is shifted in path and elements modes and centered in view mo
     // shifts it away from the path line. The grown collision radius may push
     // the label along the path, so the span midpoint only bounds the resolved
     // position.
-    expect(Math.abs(shifted[0]!.x - 0.5 * 20)).toBeLessThanOrEqual(
+    expect(Math.abs(shifted[0]!.x - 0.5 * CANVAS_SCALE)).toBeLessThanOrEqual(
       LABEL_ANCHOR_LIMIT * halfB(editorRef(editor).view.zoom),
     );
     expect(shifted[0]!.y).not.toBeCloseTo(0, 6);
@@ -1165,7 +1167,7 @@ test("a jump label is shifted in path and elements modes and centered in view mo
   // In view mode only the label sits on the anchor without the outward shift.
   // The grown collision radius may push the label against other labels, so the
   // anchor only bounds the resolved position.
-  expect(Math.abs(centered[0]!.x - 0.5 * 20)).toBeLessThanOrEqual(
+  expect(Math.abs(centered[0]!.x - 0.5 * CANVAS_SCALE)).toBeLessThanOrEqual(
     LABEL_ANCHOR_LIMIT * halfB(editorRef(editor).view.zoom),
   );
   expect(Math.abs(centered[0]!.y)).toBeLessThanOrEqual(LABEL_ANCHOR_LIMIT * halfB(editorRef(editor).view.zoom));

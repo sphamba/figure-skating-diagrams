@@ -3,6 +3,7 @@ import type { CanvasRenderingContext2DSized } from "../../src/engine/rinkCanvas"
 import { CANVAS_SCALE } from "../../src/engine/constants.js";
 import {
   LabelLayer,
+  LABEL_OFFSET,
   PILL_PADDING,
   PILL_SIZE_FACTOR,
   PillLabel,
@@ -491,7 +492,7 @@ describe("PillLabel connector growth", () => {
     const half = drawAt(0.5);
     // Straight direction, so the home center sits one offset plus one support
     // away from the anchor, and the half growth apex sits halfway to it.
-    const center = anchorY - (12 * CANVAS_SCALE) / ZOOM - halfB;
+    const center = anchorY - (LABEL_OFFSET * CANVAS_SCALE) / ZOOM - halfB;
     const midApex = center + (anchorY - center) / 2;
     for (const point of half) expect(point.y).toBeCloseTo(midApex, 6);
   });
