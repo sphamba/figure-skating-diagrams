@@ -12,5 +12,7 @@ export const WHEEL_SENSITIVITY = 0.2;
 // Matches the app font loaded in main.ts.
 export const CANVAS_FONT = '"Inter Variable", sans-serif';
 
-// App primary color of the primary buttons, the sky-400 token of the theme preset in main.ts.
-export const PRIMARY_COLOR = "#38bdf8";
+// App primary color of the primary buttons: the sky-500 token in light mode and
+// the sky-400 token in dark mode, from the theme preset in main.ts.
+export const PRIMARY_COLOR = "#0ea5e9";
+export const PRIMARY_COLOR_DARK = "#38bdf8";

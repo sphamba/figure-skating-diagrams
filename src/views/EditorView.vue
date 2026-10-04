@@ -1255,6 +1255,17 @@ watch(
   { immediate: true },
 );
 
+watch(
+  () => appearance.darkMode,
+  (value) => {
+    if (editor) {
+      editor.darkMode = value;
+      editor.draw();
+    }
+  },
+  { immediate: true },
+);
+
 onMounted(() => {
   if (!canvasRef.value) return;
   const editorInstance = new Editor(canvasRef.value, sequences.value, { occludedTop });
@@ -1268,6 +1279,7 @@ onMounted(() => {
   editorInstance.setHiddenSequences(hiddenSequenceSet.value);
   editorInstance.scaleElements = appearance.scaleElements;
   editorInstance.showLabels = appearance.showLabels;
+  editorInstance.darkMode = appearance.darkMode;
 
   editorInstance.onVideoTimeChange = (seconds) => setTimestamp(seconds);
   editorInstance.onTimeScrubStart = () => {

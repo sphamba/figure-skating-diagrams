@@ -1,6 +1,13 @@
 import { Curve, type Curvilinear } from "../curve.js";
 import { type AxisRect } from "../curve.js";
-import { bladeLength, CANVAS_SCALE, PRIMARY_COLOR, RINK_COLOR, WHEEL_SENSITIVITY } from "../constants.js";
+import {
+  bladeLength,
+  CANVAS_SCALE,
+  PRIMARY_COLOR,
+  PRIMARY_COLOR_DARK,
+  RINK_COLOR,
+  WHEEL_SENSITIVITY,
+} from "../constants.js";
 import type { PathCoordinate, Time } from "../coordinates.js";
 import { fullTimeExtentSeconds } from "../diagram.js";
 import { Annotation } from "../annotation.js";
@@ -199,6 +206,7 @@ export class Editor {
   mode: EditMode = "view";
   scaleElements = true;
   showLabels = true;
+  darkMode = false;
   activeSequence: Sequence | null = null;
 
   private _shortDrawRange = false;
@@ -2624,8 +2632,8 @@ export class Editor {
         new PillLabel("start", geometry.point, geometry.outside, this.view.zoom, {
           connector: true,
           rotation: this.view.rotation,
-          background: PRIMARY_COLOR,
-          textColor: "#000",
+          background: this.darkMode ? PRIMARY_COLOR_DARK : PRIMARY_COLOR,
+          textColor: this.darkMode ? "#000" : "#fff",
         }),
       );
     }

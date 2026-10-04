@@ -266,6 +266,17 @@ watch(
 );
 
 watch(
+  () => appearance.darkMode,
+  (value) => {
+    if (editor) {
+      editor.darkMode = value;
+      editor.draw();
+    }
+  },
+  { immediate: true },
+);
+
+watch(
   videoValid,
   (valid) => {
     if (!valid || !editor) return;
@@ -388,6 +399,7 @@ function createEditor() {
   editorInstance.mode = "view";
   editorInstance.scaleElements = appearance.scaleElements;
   editorInstance.showLabels = appearance.showLabels;
+  editorInstance.darkMode = appearance.darkMode;
   editorInstance.shortDrawRange = store.getShortDrawRange();
   editorInstance.loopDrawWindow = () => loopDrawWindow.value;
   editorInstance.loopTimeBounds = () => loopBounds.value;

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { bladeLength, CANVAS_SCALE, PRIMARY_COLOR } from "../src/engine/constants";
+import { bladeLength, CANVAS_SCALE, PRIMARY_COLOR, PRIMARY_COLOR_DARK } from "../src/engine/constants";
 import { Curve } from "../src/engine/curve";
 import type { Curvilinear } from "../src/engine/curve";
 import { Path } from "../src/engine/path";
@@ -2343,7 +2343,7 @@ test("action buttons sit above the labels in the draw layer", () => {
   editor.destroy();
 });
 
-test("the start label draws a primary pill with black text", () => {
+test("the start label draws a mode-matched primary pill", () => {
   const { editor } = makeEditor();
   editor.draw();
   // The layer array is replaced at each frame end, so a captured reference
@@ -2355,8 +2355,17 @@ test("the start label draws a primary pill with black text", () => {
   ) as unknown as { backgroundColor: string; textColor: string; backgroundAlpha: number } | undefined;
   expect(startLabel).toBeDefined();
   expect(startLabel!.backgroundColor).toBe(PRIMARY_COLOR);
-  expect(startLabel!.textColor).toBe("#000");
+  expect(startLabel!.textColor).toBe("#fff");
   expect(startLabel!.backgroundAlpha).toBe(1);
+  editor.darkMode = true;
+  const darkLayer = editorRef(editor).labelLayer.labels as unknown[];
+  editor.draw();
+  const darkLabel = darkLayer.find(
+    (label) => label instanceof PillLabel && (label as PillLabel).text === "start",
+  ) as unknown as { backgroundColor: string; textColor: string } | undefined;
+  expect(darkLabel).toBeDefined();
+  expect(darkLabel!.backgroundColor).toBe(PRIMARY_COLOR_DARK);
+  expect(darkLabel!.textColor).toBe("#000");
   editor.destroy();
 });
 
