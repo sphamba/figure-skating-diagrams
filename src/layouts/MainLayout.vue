@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import Button from "openvue/button";
 import Menubar from "openvue/menubar";
+import Toast from "openvue/toast";
 
 const route = useRoute();
 const isFullBleed = computed(() => Boolean(route.meta.fullBleed));
@@ -45,6 +46,8 @@ const year = new Date().getFullYear();
     <footer v-if="!isFullBleed" class="main-layout__footer">
       <span>&copy; {{ year }} Son Pham-Ba</span>
     </footer>
+
+    <Toast />
   </div>
 </template>
 

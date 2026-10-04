@@ -5,6 +5,7 @@ import { createApp } from "vue";
 import { createPinia } from "pinia";
 import OpenVue from "openvue/config";
 import ConfirmationService from "openvue/confirmationservice";
+import ToastService from "openvue/toastservice";
 import Tooltip from "openvue/tooltip";
 import Ripple from "openvue/ripple";
 import Aura from "@openvue/themes/aura";
@@ -44,6 +45,7 @@ useLocaleStore();
 app.use(i18n);
 app.use(router);
 app.use(ConfirmationService);
+app.use(ToastService);
 app.directive("ripple", Ripple);
 app.directive("tooltip", Tooltip);
 app.use(OpenVue, {

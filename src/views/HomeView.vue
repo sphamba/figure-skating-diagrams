@@ -13,6 +13,9 @@ import { earliestTimeKeyframeSeconds, fullTimeExtentSeconds } from "@/engine/dia
 import type { Sequence } from "@/engine/sequence";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import { useAppearanceStore } from "@/stores/appearance";
+import { useRoute, useRouter } from "vue-router";
+import { decodeShareParam } from "@/utils/shareUrl";
+import type { DiagramJSON } from "@/engine/diagram";
 import { useMediaQuery } from "@/composables/useMediaQuery";
 import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
 import { usePlaybackKeyToggle } from "@/composables/usePlaybackKeyToggle";
@@ -29,6 +32,9 @@ const drawerOpen = ref(false);
 const store = useSequenceEditorStore();
 const appearance = useAppearanceStore();
 const { t } = useI18n();
+const route = useRoute();
+const router = useRouter();
+const sharedLinkError = ref(false);
 
 const sequences = computed(() => store.getSequences());
 const activeSequence = computed(() => store.getActiveSequence());
@@ -452,11 +458,30 @@ const visibleSequences = computed(() => sequences.value.filter((sequence) => sto
 onMounted(() => {
   updateViewportSizes();
   window.addEventListener("resize", updateViewportSizes);
+  void loadSharedDiagram();
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("resize", updateViewportSizes);
 });
+
+async function loadSharedDiagram() {
+  // The wiring tests mount the view without a router, so both stay undefined there.
+  if (!route || !router) return;
+  const shared = route.query.d;
+  if (typeof shared !== "string" || shared === "") return;
+  try {
+    const json = (await decodeShareParam(shared)) as DiagramJSON;
+    if (!Array.isArray(json.sequences)) throw new Error("not a DiagramJSON payload");
+    store.loadFromJSON(json);
+    // The payload has served its purpose, so the long URL leaves the address
+    // bar and history; the diagram itself stays in the store storage.
+    await router.replace({ query: {} });
+  } catch (error) {
+    sharedLinkError.value = true;
+    console.error("Could not load the shared diagram:", error);
+  }
+}
 
 onBeforeUnmount(() => {
   editor?.destroy();
@@ -479,6 +504,7 @@ onBeforeUnmount(() => {
     />
 
     <div class="home-view__main">
+      <small v-if="sharedLinkError" class="home-view__shared-link-error">{{ $t("files.sharedLinkError") }}</small>
       <div class="home-view__splitter-wrap">
         <Splitter
           :key="splitKey"
@@ -592,6 +618,11 @@ onBeforeUnmount(() => {
   flex: 1 1 auto;
   min-width: 0;
   height: 100%;
+}
+
+.home-view__shared-link-error {
+  margin-block-end: 0.25rem;
+  color: var(--p-form-field-invalid-hover-border-color);
 }
 
 .home-view__splitter-wrap {

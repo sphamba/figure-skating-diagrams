@@ -200,6 +200,17 @@ function onTabsScroll(event: Event) {
   color: var(--p-form-field-invalid-hover-border-color);
 }
 
+.diagram-sidebar__share-note {
+  color: var(--p-text-muted-color);
+}
+
+.diagram-sidebar__share-dialog__url {
+  width: 100%;
+  resize: none;
+  font-size: 0.7rem;
+  font-family: monospace;
+}
+
 .diagram-sidebar__copyright {
   /* The auto margin pins the line to the sidebar bottom when it is short. */
   margin-top: auto;

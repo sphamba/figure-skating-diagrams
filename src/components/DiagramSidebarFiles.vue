@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import Button from "openvue/button";
+import Dialog from "openvue/dialog";
 import Tag from "openvue/tag";
 import ConfirmDialog from "openvue/confirmdialog";
 import { useConfirm } from "openvue/useconfirm";
+import { useToast } from "openvue/usetoast";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import DiagramTree, { type DiagramTreeSource } from "@/components/DiagramTree.vue";
 import { decodeJsonFile, encodeJsonFile, gzipFileName } from "@/utils/jsonGzip";
+import { buildShareUrl, SHARE_URL_MAX_CHARS } from "@/utils/shareUrl";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import type { PatternJSON } from "@/engine/pattern";
 import type { DiagramJSON } from "@/engine/diagram";
@@ -28,6 +31,10 @@ const { t } = useI18n();
 const isUnsaved = computed(() => store.isUnsaved());
 const loadFailed = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
+const shareDialogOpen = ref(false);
+const shareDialogUrl = ref("");
+const shareDialogTextarea = ref<HTMLTextAreaElement | null>(null);
+const toast = useToast();
 
 function isPattern(json: PatternJSON | DiagramJSON | SequenceJSON): json is PatternJSON {
   return Array.isArray((json as PatternJSON).sequences);
@@ -145,6 +152,65 @@ async function downloadFile() {
   emit("close");
 }
 
+async function shareLink() {
+  shareDialogOpen.value = false;
+  const json = store.toJSON();
+  let url: string;
+  let chars: number;
+  try {
+    ({ url, chars } = await buildShareUrl(json));
+  } catch (error) {
+    toast.add({ severity: "error", summary: t("files.shareError"), life: 6000 });
+    console.error("Could not build the share link:", error);
+    return;
+  }
+  if (chars > SHARE_URL_MAX_CHARS) {
+    toast.add({ severity: "error", summary: t("files.shareTooBig"), life: 6000 });
+    return;
+  }
+  const title = store.diagram.name;
+  if (typeof navigator.share !== "undefined" && navigator.canShare?.({ url })) {
+    try {
+      await navigator.share({ url, title });
+      return;
+    } catch (error) {
+      // Chrome reports a missing share backend the same way as a user cancel,
+      // so only a cancelled message stops the clipboard fallback.
+      if (error instanceof DOMException && error.name === "AbortError" && /cancell?ed/i.test(error.message)) return;
+      console.warn("navigator.share failed, falling back to the clipboard:", error);
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    toast.add({ severity: "success", summary: t("files.shareCopied"), life: 4000 });
+  } catch (error) {
+    console.error("Could not share or copy the link:", error);
+    shareDialogUrl.value = url;
+    shareDialogOpen.value = true;
+  }
+}
+
+async function copyShareDialogUrl() {
+  try {
+    await navigator.clipboard.writeText(shareDialogUrl.value);
+    shareDialogOpen.value = false;
+    toast.add({ severity: "success", summary: t("files.shareCopied"), life: 4000 });
+  } catch (error) {
+    console.error("Could not copy the link:", error);
+  }
+}
+
+watch(shareDialogOpen, async (open) => {
+  if (!open) return;
+  await nextTick();
+  // The Dialog focuses its close button in onAfterEnter, so the select lands
+  // after it and on the autofocus target.
+  requestAnimationFrame(() => {
+    shareDialogTextarea.value?.focus();
+    shareDialogTextarea.value?.select();
+  });
+});
+
 function confirmNew() {
   const unsaved = !store.isUnsaved() ? t("files.confirm.newDiagramHeader") : t("files.confirm.unsavedHeader");
   const message = store.isUnsaved() ? t("files.confirm.newMessageUnsaved") : t("files.confirm.newMessageEmpty");
@@ -214,6 +280,13 @@ function leaveEditor() {
         severity="secondary"
         @click="downloadFile"
       />
+      <Button
+        :label="$t('files.shareLink')"
+        icon="pi pi-share-alt"
+        class="w-full"
+        severity="secondary"
+        @click="shareLink"
+      />
       <Button :label="$t('files.new')" icon="pi pi-plus" class="w-full" severity="secondary" @click="confirmNew" />
       <Button :label="$t('files.leaveEditor')" icon="pi pi-arrow-left" class="w-full" @click="leaveEditor" />
     </template>
@@ -229,6 +302,26 @@ function leaveEditor() {
     <ConfirmDialog group="diagram-sidebar-open-tree" />
     <ConfirmDialog group="diagram-sidebar-new" />
     <ConfirmDialog group="diagram-sidebar-leave" />
+    <Dialog
+      v-model:visible="shareDialogOpen"
+      modal
+      :header="t('files.shareDialogTitle')"
+      class="diagram-sidebar__share-dialog"
+    >
+      <p class="diagram-sidebar__share-dialog__instructions">{{ t("files.shareDialogInstructions") }}</p>
+      <textarea
+        ref="shareDialogTextarea"
+        class="diagram-sidebar__share-dialog__url"
+        :value="shareDialogUrl"
+        rows="3"
+        readonly
+        autofocus
+      ></textarea>
+      <template #footer>
+        <Button :label="$t('files.close')" severity="secondary" @click="shareDialogOpen = false" />
+        <Button :label="$t('files.shareDialogCopy')" @click="copyShareDialogUrl" />
+      </template>
+    </Dialog>
   </div>
 </template>
 
