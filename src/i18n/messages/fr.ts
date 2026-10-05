@@ -35,9 +35,13 @@ const fr = {
   files: {
     unsaved: "Modifications non enregistrées",
     saved: "Enregistré",
-    savedDiagrams: "Diagrammes enregistrés",
-    openPlaceholder: "Ouvrir un diagramme",
-    treeRoot: "diagrammes",
+    load: "Ouvrir",
+    save: "Enregistrer",
+    libraryTitle: "Ouvrir un diagramme",
+    savedFolder: "Enregistrés",
+    savedEmpty: "vide",
+    savedToast: "Diagramme enregistré",
+    saveError: "Le diagramme n'a pas pu être enregistré.",
     loadError: "Le diagramme n'a pas pu être ouvert. Vérifiez que le fichier json est valide.",
     sharedLinkError: "Le diagramme partagé n'a pas pu être chargé.",
     loadJson: "Charger un JSON",
@@ -64,8 +68,15 @@ const fr = {
       newDiagramHeader: "Nouveau diagramme",
       openFileMessage:
         "Le diagramme actuel comporte des modifications non enregistrées. Ouvrir le nouveau fichier et les perdre ?",
-      openTreeMessage:
-        "Le diagramme actuel comporte des modifications non enregistrées. Ouvrir le nouveau diagramme et les perdre ?",
+      openLibraryMessage:
+        "Le diagramme actuel comporte des modifications non enregistrées. Ouvrir la bibliothèque et les perdre ?",
+      deleteHeader: "Supprimer le diagramme ?",
+      deleteMessage: "Cela supprime la copie enregistrée de {name}. Le diagramme reste ouvert.",
+      delete: "Supprimer",
+      deleteNamed: "Supprimer « {name} »",
+      overwriteHeader: "Écraser le diagramme enregistré ?",
+      overwriteMessage: "Un diagramme enregistré nommé {name} existe déjà. L'écraser ?",
+      overwrite: "Écraser",
       newMessageUnsaved:
         "Le diagramme actuel comporte des modifications non enregistrées. Créer un nouveau diagramme et les perdre ?",
       newMessageEmpty: "Créer un nouveau diagramme ? Le diagramme actuel sera perdu.",

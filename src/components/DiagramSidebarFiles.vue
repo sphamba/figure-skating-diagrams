@@ -10,6 +10,7 @@ import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import DiagramTree, { type DiagramTreeSource } from "@/components/DiagramTree.vue";
 import { decodeJsonFile, encodeJsonFile, gzipFileName } from "@/utils/jsonGzip";
+import { listSavedDiagrams, loadSavedDiagram, saveSavedDiagram } from "@/utils/diagramLibrary";
 import { buildShareUrl, SHARE_URL_MAX_CHARS } from "@/utils/shareUrl";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import type { PatternJSON } from "@/engine/pattern";
@@ -30,6 +31,8 @@ const { t } = useI18n();
 
 const isUnsaved = computed(() => store.isUnsaved());
 const loadFailed = ref(false);
+const libraryOpen = ref(false);
+const libraryRefresh = ref(0);
 const fileInput = ref<HTMLInputElement | null>(null);
 const shareDialogOpen = ref(false);
 const shareDialogUrl = ref("");
@@ -104,7 +107,7 @@ async function onFileSelected(event: Event) {
   }
 }
 
-async function loadDiagramSource({ path }: DiagramTreeSource) {
+async function loadDiagramSource(path: string) {
   loadFailed.value = false;
   try {
     const response = await fetch(`${import.meta.env.BASE_URL}${path}`);
@@ -120,23 +123,75 @@ async function loadDiagramSource({ path }: DiagramTreeSource) {
   }
 }
 
+// The unsaved guard runs when the library dialog opens, not on selection.
 function openDiagramSource(source: DiagramTreeSource) {
+  if (source.source === "saved") void openSavedDiagram(source.name);
+  else void loadDiagramSource(source.path);
+}
+
+async function openSavedDiagram(name: string) {
+  loadFailed.value = false;
+  try {
+    const json = await loadSavedDiagram(name);
+    if (json === null) throw new Error(`No saved diagram named "${name}".`);
+    emit("load-start");
+    store.setSaveFilename(name);
+    loadIntoStore(json as PatternJSON | DiagramJSON | SequenceJSON);
+    libraryOpen.value = false;
+    emit("close");
+  } catch {
+    loadFailed.value = true;
+  }
+}
+
+function openLibrary() {
   if (!store.isUnsaved()) {
-    void loadDiagramSource(source);
+    libraryOpen.value = true;
     return;
   }
   confirm.require({
-    group: "diagram-sidebar-open-tree",
+    group: "diagram-sidebar-open-library",
     header: t("files.confirm.unsavedHeader"),
-    message: t("files.confirm.openTreeMessage"),
+    message: t("files.confirm.openLibraryMessage"),
     icon: "pi pi-exclamation-triangle",
     rejectLabel: t("files.confirm.cancel"),
     acceptLabel: t("files.confirm.open"),
     acceptProps: { severity: "warning" },
     rejectProps: { severity: "secondary", text: true },
     accept: () => {
-      void loadDiagramSource(source);
+      libraryOpen.value = true;
     },
+  });
+}
+
+async function writeToLibrary(name: string) {
+  const ok = await saveSavedDiagram(name, store.toJSON());
+  if (!ok) {
+    toast.add({ severity: "error", summary: t("files.saveError"), life: 6000 });
+    return;
+  }
+  toast.add({ severity: "success", summary: t("files.savedToast"), life: 4000 });
+  store.markSaved();
+  store.setSaveFilename(name);
+  libraryRefresh.value++;
+}
+
+async function saveToLibrary() {
+  const name = store.getDiagram().name.trim() || t("files.defaultDiagramName");
+  if (!(await listSavedDiagrams()).includes(name)) {
+    await writeToLibrary(name);
+    return;
+  }
+  confirm.require({
+    group: "diagram-sidebar-save-overwrite",
+    header: t("files.confirm.overwriteHeader"),
+    message: t("files.confirm.overwriteMessage", { name }),
+    icon: "pi pi-exclamation-triangle",
+    rejectLabel: t("files.confirm.cancel"),
+    acceptLabel: t("files.confirm.overwrite"),
+    acceptProps: { severity: "warning" },
+    rejectProps: { severity: "secondary", text: true },
+    accept: () => void writeToLibrary(name),
   });
 }
 
@@ -261,7 +316,13 @@ function leaveEditor() {
       :severity="isUnsaved ? 'warn' : 'success'"
       class="diagram-sidebar__unsaved-tag"
     />
-    <DiagramTree class="w-full" @select="openDiagramSource" />
+    <DiagramTree
+      v-model:visible="libraryOpen"
+      :refresh-key="libraryRefresh"
+      @open-request="openLibrary"
+      @select="openDiagramSource"
+    />
+    <Button :label="$t('files.save')" icon="pi pi-save" class="w-full" severity="secondary" @click="saveToLibrary" />
     <small v-if="loadFailed" class="diagram-sidebar__load-error">
       {{ $t("files.loadError") }}
     </small>
@@ -299,7 +360,8 @@ function leaveEditor() {
       @change="onFileSelected"
     />
     <ConfirmDialog group="diagram-sidebar-open-file" />
-    <ConfirmDialog group="diagram-sidebar-open-tree" />
+    <ConfirmDialog group="diagram-sidebar-open-library" />
+    <ConfirmDialog group="diagram-sidebar-save-overwrite" />
     <ConfirmDialog group="diagram-sidebar-new" />
     <ConfirmDialog group="diagram-sidebar-leave" />
     <Dialog

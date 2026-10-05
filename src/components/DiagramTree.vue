@@ -1,52 +1,155 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import Select from "openvue/select";
+import { computed, onMounted, ref, watch } from "vue";
+import Button from "openvue/button";
+import ConfirmDialog from "openvue/confirmdialog";
+import Dialog from "openvue/dialog";
+import Tree from "openvue/tree";
+import { useConfirm } from "openvue/useconfirm";
 import { useI18n } from "vue-i18n";
 import diagramTree from "virtual:diagram-tree";
+import { buildLibraryTree, deleteSavedDiagram, listSavedDiagrams } from "@/utils/diagramLibrary";
+import type { LibraryTreeNode } from "@/utils/diagramLibrary";
+import type { TreeNode } from "openvue/treenode";
 
-export type DiagramTreeSource = { source: "bundled"; path: string };
+export type DiagramTreeSource = { source: "bundled"; path: string } | { source: "saved"; name: string };
 
-const emit = defineEmits<{ select: [source: DiagramTreeSource] }>();
+const props = defineProps<{ visible: boolean; refreshKey: number }>();
 
-type TreeGroup = { label: string; items: { name: string; path: string }[] };
+const emit = defineEmits<{
+  select: [source: DiagramTreeSource];
+  "open-request": [];
+  "update:visible": [visible: boolean];
+}>();
 
 const { t } = useI18n();
+const confirm = useConfirm();
 
-const bundledGroups = computed<TreeGroup[]>(() => {
-  const groups: TreeGroup[] = [];
-  const walk = (folder: typeof diagramTree, prefix: string) => {
-    if (folder.files.length > 0) groups.push({ label: prefix, items: folder.files });
-    for (const child of folder.folders) walk(child, prefix ? `${prefix} / ${child.name}` : child.name);
-  };
-  walk(diagramTree, t("files.treeRoot"));
-  return groups;
-});
+const savedNames = ref<string[]>([]);
+const selectionKeys = ref<Record<string, boolean>>({});
+const expandedKeys = ref<Record<string, boolean>>({ saved: true });
 
-const selectedPath = ref<string | null>(null);
+const libraryNodes = computed(() =>
+  buildLibraryTree(savedNames.value, diagramTree, t("files.savedFolder"), t("files.savedEmpty")),
+);
 
-function onTreeSelect(value: unknown) {
-  if (typeof value !== "string" || value === "") return;
-  const source: DiagramTreeSource = { source: "bundled", path: value };
-  selectedPath.value = null;
-  emit("select", source);
+async function refreshSaved() {
+  savedNames.value = await listSavedDiagrams();
+  selectionKeys.value = {};
+}
+
+onMounted(() => void refreshSaved());
+
+// The parent owns the unsaved guard and the save triggers, so the saved list
+// reloads whenever the dialog opens or the parent bumps the refresh key.
+watch(
+  () => [props.visible, props.refreshKey] as const,
+  ([visible]) => {
+    if (visible) void refreshSaved();
+  },
+);
+
+function closeLibrary() {
+  emit("update:visible", false);
+}
+
+function onNodeSelect(node: TreeNode) {
+  // Clear the selection so clicking the same leaf again selects it.
+  selectionKeys.value = {};
+  const libraryNode = node as LibraryTreeNode;
+  if (libraryNode.children?.length) {
+    expandedKeys.value = { ...expandedKeys.value, [libraryNode.key]: !expandedKeys.value[libraryNode.key] };
+    return;
+  }
+  if (libraryNode.type === "saved") {
+    emit("select", { source: "saved", name: libraryNode.label });
+    closeLibrary();
+    return;
+  }
+  if (libraryNode.path) {
+    emit("select", { source: "bundled", path: libraryNode.path });
+    closeLibrary();
+  }
+}
+
+function onNodeUnselect(node: TreeNode) {
+  // A second row click on a selected folder arrives as an unselect; toggle it too.
+  const libraryNode = node as LibraryTreeNode;
+  if (libraryNode.children?.length) {
+    expandedKeys.value = { ...expandedKeys.value, [libraryNode.key]: !expandedKeys.value[libraryNode.key] };
+  }
+}
+
+function requestDelete(name: string) {
+  confirm.require({
+    group: "diagram-tree-delete",
+    header: t("files.confirm.deleteHeader"),
+    message: t("files.confirm.deleteMessage", { name }),
+    icon: "pi pi-exclamation-triangle",
+    rejectLabel: t("files.confirm.cancel"),
+    acceptLabel: t("files.confirm.delete"),
+    acceptProps: { severity: "danger" },
+    rejectProps: { severity: "secondary", text: true },
+    accept: () => void deleteConfirmed(name),
+  });
+}
+
+async function deleteConfirmed(name: string) {
+  await deleteSavedDiagram(name);
+  await refreshSaved();
 }
 </script>
 
 <template>
   <div class="diagram-tree">
-    <label class="diagram-tree__label" for="diagram-tree-input">{{ $t("files.savedDiagrams") }}</label>
-    <Select
-      input-id="diagram-tree-input"
-      :model-value="selectedPath"
-      :options="bundledGroups"
-      option-label="name"
-      option-value="path"
-      option-group-label="label"
-      option-group-children="items"
-      :placeholder="$t('files.openPlaceholder')"
+    <Button
+      :label="$t('files.load')"
+      icon="pi pi-folder-open"
       class="w-full"
-      @update:model-value="onTreeSelect"
+      severity="secondary"
+      @click="$emit('open-request')"
     />
+    <Dialog
+      :visible="visible"
+      modal
+      :header="t('files.libraryTitle')"
+      class="diagram-tree__dialog"
+      @update:visible="$emit('update:visible', $event)"
+    >
+      <Tree
+        v-model:selection-keys="selectionKeys"
+        v-model:expanded-keys="expandedKeys"
+        :value="libraryNodes"
+        selection-mode="single"
+        scroll-height="40vh"
+        class="diagram-tree__library"
+        @node-select="onNodeSelect"
+        @node-unselect="onNodeUnselect"
+      >
+        <template #default="{ node, expanded }">
+          <i
+            class="diagram-tree__node-icon"
+            :class="node.children?.length ? (expanded ? 'pi pi-folder-open' : 'pi pi-folder') : 'pi pi-file'"
+          />
+          <span class="diagram-tree__node-label">{{ node.label }}</span>
+        </template>
+        <template #placeholder="{ node }">
+          <span class="diagram-tree__node-label diagram-tree__empty">{{ node.label }}</span>
+        </template>
+        <template #saved="{ node }">
+          <i class="pi pi-file diagram-tree__node-icon" />
+          <span class="diagram-tree__node-label">{{ node.label }}</span>
+          <Button
+            icon="pi pi-trash"
+            severity="danger"
+            text
+            class="diagram-tree__delete"
+            :aria-label="$t('files.confirm.deleteNamed', { name: String(node.label) })"
+            @click.stop="requestDelete(String(node.label))"
+          />
+        </template>
+      </Tree>
+    </Dialog>
+    <ConfirmDialog group="diagram-tree-delete" />
   </div>
 </template>
 
@@ -57,9 +160,40 @@ function onTreeSelect(value: unknown) {
   gap: 0.25rem;
 }
 
-.diagram-tree__label {
-  color: var(--p-text-muted-color);
+.diagram-tree__library {
+  padding: 0.25rem;
   font-size: 0.875rem;
-  margin-bottom: 0.25rem;
+  background: transparent;
+}
+
+.diagram-tree__node-icon {
+  padding-right: 0.25rem;
+}
+
+.diagram-tree__empty {
+  color: var(--p-text-muted-color);
+}
+</style>
+
+<!-- The Dialog teleports to the body without the scoped attribute, so these rules must be global. -->
+<style lang="scss">
+.diagram-tree__dialog {
+  width: 500px;
+  max-width: calc(100vw - 2rem);
+}
+
+.diagram-tree__dialog .p-dialog-content {
+  padding: 0;
+}
+
+.diagram-tree__dialog .p-tree-node-label {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.diagram-tree__dialog .p-tree-node-icon:empty {
+  display: none;
 }
 </style>

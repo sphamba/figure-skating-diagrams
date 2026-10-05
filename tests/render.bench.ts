@@ -53,7 +53,7 @@ function makeCanvas() {
 function makeEditor() {
   const json = JSON.parse(
     readFileSync(
-      resolve(import.meta.dirname, "../public/diagrams/moves-in-the-field/juvenile_6.json"),
+      resolve(import.meta.dirname, "../public/diagrams/Moves in the field/04. Juvenile/06. Forward Double Three-Turns.json"),
       "utf-8",
     ),
   ) as DiagramJSON;

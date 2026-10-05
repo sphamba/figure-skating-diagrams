@@ -11,7 +11,7 @@ const toastAdd = vi.hoisted(() => vi.fn());
 vi.mock("openvue/usetoast", () => ({ useToast: () => ({ add: toastAdd }) }));
 
 // Stub matchMedia and ResizeObserver: jsdom does not implement them, and
-// DiagramTree's Select needs both at mount.
+// DiagramTree's Tree and Dialog need both at mount.
 Object.defineProperty(window, "matchMedia", {
   writable: true,
   value: vi.fn().mockImplementation((query: string) => ({
