@@ -6,10 +6,15 @@ import { Path } from "../src/engine/path";
 import { Sequence } from "../src/engine/sequence";
 import type { PathCoordinate } from "../src/engine/coordinates";
 import { Vector } from "../src/engine/vector";
-import { LABEL_FONT_SIZE, LABEL_FONT_SIZE_SMALL, PILL_PADDING, PILL_SIZE_FACTOR } from "../src/engine/sequenceEditor/label";
+import {
+  LABEL_FONT_SIZE,
+  LABEL_FONT_SIZE_SMALL,
+  PILL_PADDING,
+  PILL_SIZE_FACTOR,
+} from "../src/engine/sequenceEditor/label";
 import { LeftForwardOutsideThreeTurn, LeftForwardInsideThreeTurn } from "../src/engine/element/threeTurn";
 import { LeftForwardOpenChoctaw } from "../src/engine/element/choctaw";
-import { glideConstructorsByType, LeftForwardOutsideGlide } from "../src/engine/element/glide";
+import { BothForwardGlide, glideConstructorsByType, LeftForwardOutsideGlide } from "../src/engine/element/glide";
 import { jumpConstructorsByType } from "../src/engine/element/jump";
 import type { Element } from "../src/engine/element/element";
 import { LeftNormalForwardInsideGlide } from "../src/engine/element/stroke";
@@ -840,7 +845,10 @@ test("an uncovered inflection point draws one small inflection label", () => {
   const px = (font: string) => Number(font.replace(/px.*$/, ""));
   const mainLabels = drawn.filter((label) => label.text === "LFO");
   expect(mainLabels.length).toBeGreaterThan(0);
-  expect(px(inflectionLabels[0]!.font) * LABEL_FONT_SIZE).toBeCloseTo(px(mainLabels[0]!.font) * LABEL_FONT_SIZE_SMALL, 9);
+  expect(px(inflectionLabels[0]!.font) * LABEL_FONT_SIZE).toBeCloseTo(
+    px(mainLabels[0]!.font) * LABEL_FONT_SIZE_SMALL,
+    9,
+  );
 
   editor.destroy();
 });
@@ -2936,7 +2944,7 @@ test("a choctaw collision check reads the trace sides, not the middle discontinu
   // The midpoint keyframe coordinate rounds, so the trace is read at the
   // keyframe itself: an evaluation a fraction of a millimetre before it sits
   // in the landing transition, off the ice.
-  const middle = (choctaw.start as number + choctaw.end as number) / 2;
+  const middle = (((choctaw.start as number) + choctaw.end) as number) / 2;
   const midCoordinate = sequence.keyframes.footR
     .map((keyframe) => keyframe.coordinate as number)
     .reduce((best, u) => (Math.abs(u - middle) < Math.abs(best - middle) ? u : best), Infinity);
@@ -2991,4 +2999,99 @@ test("a stroke keeps the centerline label anchor on a curved path", () => {
   expect(geometry.point.y).toBeCloseTo(expected.y, 9);
 
   editor.destroy();
+});
+
+test("a two-feet glide anchors its label tail at the on-ice foot trace on the label side", () => {
+  const { editor } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+
+  const glide = new BothForwardGlide(0.2 as PathCoordinate, 0.6 as PathCoordinate);
+  sequence.addElement(glide);
+  editor.draw();
+
+  const geometry = editorRef(editor).getElementLabelGeometry(sequence, glide);
+  const anchorU = ((glide.end as number) + path.length) / 2;
+  // Both feet glide on the ice at half the feet spacing: on the straight path
+  // the left foot sits on the label side, so the tail starts at its trace.
+  const expected = footContactAt(sequence, "footL", anchorU as PathCoordinate);
+  expect(expected).not.toBeNull();
+  expect(geometry.point.x).toBeCloseTo(expected!.x, 3);
+  expect(geometry.point.y).toBeCloseTo(expected!.y, 3);
+
+  editor.destroy();
+});
+
+test("a single-foot glide keeps the centerline anchor when its on-ice foot stays on the path", () => {
+  const { editor } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+
+  const glide = new LeftForwardOutsideGlide(0.2 as PathCoordinate, 0.6 as PathCoordinate);
+  sequence.addElement(glide);
+  editor.draw();
+
+  const geometry = editorRef(editor).getElementLabelGeometry(sequence, glide);
+  const anchorU = ((glide.end as number) + path.length) / 2;
+  // The on-ice foot is centered on the path and the free foot lifts off, so no
+  // trace sits on the label side at the anchor.
+  const expected = path.getPosition(anchorU as PathCoordinate);
+  expect(geometry.point.x).toBeCloseTo(expected.x, 9);
+  expect(geometry.point.y).toBeCloseTo(expected.y, 9);
+
+  editor.destroy();
+});
+
+test("a stroke anchors its label tail at the following stroke's entry foot trace", () => {
+  const { editor } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const sequence = editor.getSequences()[0];
+  const path = sequence.path;
+  path.addCurveEnd(new Curve(new Vector(1, 0), new Vector(4 / 3, 0), new Vector(5 / 3, 0), new Vector(2, 0)));
+
+  const stroke = new LeftNormalForwardInsideGlide(0.2 as PathCoordinate, 0.6 as PathCoordinate);
+  const next = new (glideConstructorsByType["RightNormalForwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => LeftNormalForwardInsideGlide)(1.2 as PathCoordinate, 1.6 as PathCoordinate);
+  sequence.addElement(stroke);
+  sequence.addElement(next);
+  editor.draw();
+
+  const geometry = editorRef(editor).getElementLabelGeometry(sequence, stroke);
+  const anchorU = ((stroke.end as number) + (next.start as number)) / 2;
+  // The following stroke glides on the other foot, so its entry foot starts on
+  // the ice beside the path: at the anchor the lifted gliding foot has moved
+  // halfway there, on the label side of the straight path.
+  const expected = footContactAt(sequence, "footL", anchorU as PathCoordinate);
+  expect(expected).not.toBeNull();
+  expect(geometry.point.x).toBeCloseTo(expected!.x, 3);
+  expect(geometry.point.y).toBeCloseTo(expected!.y, 3);
+
+  editor.destroy();
+});
+
+test("a crossed stroke anchors its small label at the on-ice push foot trace on its inside side", () => {
+  const { editor } = makeEditor();
+  editorRef(editor).mode = "elements";
+  const sequence = editor.getSequences()[0];
+
+  const crossed = new (glideConstructorsByType["LeftCrossedBackwardInsideGlide"] as unknown as new (
+    start: number,
+    end: number,
+  ) => LeftNormalForwardInsideGlide)(0.2 as PathCoordinate, 0.6 as PathCoordinate);
+  sequence.addElement(crossed);
+  editor.draw();
+
+  const label = editorRef(editor).makeCrossedLabel(sequence, crossed) as PillLabel;
+  expect(label).not.toBeNull();
+  // The backward push foot crosses over: its drawn trace runs on the inside of
+  // the path at the stroke start, so the crossed pill anchors at the trace.
+  const expected = footContactAt(sequence, "footR", crossed.start as PathCoordinate);
+  expect(expected).not.toBeNull();
+  const anchor = label as unknown as { anchorX: number; anchorY: number };
+  expect(anchor.anchorX).toBeCloseTo(expected!.x * CANVAS_SCALE, 6);
+  expect(anchor.anchorY).toBeCloseTo(-expected!.y * CANVAS_SCALE, 6);
 });
