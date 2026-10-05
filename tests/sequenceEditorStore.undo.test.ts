@@ -1,11 +1,13 @@
 import { expect, test } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { useSequenceEditorStore } from "../src/stores/sequenceEditor";
+import { seedStoredDiagram } from "./helpers";
 import type { DiagramJSON } from "../src/engine/diagram";
 import type { Sequence } from "../src/engine/sequence";
 
 test("a rename records a step; undo and redo restore the name on rebuilt sequences", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const first = store.getSequences()[0] as Sequence;
@@ -27,6 +29,7 @@ test("a rename records a step; undo and redo restore the name on rebuilt sequenc
 
 test("a bpm change records a step; undo restores the previous bpm", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
 
@@ -41,6 +44,7 @@ test("a bpm change records a step; undo restores the previous bpm", () => {
 
 test("adding a sequence records a list step; undo removes it and redo brings it back", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
 
@@ -58,6 +62,7 @@ test("adding a sequence records a list step; undo removes it and redo brings it 
 
 test("loading a diagram deletes the history", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const first = store.getSequences()[0] as Sequence;
@@ -72,6 +77,7 @@ test("loading a diagram deletes the history", () => {
 
 test("creating a new diagram deletes the history", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const first = store.getSequences()[0] as Sequence;
@@ -85,6 +91,7 @@ test("creating a new diagram deletes the history", () => {
 
 test("the history survives a store rebuild and keeps walking back", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   let store = useSequenceEditorStore();
   const first = store.getSequences()[0] as Sequence;
@@ -110,6 +117,7 @@ test("the history survives a store rebuild and keeps walking back", () => {
 
 test("undo does not record itself; a new edit after an undo drops the redo stack", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const first = store.getSequences()[0] as Sequence;
@@ -129,6 +137,7 @@ test("undo does not record itself; a new edit after an undo drops the redo stack
 
 test("a non-list undo keeps hidden sequences at their index", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   store.addSequence();
@@ -149,6 +158,7 @@ test("a non-list undo keeps hidden sequences at their index", () => {
 
 test("a list undo clears the hidden set", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   store.addSequence();
@@ -166,6 +176,7 @@ test("a list undo clears the hidden set", () => {
 
 test("undoing past the saved baseline keeps the unsaved indicator on", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const first = store.getSequences()[0] as Sequence;
@@ -184,6 +195,7 @@ test("undoing past the saved baseline keeps the unsaved indicator on", () => {
 
 test("undoing back to the saved state clears the unsaved indicator", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const first = store.getSequences()[0] as Sequence;

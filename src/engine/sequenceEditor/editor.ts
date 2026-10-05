@@ -13,11 +13,11 @@ import { fullTimeExtentSeconds } from "../diagram.js";
 import { Annotation } from "../annotation.js";
 import type { Element } from "../element/element.js";
 import type { DynamicGlide } from "../element/stroke.js";
-import type { Path } from "../path.js";
+import { Path } from "../path.js";
 import { LENGTH, WIDTH, CORNER_RADIUS } from "../rink.js";
 import type { CanvasRenderingContext2DSized } from "../rinkCanvas.js";
 import { canvasFontReady } from "../font.js";
-import { round3 } from "../round.js";
+import { round3, roundVector2 } from "../round.js";
 import { createDefaultFootTurn, isJumpType } from "../element/turnTypes.js";
 import { TwoFeetTurn } from "../element/twoFeetTurn.js";
 import { TimingKeyframe } from "../keyframe.js";
@@ -110,6 +110,8 @@ const PROVISIONAL_COLOR = "#1976d2";
 export const PROVISIONAL_TOTAL_LENGTH = 0.8; // m
 export const DEFAULT_START_ELEMENT_LENGTH = 0.4; // m, total span of the default starting element
 const SPLIT_BUTTON_OFFSET = 14; // px, from the curve midpoint
+const PATH_CREATION_DOUBLE_CLICK_MS = 400; // max time between the two clicks of a finishing double click
+const PATH_CREATION_DOUBLE_CLICK_RADIUS = 10; // px, max distance between the two clicks of a finishing double click
 const DRAW_WINDOW_SECONDS = 4; // s, half of the short draw window
 const SELECTION_RECT_FILL = "rgba(100, 149, 237, 0.2)"; // gentle blue fill
 const SELECTION_RECT_STROKE = "rgba(100, 149, 237, 0.9)";
@@ -141,6 +143,17 @@ type ViewState = {
 };
 
 export type EditMode = "view" | "path" | "elements" | "timing" | "annotations";
+
+export type PathCreationPhase = "awaitStart" | "placing";
+
+// Live state of the click-to-draw path creation: a new sequence draws its path
+// from zero curves, an existing sequence extends its current one.
+export type PathCreationState = {
+  sequence: Sequence;
+  isNew: boolean;
+  phase: PathCreationPhase;
+  curveCount: number;
+};
 
 // One canvas action button drawn in the last frame. The owner is what a hit
 // returns, so the hit functions read it back per kind.
@@ -191,6 +204,19 @@ type JointDeletionSnapshot = MoveSnapshot & {
   jointOldCount: number;
 };
 
+// Internal state of an active path creation. The snapshot anchors and curves
+// of an extension keep every pre-existing handle untouched while the new
+// anchors rebuild only their own part of the path.
+type PathCreationRecord = {
+  sequence: Sequence;
+  isNew: boolean;
+  phase: PathCreationPhase;
+  newAnchors: Vector<2>[];
+  snapshotAnchors: Vector<2>[];
+  snapshotCurves: Curve[];
+  snapshotJson: ReturnType<Path["toJSON"]> | null;
+};
+
 // Owners whose appear and disappear transitions the editor tracks.
 type TransitionOwner = Element | Annotation | TimingKeyframe;
 type TransitionOwnerPair = { from: TransitionOwner; to: TransitionOwner };
@@ -202,7 +228,18 @@ export class Editor {
   height = 0;
 
   sequences: Sequence[] = [];
-  mode: EditMode = "view";
+  private _mode: EditMode = "view";
+  // Leaving "path" cancels an active path creation with its cancel semantics,
+  // so the partially drawn path never survives a mode switch silently.
+  get mode(): EditMode {
+    return this._mode;
+  }
+  set mode(value: EditMode) {
+    if (value === this._mode) return;
+    const previous = this._mode;
+    this._mode = value;
+    if (previous === "path" && this.pathCreation) this.cancelSequenceCreation();
+  }
   scaleElements = true;
   showLabels = true;
   darkMode = false;
@@ -246,6 +283,9 @@ export class Editor {
   onElementChangeRequest?: (element: Element) => void;
   onAnnotationChangeRequest?: (annotation: Annotation) => void;
   onSequenceChange?: () => void;
+  onPathCreationChange?: (state: PathCreationState | null) => void;
+  onSequenceCreationFinish?: (sequence: Sequence) => void;
+  onSequenceCreationCancel?: (sequence: Sequence) => void;
   private sequenceMutated = false;
   private ctxTransformApplied = false;
   private selectedCurves = new Map<Sequence, Set<number>>();
@@ -284,6 +324,14 @@ export class Editor {
   private provisionalElements = new Map<Sequence, Element>();
   private creatingSequence: Sequence | null = null;
   private isCreatingProvisional = false;
+  // Active click-to-draw path creation. Separate from the element-creation
+  // flags above: it owns the sequence path itself, with a snapshot for the
+  // cancel-restore of an extension.
+  private pathCreation: PathCreationRecord | null = null;
+  private lastPathCreationClick: { x: number; y: number; at: number } | null = null;
+  // Mouse-only hover point of the active path creation; the preview is
+  // rendering-only and recomputes from it at each draw.
+  private pathCreationHover: Vector<2> | null = null;
   private provisionalOriginU = 0;
   private provisionalTimingKeyframes = new Map<Sequence, TimingKeyframe>();
   private selectedTimingKeyframes = new Set<TimingKeyframe>();
@@ -356,7 +404,16 @@ export class Editor {
 
   private onWheel = (event: WheelEvent) => this.handleWheel(event);
   private onMouseDown = (event: MouseEvent) => this.handleMouseDown(event);
-  private onMouseMove = (event: MouseEvent) => this.handleMove(...this.screenPosition(event));
+  private onMouseMove = (event: MouseEvent) => {
+    if (this.pathCreation) this.updatePathCreationHover(...this.screenPosition(event));
+    this.handleMove(...this.screenPosition(event));
+  };
+  private onMouseLeave = () => {
+    if (this.pathCreationHover) {
+      this.pathCreationHover = null;
+      this.requestDraw();
+    }
+  };
   private onMouseUp = () => this.handleMouseUp();
   private onTouchStart = (event: TouchEvent) => this.handleTouchStart(event);
   private onTouchMove = (event: TouchEvent) => this.handleTouchMove(event);
@@ -408,6 +465,7 @@ export class Editor {
     window.addEventListener("mouseup", this.onMouseUp);
     window.addEventListener("keydown", this.onKeyDown);
     canvas.addEventListener("contextmenu", this.onContextMenu);
+    canvas.addEventListener("mouseleave", this.onMouseLeave);
     window.addEventListener("resize", this.onWindowResize);
 
     this.draw();
@@ -434,6 +492,7 @@ export class Editor {
     window.removeEventListener("mouseup", this.onMouseUp);
     window.removeEventListener("keydown", this.onKeyDown);
     this.canvas.removeEventListener("contextmenu", this.onContextMenu);
+    this.canvas.removeEventListener("mouseleave", this.onMouseLeave);
     window.removeEventListener("resize", this.onWindowResize);
     if (this.resizeObserver) this.resizeObserver.disconnect();
     this.resizeObserver = null;
@@ -443,7 +502,10 @@ export class Editor {
     this.remapTransitionOwners(sequences);
     this.sequences = sequences;
     this.sequenceMutated = false;
-    this.clearEditingState();
+    // A creation on a sequence that stays in the list survives the update, so
+    // the addSequence flow never kills its own creation state in the same flush.
+    const keepPathCreation = this.pathCreation !== null && sequences.includes(this.pathCreation.sequence);
+    this.clearEditingState({ keepPathCreation });
     this.draw();
   }
 
@@ -515,7 +577,8 @@ export class Editor {
     }
   }
 
-  private clearEditingState() {
+  private clearEditingState(options?: { keepPathCreation?: boolean }) {
+    this.pathCreationHover = null;
     this.dragSnapshots.clear();
     this.jointDeletionSnapshot = null;
     this.selectedPoints.clear();
@@ -524,6 +587,11 @@ export class Editor {
     this.provisionalElements.clear();
     this.creatingSequence = null;
     this.isCreatingProvisional = false;
+    if (this.pathCreation && !options?.keepPathCreation) {
+      this.pathCreation = null;
+      this.lastPathCreationClick = null;
+      if (this.onPathCreationChange) this.onPathCreationChange(null);
+    }
     this.dragSequence = null;
     this.dragElement = null;
     this.touchMode = "none";
@@ -561,7 +629,12 @@ export class Editor {
     }
     const hasNewlyHidden = this.sequences.some((sequence) => next.has(sequence) && !this.hiddenSequences.has(sequence));
     this.hiddenSequences = next;
-    if (hasNewlyHidden) this.clearEditingState();
+    if (hasNewlyHidden) {
+      // Hiding the creation's own sequence cancels it; a creation on a still
+      // visible sequence survives the visibility update.
+      const keepPathCreation = this.pathCreation !== null && !next.has(this.pathCreation.sequence);
+      this.clearEditingState({ keepPathCreation });
+    }
     this.draw();
   }
 
@@ -665,10 +738,306 @@ export class Editor {
     return sequence;
   }
 
-  addSegmentEnd(sequence: Sequence) {
-    sequence.path.addCurveEnd();
+  getPathCreationState(): PathCreationState | null {
+    const creation = this.pathCreation;
+    if (!creation) return null;
+    return {
+      sequence: creation.sequence,
+      isNew: creation.isNew,
+      phase: creation.phase,
+      curveCount: creation.sequence.path.curves.length,
+    };
+  }
+
+  startSequenceCreation(sequence: Sequence) {
+    if (this.pathCreation) this.cancelSequenceCreation();
+    this.pathCreation = {
+      sequence,
+      isNew: true,
+      phase: "awaitStart",
+      newAnchors: [],
+      snapshotAnchors: [],
+      snapshotCurves: [],
+      snapshotJson: null,
+    };
+    this.lastPathCreationClick = null;
+    this.pathCreationHover = null;
+    this.notifyPathCreationChange();
+    this.draw();
+  }
+
+  startSequenceExtension(sequence: Sequence) {
+    if (this.pathCreation) this.cancelSequenceCreation();
+    this.pathCreation = {
+      sequence,
+      isNew: false,
+      phase: "placing",
+      newAnchors: [],
+      snapshotAnchors: this.pathAnchors(sequence.path),
+      snapshotCurves: [...sequence.path.curves],
+      snapshotJson: sequence.path.toJSON(),
+    };
+    this.lastPathCreationClick = null;
+    this.pathCreationHover = null;
+    this.notifyPathCreationChange();
+    this.draw();
+  }
+
+  finishSequenceCreation(): boolean {
+    const creation = this.pathCreation;
+    if (!creation) return false;
+    if (creation.snapshotAnchors.length + creation.newAnchors.length < 2) return false;
+    this.pathCreation = null;
+    this.lastPathCreationClick = null;
+    this.pathCreationHover = null;
+    this.notifyPathCreationChange();
+    if (this.onSequenceCreationFinish) this.onSequenceCreationFinish(creation.sequence);
     this.notifySequenceChange();
     this.draw();
+    return true;
+  }
+
+  cancelSequenceCreation() {
+    const creation = this.pathCreation;
+    if (!creation) return;
+    this.pathCreation = null;
+    this.lastPathCreationClick = null;
+    this.pathCreationHover = null;
+    if (!creation.isNew && creation.snapshotJson) {
+      this.restorePathSnapshot(creation.sequence, creation.snapshotJson);
+    }
+    this.notifyPathCreationChange();
+    if (creation.isNew) {
+      if (this.onSequenceCreationCancel) this.onSequenceCreationCancel(creation.sequence);
+    } else {
+      this.notifySequenceChange();
+    }
+    this.draw();
+  }
+
+  private notifyPathCreationChange() {
+    if (this.onPathCreationChange) this.onPathCreationChange(this.getPathCreationState());
+  }
+
+  // Live mouse-only hover preview of the active path creation. In awaitStart
+  // it holds one provisional point marker under the cursor; in placing it
+  // holds the placed anchors in both styles (the latest provisional), the
+  // provisional next curve and the previous curve with the would-be recomputed
+  // handle. Null when no creation is active or the mouse left the canvas;
+  // touch never fills it.
+  getPathCreationPreview(): {
+    points: Vector<2>[];
+    provisionalPoints: Vector<2>[];
+    curve: { p0: Vector<2>; p1: Vector<2>; p2: Vector<2>; p3: Vector<2> } | null;
+    previousCurve: { p0: Vector<2>; p1: Vector<2>; p2: Vector<2>; p3: Vector<2> } | null;
+  } | null {
+    const creation = this.pathCreation;
+    const hover = this.pathCreationHover;
+    if (!creation || !hover) return null;
+    const combined = [...creation.snapshotAnchors, ...creation.newAnchors];
+    if (creation.phase === "awaitStart" || combined.length === 0)
+      return { points: [], provisionalPoints: [hover], curve: null, previousCurve: null };
+    const last = combined[combined.length - 1];
+    if (!last) return { points: [], provisionalPoints: [hover], curve: null, previousCurve: null };
+    const withHover = [...combined, hover];
+    const index = combined.length - 1;
+    const tangent = this.creationTangent(withHover, index);
+    // The second handle stays on the departure→hover segment, so the control
+    // polygon turns at most once and the provisional curve never inflects,
+    // whatever direction the cursor swings.
+    const departure = last.plus(tangent.times(1 / 3));
+    // The last path curve ends at the latest anchor, whose incoming handle a
+    // placement at the hover point would recompute to the same Catmull-Rom
+    // tangent the next curve then uses.
+    const lastCurve = creation.sequence.path.curves[creation.sequence.path.curves.length - 1] ?? null;
+    return {
+      points: combined.slice(0, -1),
+      provisionalPoints: [last, hover],
+      curve: {
+        p0: last,
+        p1: departure,
+        p2: departure.plus(hover.minus(departure).times(0.5)),
+        p3: hover,
+      },
+      previousCurve: lastCurve
+        ? {
+            p0: lastCurve.p0,
+            p1: lastCurve.p1,
+            p2: last.minus(tangent.times(1 / 3)),
+            p3: last,
+          }
+        : null,
+    };
+  }
+
+  private updatePathCreationHover(screenX: number, screenY: number) {
+    if (!this.pathCreation) return;
+    const hover = roundVector2(this.screenToWorld(screenX, screenY));
+    const previous = this.pathCreationHover;
+    this.pathCreationHover = hover;
+    if (!previous || previous.x !== hover.x || previous.y !== hover.y) this.requestDraw();
+  }
+
+  // Draws the mouse-only hover preview: the previous curve with its would-be
+  // recomputed handle and the provisional curve in the provisional style,
+  // placed anchors in the normal point style except the latest provisional
+  // one, and no handle dots.
+  private drawPathCreationPreview() {
+    const preview = this.getPathCreationPreview();
+    if (!preview) return;
+    const ctx = this.ctx;
+    ctx.strokeStyle = PROVISIONAL_COLOR;
+    ctx.lineWidth = (PATH_WIDTH * CANVAS_SCALE) / this.view.zoom;
+    for (const curve of [preview.previousCurve, preview.curve]) {
+      if (!curve) continue;
+      const { p0, p1, p2, p3 } = curve;
+      ctx.beginPath();
+      ctx.moveTo(p0.x * CANVAS_SCALE, -p0.y * CANVAS_SCALE);
+      ctx.bezierCurveTo(
+        p1.x * CANVAS_SCALE,
+        -p1.y * CANVAS_SCALE,
+        p2.x * CANVAS_SCALE,
+        -p2.y * CANVAS_SCALE,
+        p3.x * CANVAS_SCALE,
+        -p3.y * CANVAS_SCALE,
+      );
+      ctx.stroke();
+    }
+    const radius = (NODE_SIZE * CANVAS_SCALE) / this.view.zoom / 2;
+    for (const point of preview.points) {
+      ctx.fillStyle = "#444";
+      ctx.beginPath();
+      ctx.arc(point.x * CANVAS_SCALE, -point.y * CANVAS_SCALE, radius, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+    ctx.fillStyle = PROVISIONAL_COLOR;
+    for (const point of preview.provisionalPoints) {
+      ctx.beginPath();
+      ctx.arc(point.x * CANVAS_SCALE, -point.y * CANVAS_SCALE, radius, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+  }
+
+  // Placed creation anchors render in the base draw, so a touch placement
+  // without hover still shows its points; the latest anchor stays provisional.
+  private drawCreationAnchors() {
+    const creation = this.pathCreation;
+    if (!creation) return;
+    const ctx = this.ctx;
+    const radius = (NODE_SIZE * CANVAS_SCALE) / this.view.zoom / 2;
+    creation.newAnchors.forEach((anchor, index) => {
+      ctx.fillStyle = index === creation.newAnchors.length - 1 ? PROVISIONAL_COLOR : "#444";
+      ctx.beginPath();
+      ctx.arc(anchor.x * CANVAS_SCALE, -anchor.y * CANVAS_SCALE, radius, 0, 2 * Math.PI);
+      ctx.fill();
+    });
+  }
+
+  private pathAnchors(path: Path): Vector<2>[] {
+    if (path.curves.length === 0) return [];
+    return [path.curves[0]!.p0, ...path.curves.map((curve) => curve.p3)];
+  }
+
+  private restorePathSnapshot(sequence: Sequence, snapshot: ReturnType<Path["toJSON"]>) {
+    sequence.path.curves = Path.fromJSON(snapshot).curves;
+    sequence.path.updateLength();
+  }
+
+  // The primary click of a path creation: a double click finishes, any other
+  // click places the next anchor. No hit-testing and no modifiers while the
+  // creation state is active.
+  private handlePathCreationClick(screenX: number, screenY: number) {
+    const now = Date.now();
+    const last = this.lastPathCreationClick;
+    if (
+      last &&
+      now - last.at <= PATH_CREATION_DOUBLE_CLICK_MS &&
+      Math.hypot(screenX - last.x, screenY - last.y) <= PATH_CREATION_DOUBLE_CLICK_RADIUS
+    ) {
+      this.lastPathCreationClick = null;
+      this.finishSequenceCreation();
+      return;
+    }
+    this.lastPathCreationClick = { x: screenX, y: screenY, at: now };
+    const creation = this.pathCreation;
+    if (!creation) return;
+    const anchor = roundVector2(this.screenToWorld(screenX, screenY));
+    const combined = [...creation.snapshotAnchors, ...creation.newAnchors];
+    const previous = combined[combined.length - 1];
+    // A click at the last anchor adds nothing, so a slow double click never
+    // creates a zero-length curve.
+    if (creation.phase === "placing" && previous && previous.x === anchor.x && previous.y === anchor.y) return;
+    creation.newAnchors.push(anchor);
+    creation.phase = "placing";
+    this.rebuildCreationCurves();
+    this.notifyPathCreationChange();
+    this.draw();
+  }
+
+  private removeLastPathCreationPoint() {
+    const creation = this.pathCreation;
+    if (!creation || creation.phase !== "placing" || creation.newAnchors.length === 0) return;
+    creation.newAnchors.pop();
+    const path = creation.sequence.path;
+    if (creation.newAnchors.length === 0) {
+      if (creation.isNew) {
+        path.curves = [];
+        path.updateLength();
+        creation.phase = "awaitStart";
+      } else {
+        this.restorePathSnapshot(creation.sequence, creation.snapshotJson!);
+      }
+    } else {
+      this.rebuildCreationCurves();
+    }
+    this.notifyPathCreationChange();
+    this.draw();
+  }
+
+  private rebuildCreationCurves() {
+    const creation = this.pathCreation;
+    if (!creation) return;
+    const path = creation.sequence.path;
+    const combined = [...creation.snapshotAnchors, ...creation.newAnchors];
+    const curves: Curve[] = [];
+    if (!creation.isNew) curves.push(...creation.snapshotCurves);
+
+    // The previous end anchor of an extension becomes an interior joint: its
+    // outgoing handle follows the same Catmull-Rom tangent as the first new
+    // curve, so the old and new parts stay G1-continuous.
+    const jointIndex = creation.snapshotCurves.length;
+    if (!creation.isNew && creation.snapshotCurves.length > 0 && creation.newAnchors.length > 0) {
+      const lastPreserved = curves[curves.length - 1]!;
+      lastPreserved.p2 = lastPreserved.p3.minus(this.creationTangent(combined, jointIndex).times(1 / 3));
+    }
+
+    for (let index = jointIndex; index + 1 < combined.length; index++) {
+      const start = combined[index]!;
+      const end = combined[index + 1]!;
+      const previous = curves[curves.length - 1] ?? null;
+      // The newest curve keeps its second handle on the departure→end segment
+      // so it never inflects; interior curves keep the Catmull-Rom end handle.
+      const departure = start.plus(this.creationTangent(combined, index).times(1 / 3));
+      const arrival =
+        index + 2 === combined.length
+          ? departure.plus(end.minus(departure).times(0.5))
+          : end.minus(this.creationTangent(combined, index + 1).times(1 / 3));
+      const curve = new Curve(start, departure, arrival, end);
+      if (previous) curve.p0 = previous.p3;
+      curves.push(curve);
+    }
+
+    path.curves = curves;
+    path.updateLength();
+  }
+
+  // Doubled Catmull-Rom tangent at anchors[index] for rounder creation
+  // handles: interior anchors double the neighbour average, the path ends
+  // take the full chord to their only neighbour. Handles stay tangent/3.
+  private creationTangent(anchors: Vector<2>[], index: number): Vector<2> {
+    if (index === 0) return anchors[1]!.minus(anchors[0]!);
+    if (index === anchors.length - 1) return anchors[index]!.minus(anchors[index - 1]!);
+    return anchors[index + 1]!.minus(anchors[index - 1]!);
   }
 
   // Loads the background image of the diagram; the redraw happens once the
@@ -725,6 +1094,11 @@ export class Editor {
         for (const sequence of this.editSequences()) {
           this.drawControlHandles(sequence);
         }
+        // The creation anchors and the preview render above the control
+        // handles, so the latest anchor keeps its provisional color over the
+        // endpoint style every curve end draws.
+        this.drawCreationAnchors();
+        this.drawPathCreationPreview();
       } else if (this.mode === "elements") {
         drewElements = this.drawElements();
       } else if (this.mode === "view") {
@@ -755,9 +1129,11 @@ export class Editor {
       this.scheduleTransitionDraw();
       // The buttons render above the labels, so no pointer crosses a button.
       if (this.mode === "path") {
-        this.collectAddButtons();
-        this.collectSplitButtons();
-        this.collectPathDeleteButtons();
+        if (!this.pathCreation) {
+          this.collectAddButtons();
+          this.collectSplitButtons();
+          this.collectPathDeleteButtons();
+        }
       } else if (this.mode === "elements") {
         if (drewElements) this.collectElementModeButtons();
       } else if (this.mode === "timing") {
@@ -3853,6 +4229,13 @@ export class Editor {
       return;
     }
 
+    // A path creation owns every primary click in path mode: no buttons, no
+    // hit-testing and no selection while it is active.
+    if (this.pathCreation) {
+      this.handlePathCreationClick(screenX, screenY);
+      return;
+    }
+
     const deleteHit = this.hitDeleteButton(screenX, screenY);
     if (deleteHit) {
       const sequence = deleteHit.sequence;
@@ -3877,7 +4260,7 @@ export class Editor {
     }
     const addHit = this.hitAddButton(screenX, screenY);
     if (addHit) {
-      this.addSegmentEnd(addHit);
+      this.startSequenceExtension(addHit);
       return;
     }
     const splitHit = this.hitSplitButton(screenX, screenY);
@@ -4385,6 +4768,21 @@ export class Editor {
 
   private handleKeyDown(event: KeyboardEvent) {
     if (isInteractiveKeyTarget(event.target)) return;
+    // A path creation owns Backspace, Delete and Escape; the normal selection
+    // keys stay disabled while it is active.
+    if (this.pathCreation) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.cancelSequenceCreation();
+        return;
+      }
+      if (event.key === "Backspace" || event.key === "Delete") {
+        event.preventDefault();
+        this.removeLastPathCreationPoint();
+        return;
+      }
+      return;
+    }
     if (this.mode === "path" && event.ctrlKey && (event.key === "a" || event.key === "A")) {
       event.preventDefault();
       this.selectAll();
@@ -4412,7 +4810,7 @@ export class Editor {
         return;
       }
       const add = this.lastDrawnButton("add");
-      if (add) this.addSegmentEnd(add.owner as Sequence);
+      if (add) this.startSequenceExtension(add.owner as Sequence);
       return;
     }
     if (this.mode === "elements") {

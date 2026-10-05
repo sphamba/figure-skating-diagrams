@@ -25,18 +25,13 @@ import { createStubCanvas, makeNoopContext, makeStraightLengthOnePath, getArcCur
 
 const makeStraightPath = makeStraightLengthOnePath;
 
-test("addSegmentEnd appends a 5 m straight curve", () => {
-  const editor = {
-    sequence: new Sequence(makeStraightPath()),
-    addSegmentEnd() {
-      this.sequence.path.addCurveEnd();
-    },
-  };
+test("addCurveEnd appends a 5 m straight curve", () => {
+  const path = makeStraightPath();
 
-  const curvesBefore = editor.sequence.path.curves.length;
-  editor.addSegmentEnd();
+  const curvesBefore = path.curves.length;
+  path.addCurveEnd();
 
-  const curves = editor.sequence.path.curves;
+  const curves = path.curves;
   expect(curves).toHaveLength(curvesBefore + 1);
 
   const lastCurve = curves[curves.length - 1]!;
@@ -2307,33 +2302,47 @@ test("the path add buttons register as labels after a draw", () => {
   editor.destroy();
 });
 
-test("a click at the resolved add button position adds a curve end", () => {
+test("a click at the resolved add button position enters the extension mode", () => {
   const { editor, canvas } = makeEditor();
   const sequence = editor.getSequences()[0];
   editor.draw();
   const drawn = editorRef(editor).drawnButtons as Array<{ kind: string; label: unknown }>;
   const addButton = drawn.find((button) => button.kind === "add")!;
   const [iconX, iconY] = editorRef(editor).drawnButtonScreenPosition(addButton.label);
-  const before = sequence.path.curves.length;
+  const snapshotJson = JSON.stringify(sequence.path.toJSON());
+  const curvesBefore = sequence.path.curves.length;
   mouse("mousedown", canvas, { clientX: iconX, clientY: iconY, button: 0, ctrlKey: false });
   mouse("mouseup", window, {});
-  expect(sequence.path.curves.length).toBe(before + 1);
+  const creation = editor.getPathCreationState();
+  expect(creation).not.toBeNull();
+  expect(creation!.isNew).toBe(false);
+  expect(creation!.phase).toBe("placing");
+  expect(creation!.sequence).toBe(sequence);
+  expect(sequence.path.curves.length).toBe(curvesBefore);
+
+  // A click away from the path end places the next anchor.
+  const zoom = editorRef(editor).view.zoom;
+  mouse("mousedown", canvas, { clientX: 512 + 4 * zoom, clientY: 512 - 2 * zoom, button: 0, ctrlKey: false });
+  mouse("mouseup", window, {});
+  expect(sequence.path.curves.length).toBe(curvesBefore + 1);
+
+  editor.cancelSequenceCreation();
+  expect(editor.getPathCreationState()).toBeNull();
+  expect(JSON.stringify(sequence.path.toJSON())).toBe(snapshotJson);
   editor.destroy();
 });
 
 test("a pending scheduled draw flushes at pointerdown", () => {
   const { editor, canvas } = makeEditor();
-  const sequence = editor.getSequences()[0];
   editor.draw();
-  const before = sequence.path.curves.length;
   // Zooming moves the add button on screen and schedules a deferred frame.
   editorRef(editor).view.zoom = 500;
   editor.requestDraw();
   expect(editorRef(editor).drawScheduled).toBe(true);
-  const [iconX, iconY] = editorRef(editor).worldToScreen(editorRef(editor).getAddButtonPosition(sequence));
+  const [iconX, iconY] = editorRef(editor).worldToScreen(editorRef(editor).getAddButtonPosition(editor.getSequences()[0]));
   mouse("mousedown", canvas, { clientX: iconX, clientY: iconY, button: 0, ctrlKey: false });
   mouse("mouseup", window, {});
-  expect(sequence.path.curves.length).toBe(before + 1);
+  expect(editor.getPathCreationState()).not.toBeNull();
   editor.destroy();
 });
 
@@ -2665,13 +2674,17 @@ test("a second Delete after a deletion is a no-op", () => {
   editor.destroy();
 });
 
-test("Enter appends a curve like clicking the path add button", () => {
+test("Enter enters the extension mode like clicking the path add button", () => {
   const { editor } = makeEditor();
   const sequence = editor.getSequences()[0];
   editorRef(editor).draw();
-  const before = sequence.path.curves.length;
+  const curvesBefore = sequence.path.curves.length;
   window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
-  expect(sequence.path.curves.length).toBe(before + 1);
+  const creation = editor.getPathCreationState();
+  expect(creation).not.toBeNull();
+  expect(creation!.isNew).toBe(false);
+  expect(creation!.phase).toBe("placing");
+  expect(sequence.path.curves.length).toBe(curvesBefore);
   editor.destroy();
 });
 
@@ -2831,15 +2844,16 @@ test("Enter pressed inside an input does not activate buttons", () => {
   editor.destroy();
 });
 
-test("a repeated Enter dispatch adds only one item", () => {
+test("a repeated Enter dispatch starts the extension mode only once", () => {
   const { editor } = makeEditor();
   const sequence = editor.getSequences()[0];
   editorRef(editor).draw();
   const before = sequence.path.curves.length;
   window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
-  expect(sequence.path.curves.length).toBe(before + 1);
+  expect(editor.getPathCreationState()).not.toBeNull();
   window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", repeat: true }));
-  expect(sequence.path.curves.length).toBe(before + 1);
+  expect(editor.getPathCreationState()).not.toBeNull();
+  expect(sequence.path.curves.length).toBe(before);
   editor.destroy();
 });
 

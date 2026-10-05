@@ -1,14 +1,10 @@
 import { ref, shallowRef, triggerRef } from "vue";
 import { defineStore } from "pinia";
-import { BothForwardGlide } from "@/engine/element/glide";
 import { applyParts, EditHistory, type EditStep } from "@/engine/sequenceEditor/editHistory";
-import { DEFAULT_START_ELEMENT_LENGTH } from "@/engine/sequenceEditor/editor";
-import { Curve } from "@/engine/curve";
 import { Diagram, type DiagramJSON } from "@/engine/diagram";
 import { Path } from "@/engine/path";
 import { Sequence, type FootKey, type SequenceJSON } from "@/engine/sequence";
 import { Vector } from "@/engine/vector";
-import type { PathCoordinate } from "@/engine/coordinates";
 
 const STORAGE_KEY = "sequence-editor";
 const SHORT_DRAW_RANGE_KEY = "sequence-editor-short-draw-range";
@@ -19,20 +15,8 @@ const DEFAULT_SEQUENCE_NAME = "Sequence";
 // down. A duplicate lands 5 m to the bottom right of its original.
 const DUPLICATE_SHIFT = new Vector<2>(5, -5);
 
-function defaultSequence(): Sequence {
-  const path = new Path();
-  path.curves.push(new Curve(new Vector(-2.5, 0), new Vector(-0.5, 0), new Vector(0.5, 0), new Vector(2.5, 0)));
-  path.updateLength();
-  const sequence = new Sequence(path);
-  const half = DEFAULT_START_ELEMENT_LENGTH / 2;
-  sequence.addElement(new BothForwardGlide(-half as PathCoordinate, half as PathCoordinate));
-  return sequence;
-}
-
 function defaultDiagram(): Diagram {
-  const sequence = defaultSequence();
-  sequence.name = `${DEFAULT_SEQUENCE_NAME} 1`;
-  return new Diagram("Diagram", [sequence]);
+  return new Diagram("Diagram", []);
 }
 
 function loadStoredDiagram(): Diagram {
@@ -104,7 +88,16 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
   const history = new EditHistory({ storage: localStorage, storageKey: HISTORY_KEY });
   const canUndo = ref(false);
   const canRedo = ref(false);
+  // The Editor instance lives in the view, so a new sequence travels as a
+  // request the view consumes to enter the path-creation mode.
+  const creationRequest = shallowRef<Sequence | null>(null);
   let applyingHistory = false;
+
+  function consumeCreationRequest(): Sequence | null {
+    const request = creationRequest.value;
+    creationRequest.value = null;
+    return request;
+  }
 
   function syncHistoryState() {
     canUndo.value = history.canUndo;
@@ -175,10 +168,11 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
   }
 
   function addSequence() {
-    const sequence = defaultSequence();
+    const sequence = new Sequence(new Path());
     sequence.name = uniqueSequenceName(diagram.value.sequences);
     diagram.value.sequences = [...diagram.value.sequences, sequence];
     activeSequence.value = sequence;
+    creationRequest.value = sequence;
     triggerRef(diagram);
     saveToStorage();
   }
@@ -186,12 +180,7 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
   function removeSequence(sequence: Sequence) {
     const index = diagram.value.sequences.indexOf(sequence);
     if (index === -1) return;
-    let next = diagram.value.sequences.filter((candidate) => candidate !== sequence);
-    if (next.length === 0) {
-      const fallback = defaultSequence();
-      fallback.name = uniqueSequenceName(next);
-      next = [...next, fallback];
-    }
+    const next = diagram.value.sequences.filter((candidate) => candidate !== sequence);
     if (activeSequence.value === sequence || !next.includes(activeSequence.value as Sequence)) {
       activeSequence.value = next[0] ?? null;
     }
@@ -342,8 +331,8 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
   }
 
   function loadFromJSON(json: DiagramJSON) {
+    consumeCreationRequest();
     const next = Diagram.fromJSON(json);
-    if (next.sequences.length === 0) next.sequences.push(defaultSequence());
     diagram.value = next;
     activeSequence.value = next.sequences[0] ?? null;
     hiddenSequences.value = new Set();
@@ -377,6 +366,7 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
   }
 
   function clear() {
+    consumeCreationRequest();
     const next = defaultDiagram();
     diagram.value = next;
     activeSequence.value = next.sequences[0] ?? null;
@@ -396,6 +386,8 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
 
   return {
     diagram,
+    creationRequest,
+    consumeCreationRequest,
     getDiagram,
     getShortDrawRange,
     setShortDrawRange,

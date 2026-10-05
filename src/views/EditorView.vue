@@ -2,6 +2,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import Button from "openvue/button";
 import Tag from "openvue/tag";
+import Toast from "openvue/toast";
+import { useToast } from "openvue/usetoast";
 import Select from "openvue/select";
 import SelectButton from "openvue/selectbutton";
 import Tabs from "openvue/tabs";
@@ -21,7 +23,7 @@ import SplitterPanel from "openvue/splitterpanel";
 import TimeSyncPane from "@/components/TimeSyncPane.vue";
 import TrackingButton from "@/components/TrackingButton.vue";
 import DiagramSidebar, { type HelpItem } from "@/components/DiagramSidebar.vue";
-import { Editor, formatTimingLabel, type EditMode } from "@/engine/sequenceEditor/editor";
+import { Editor, formatTimingLabel, type EditMode, type PathCreationState } from "@/engine/sequenceEditor/editor";
 import { TimingKeyframe, type TimingKind } from "@/engine/keyframe";
 import { DEFAULT_ANNOTATION_COLOR, type Annotation } from "@/engine/annotation";
 import type { Sequence } from "@/engine/sequence";
@@ -49,6 +51,7 @@ import type { Element } from "@/engine/element/element";
 import { earliestTimeKeyframeSeconds, fullTimeExtentSeconds } from "@/engine/diagram";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import { useAppearanceStore } from "@/stores/appearance";
+import { useInputModeStore } from "@/stores/inputMode";
 import { storeToRefs } from "pinia";
 import UndoRedoButtons from "@/components/UndoRedoButtons.vue";
 import { useUndoRedoKeys } from "@/composables/useUndoRedoKeys";
@@ -61,6 +64,7 @@ import { useTimeCursorStepping } from "@/composables/useTimeCursorStepping";
 import { useTimeCursorKeys } from "@/composables/useTimeCursorKeys";
 import { useTooltipTouchGuard } from "@/composables/useTooltipTouchGuard";
 import { usePlaybackSpeed } from "@/composables/usePlaybackSpeed";
+import { textColorFor } from "@/utils/contrast";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
@@ -951,6 +955,140 @@ function commitAnnotationChange() {
   closeAnnotationChange();
 }
 
+const inputMode = useInputModeStore();
+
+const pathCreation = shallowRef<PathCreationState | null>(null);
+// The finish callback fires after onPathCreationChange(null), so the flow kind
+// outlives the creation state to decide whether the finish dialog opens.
+let pathCreationIsNew = true;
+const sequenceFinishOpen = ref(false);
+const finishSequenceTarget = shallowRef<Sequence | null>(null);
+const finishNameDraft = ref("");
+const finishColorLDraft = ref("");
+const finishColorRDraft = ref("");
+const finishColorL = computed({
+  get: () => finishColorLDraft.value.replace(/^#/, ""),
+  set: (value: string) => {
+    finishColorLDraft.value = `#${value}`;
+  },
+});
+const finishColorR = computed({
+  get: () => finishColorRDraft.value.replace(/^#/, ""),
+  set: (value: string) => {
+    finishColorRDraft.value = `#${value}`;
+  },
+});
+
+const pathCreationPlacing = computed(() => pathCreation.value?.phase === "placing");
+
+const pathCreationBanner = computed(() => {
+  const state = pathCreation.value;
+  if (!state) return null;
+  const touch = inputMode.mode === "touch";
+  return {
+    title: t(state.isNew ? "editor.pathCreation.newSequence" : "editor.pathCreation.addPoints"),
+    instruction: t(
+      pathCreationPlacing.value
+        ? touch
+          ? "editor.pathCreation.placingTouch"
+          : "editor.pathCreation.placing"
+        : touch
+          ? "editor.pathCreation.awaitStartTouch"
+          : "editor.pathCreation.awaitStart",
+    ),
+  };
+});
+
+const toast = useToast();
+const PATH_CREATION_TOAST_GROUP = "path-creation";
+
+// One sticky toast mirrors the active path creation: added once on start,
+// its title, instruction and buttons render from the reactive refs below so
+// the content updates in place; the group is removed on finish or cancel.
+const pathCreationToastShown = ref(false);
+
+function syncPathCreationToast(state: PathCreationState | null) {
+  if (!state) {
+    pathCreationToastShown.value = false;
+    toast.removeGroup(PATH_CREATION_TOAST_GROUP);
+    return;
+  }
+  if (pathCreationToastShown.value) return;
+  pathCreationToastShown.value = true;
+  toast.add({ group: PATH_CREATION_TOAST_GROUP, closable: false });
+}
+
+function finishPathCreation() {
+  editor?.finishSequenceCreation();
+}
+
+function cancelPathCreation() {
+  editor?.cancelSequenceCreation();
+}
+
+const canvasAreaEl = ref<HTMLElement | null>(null);
+const pathToastLeft = ref("50%");
+// Sits above the ~3.25rem playback bar with a 0.5rem gap so the toast never covers its buttons.
+const PATH_TOAST_BOTTOM = "3.75rem";
+
+// The toast teleports to body and the theme centers it on the viewport, but it
+// must center on the canvas pane itself (the splitter shifts it when a video
+// pane is open), so its center is measured from the canvas area element.
+function updatePathToastLeft() {
+  const rect = canvasAreaEl.value?.getBoundingClientRect();
+  if (!rect) return;
+  pathToastLeft.value = `${rect.left + rect.width / 2}px`;
+}
+
+let canvasAreaObserver: ResizeObserver | null = null;
+watch(canvasAreaEl, (el) => {
+  canvasAreaObserver?.disconnect();
+  canvasAreaObserver = null;
+  if (!el || typeof ResizeObserver === "undefined") return;
+  canvasAreaObserver = new ResizeObserver(updatePathToastLeft);
+  canvasAreaObserver.observe(el);
+  updatePathToastLeft();
+});
+onBeforeUnmount(() => canvasAreaObserver?.disconnect());
+
+const pathToastPt = computed(() => ({
+  root: {
+    style: { left: pathToastLeft.value, bottom: PATH_TOAST_BOTTOM, width: "18.75rem" },
+  },
+}));
+
+function commitSequenceFinish() {
+  const sequence = finishSequenceTarget.value;
+  if (!sequence) {
+    closeSequenceFinish();
+    return;
+  }
+  const name = finishNameDraft.value.trim();
+  if (name && name !== sequence.name) store.renameSequence(sequence, name);
+  if (finishColorLDraft.value !== sequence.traceColorL) store.setTraceColor(sequence, "footL", finishColorLDraft.value);
+  if (finishColorRDraft.value !== sequence.traceColorR) store.setTraceColor(sequence, "footR", finishColorRDraft.value);
+  editor?.draw();
+  closeSequenceFinish();
+}
+
+function closeSequenceFinish() {
+  sequenceFinishOpen.value = false;
+  finishSequenceTarget.value = null;
+}
+
+watch(
+  () => store.creationRequest,
+  (sequence) => {
+    if (!sequence) return;
+    editMode.value = "path";
+    // Desktop renders the sidebar as an always-visible aside; only the mobile
+    // bottom drawer closes when a creation starts.
+    if (isMobile.value) drawerOpen.value = false;
+    editor?.startSequenceCreation(sequence);
+    store.consumeCreationRequest();
+  },
+);
+
 const viewportWidth = ref(0);
 const viewportHeight = ref(0);
 
@@ -1223,9 +1361,16 @@ watch(editMode, (mode) => {
 });
 
 // The mode letters stay off while a modal dialog is open.
-useEditorModeKeys(editMode, () => !(elementChangeOpen.value || timingKeyframeOpen.value || annotationOpen.value));
-useTimeCursorKeys(stepTimeCursor, () => !(elementChangeOpen.value || timingKeyframeOpen.value || annotationOpen.value));
-const canApplyHistory = () => !(elementChangeOpen.value || timingKeyframeOpen.value || annotationOpen.value);
+useEditorModeKeys(
+  editMode,
+  () => !(elementChangeOpen.value || timingKeyframeOpen.value || annotationOpen.value || sequenceFinishOpen.value),
+);
+useTimeCursorKeys(
+  stepTimeCursor,
+  () => !(elementChangeOpen.value || timingKeyframeOpen.value || annotationOpen.value || sequenceFinishOpen.value),
+);
+const canApplyHistory = () =>
+  !(elementChangeOpen.value || timingKeyframeOpen.value || annotationOpen.value || sequenceFinishOpen.value);
 useUndoRedoKeys(
   () => store.undo(),
   () => store.redo(),
@@ -1270,6 +1415,7 @@ onMounted(() => {
   if (!canvasRef.value) return;
   const editorInstance = new Editor(canvasRef.value, sequences.value, { occludedTop });
   editor = editorInstance;
+  previousSequences = sequences.value;
   editorInstance.onTrackingChange = () => {
     isTracking.value = editorInstance.tracking;
     trackingStage.value = editorInstance.trackingStage === "cursor" ? "cursor" : "barycenter";
@@ -1330,6 +1476,20 @@ onMounted(() => {
   editorInstance.onAnnotationChangeRequest = (annotation) => {
     openAnnotationChange(annotation);
   };
+  editorInstance.onPathCreationChange = (state) => {
+    pathCreation.value = state;
+    if (state) pathCreationIsNew = state.isNew;
+    syncPathCreationToast(state);
+  };
+  editorInstance.onSequenceCreationFinish = (sequence) => {
+    if (!pathCreationIsNew) return;
+    finishSequenceTarget.value = sequence;
+    finishNameDraft.value = sequence.name;
+    finishColorLDraft.value = sequence.traceColorL;
+    finishColorRDraft.value = sequence.traceColorR;
+    sequenceFinishOpen.value = true;
+  };
+  editorInstance.onSequenceCreationCancel = (sequence) => store.removeSequence(sequence);
 });
 
 let previousSequences: Sequence[] = [];
@@ -1789,7 +1949,7 @@ function closeElementChange() {
             ></video>
           </SplitterPanel>
           <SplitterPanel class="editor-view__canvas-pane" :size="canvasPaneSize" :min-size="20">
-            <div class="editor-view__canvas-area">
+            <div class="editor-view__canvas-area" ref="canvasAreaEl">
               <canvas ref="canvasRef" class="editor-view__canvas-element"></canvas>
               <TrackingButton :active="isTracking" :mode="trackingStage" @toggle="toggleTracking" />
               <UndoRedoButtons :can-undo="canUndo" :can-redo="canRedo" @undo="store.undo()" @redo="store.redo()" />
@@ -1805,6 +1965,14 @@ function closeElementChange() {
                 @scrub-start="onPaneScrubStart"
                 @scrub-end="onPaneScrubEnd"
               />
+              <div v-if="sequences.length === 0" class="editor-view__empty-hint">
+                <Button
+                  :label="$t('editor.emptyCanvas.addSequence')"
+                  icon="pi pi-plus"
+                  severity="primary"
+                  @click="store.addSequence()"
+                />
+              </div>
             </div>
           </SplitterPanel>
         </Splitter>
@@ -2252,6 +2420,80 @@ function closeElementChange() {
         />
       </template>
     </Dialog>
+
+    <Dialog
+      v-model:visible="sequenceFinishOpen"
+      :header="$t('editor.pathCreation.newSequence')"
+      modal
+      class="editor-view__sequence-finish-dialog"
+      @hide="closeSequenceFinish"
+    >
+      <div class="editor-view__annotation-fields">
+        <label class="editor-view__mode-label" for="sequence-finish-name">{{ $t("editor.pathCreation.name") }}</label>
+        <InputText id="sequence-finish-name" v-model="finishNameDraft" class="w-full" autofocus />
+        <span class="editor-view__finish-color-row">
+          <span class="editor-view__finish-swatch-wrapper" :style="{ background: finishColorLDraft || undefined }">
+            <ColorPicker
+              id="sequence-finish-color-l"
+              class="editor-view__finish-swatch"
+              :model-value="finishColorL"
+              :aria-label="$t('editor.pathCreation.colorLeft')"
+              @update:model-value="(value) => (finishColorL = String(value))"
+            />
+            <span
+              class="editor-view__finish-swatch-letter"
+              :style="{ color: textColorFor(finishColorLDraft || '#ffffff') }"
+              >{{ $t("sequence.footLetterL") }}</span
+            >
+          </span>
+          <label class="editor-view__mode-label" for="sequence-finish-color-l">{{
+            $t("editor.pathCreation.colorLeft")
+          }}</label>
+        </span>
+        <span class="editor-view__finish-color-row">
+          <span class="editor-view__finish-swatch-wrapper" :style="{ background: finishColorRDraft || undefined }">
+            <ColorPicker
+              id="sequence-finish-color-r"
+              class="editor-view__finish-swatch"
+              :model-value="finishColorR"
+              :aria-label="$t('editor.pathCreation.colorRight')"
+              @update:model-value="(value) => (finishColorR = String(value))"
+            />
+            <span
+              class="editor-view__finish-swatch-letter"
+              :style="{ color: textColorFor(finishColorRDraft || '#ffffff') }"
+              >{{ $t("sequence.footLetterR") }}</span
+            >
+          </span>
+          <label class="editor-view__mode-label" for="sequence-finish-color-r">{{
+            $t("editor.pathCreation.colorRight")
+          }}</label>
+        </span>
+      </div>
+      <template #footer>
+        <Button :label="$t('editor.dialog.ok')" icon="pi pi-check" @click="commitSequenceFinish" />
+        <Button :label="$t('sequence.cancel')" severity="secondary" icon="pi pi-times" @click="closeSequenceFinish" />
+      </template>
+    </Dialog>
+
+    <Toast group="path-creation" position="bottom-center" class="editor-view__path-toast" :pt="pathToastPt">
+      <template #message>
+        <div v-if="pathCreation" class="editor-view__path-toast-content">
+          <span class="editor-view__path-toast-title">{{ pathCreationBanner?.title }}</span>
+          <span class="editor-view__path-toast-instruction">{{ pathCreationBanner?.instruction }}</span>
+          <div class="editor-view__path-toast-actions">
+            <Button
+              v-if="pathCreationPlacing"
+              :label="$t('editor.pathCreation.finish')"
+              size="small"
+              :disabled="(pathCreation.curveCount ?? 0) < 1"
+              @click="finishPathCreation"
+            />
+            <Button :label="$t('sequence.cancel')" severity="secondary" size="small" @click="cancelPathCreation" />
+          </div>
+        </div>
+      </template>
+    </Toast>
   </div>
 </template>
 
@@ -2427,6 +2669,40 @@ function closeElementChange() {
   z-index: 5;
 }
 
+/* The toast content reads as one left-aligned block: title, instruction and
+   the actions row all flush left. */
+.editor-view__path-toast-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  gap: 0.375rem;
+}
+
+.editor-view__path-toast-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.editor-view__path-toast-instruction {
+  font-size: 0.875rem;
+  color: var(--p-text-muted-color);
+}
+
+.editor-view__path-toast-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.editor-view__empty-hint {
+  position: absolute;
+  bottom: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  color: var(--p-text-muted-color);
+}
+
 .editor-view__canvas-element {
   position: absolute;
   inset: 0;
@@ -2448,6 +2724,53 @@ function closeElementChange() {
   display: flex;
   flex-direction: column;
   margin-bottom: 0.25rem;
+}
+
+.editor-view__finish-color-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+/* Mirrors the sequences-list swatch in DiagramSidebarSequences (extract a shared
+   component if a third usage appears). */
+.editor-view__finish-swatch-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background-color: #ffffff;
+}
+
+.editor-view__finish-swatch {
+  display: inline-flex;
+}
+
+.editor-view__finish-swatch :deep(input.p-colorpicker-preview) {
+  display: block;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  font-size: 0;
+  cursor: pointer;
+}
+
+.editor-view__finish-swatch-letter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
 }
 </style>
 
@@ -2520,7 +2843,7 @@ function closeElementChange() {
   gap: 0.25rem;
 }
 
-.editor-view__annotation-fields label {
+.editor-view__annotation-fields > label {
   margin-top: 0.5rem;
 }
 
@@ -2567,5 +2890,15 @@ function closeElementChange() {
   display: flex;
   flex-direction: column;
   margin-block: -0.25rem;
+}
+
+/* The toast teleports to body, so the surface styles cannot stay scoped. */
+.editor-view__path-toast .p-toast-message {
+  background: var(--p-content-background);
+}
+
+.editor-view__sequence-finish-dialog {
+  width: 300px;
+  max-width: 90vw;
 }
 </style>

@@ -304,6 +304,21 @@ const fr = {
       description: "Description",
       color: "Couleur",
     },
+    pathCreation: {
+      newSequence: "Nouvelle séquence",
+      addPoints: "Ajouter des points",
+      awaitStart: "Cliquez pour commencer un tracé",
+      awaitStartTouch: "Touchez pour commencer un tracé",
+      placing: "Cliquez pour ajouter un point. Double-cliquez pour terminer",
+      placingTouch: "Touchez pour ajouter un point. Touchez deux fois pour terminer",
+      finish: "Terminer",
+      name: "Nom",
+      colorLeft: "Couleur de la trace gauche",
+      colorRight: "Couleur de la trace droite",
+    },
+    emptyCanvas: {
+      addSequence: "Ajouter une séquence",
+    },
   },
 };
 

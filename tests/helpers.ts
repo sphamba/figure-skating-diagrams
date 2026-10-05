@@ -13,6 +13,26 @@ export function makeStraightLengthOnePath(): Path {
   return path;
 }
 
+/** Seeds local storage with a stored diagram holding one named sequence, so a
+ * test starts from a diagram the user already created instead of the empty
+ * default. `curves` holds curve point arrays in the stored JSON shape. */
+export function seedStoredDiagram(curves: number[][] = []) {
+  localStorage.setItem(
+    "sequence-editor",
+    JSON.stringify({
+      name: "Diagram",
+      sequences: [
+        {
+          name: "Sequence 1",
+          path: { curves: curves.map((points) => ({ points })) },
+          elements: [],
+          keyframes: { footL: [], footR: [], hips: [], time: [] },
+        },
+      ],
+    }),
+  );
+}
+
 /** Left foot keyframe coordinates in path order. */
 export function footLCoordinates(sequence: Sequence): number[] {
   return sequence.keyframes.footL.map((keyframe) => keyframe.coordinate);

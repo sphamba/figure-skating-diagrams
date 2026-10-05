@@ -299,6 +299,21 @@ const en = {
       description: "Description",
       color: "Color",
     },
+    pathCreation: {
+      newSequence: "New sequence",
+      addPoints: "Add points",
+      awaitStart: "Click to start a path",
+      awaitStartTouch: "Touch to start a path",
+      placing: "Click to add point. Double click to finish",
+      placingTouch: "Touch to add point. Double touch to finish",
+      finish: "Finish",
+      name: "Name",
+      colorLeft: "Left trace color",
+      colorRight: "Right trace color",
+    },
+    emptyCanvas: {
+      addSequence: "Add sequence",
+    },
   },
 };
 

@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { useSequenceEditorStore } from "../src/stores/sequenceEditor";
+import { seedStoredDiagram } from "./helpers";
 import { Sequence } from "../src/engine/sequence";
 
 function firstNameOf(store: ReturnType<typeof useSequenceEditorStore>): string {
@@ -9,6 +10,7 @@ function firstNameOf(store: ReturnType<typeof useSequenceEditorStore>): string {
 
 test("two renames undo in reverse order and redo reapplies both", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   vi.useFakeTimers();
   try {
@@ -43,6 +45,7 @@ test("two renames undo in reverse order and redo reapplies both", () => {
 
 test("a rename after an undo records the restored state; the redo stack is gone", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const former = firstNameOf(store);
@@ -62,6 +65,7 @@ test("a rename after an undo records the restored state; the redo stack is gone"
 
 test("a change spanning two sequences reverts as one step", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
 
@@ -98,6 +102,7 @@ test("a change spanning two sequences reverts as one step", () => {
 
 test("a diagram options edit and a sequence edit undo in reverse order", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const former = firstNameOf(store);
@@ -118,6 +123,7 @@ test("a diagram options edit and a sequence edit undo in reverse order", () => {
 
 test("removing a sequence keeps it undoable at its index", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
 

@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from "pinia";
 import { nextTick } from "vue";
 import type { Component } from "vue";
 import Tooltip from "openvue/tooltip";
+import { seedStoredDiagram } from "./helpers";
 
 vi.mock("virtual:diagram-tree", () => ({
   default: { name: "diagrams", files: [], folders: [] },
@@ -173,8 +174,10 @@ async function mountEditorView() {
 
 const EXAMPLE_IMAGE = "data:image/png;base64,AAAA";
 
+// The suite starts from a stored one-sequence diagram instead of the empty default.
 beforeEach(() => {
   localStorage.clear();
+  seedStoredDiagram();
   recorder.constructorSequences.length = 0;
   recorder.sequences = [];
   recorder.hiddenSets.length = 0;
@@ -292,7 +295,7 @@ test("the canvas editor follows every rebuild including redo", async () => {
   await nextTick();
   const afterUndo = recorder.sequences;
   expect(afterUndo).not.toHaveLength(0);
-  expect(afterUndo).not.toBe((recorder.constructorSequences[0] as unknown[]));
+  expect(afterUndo).not.toBe(recorder.constructorSequences[0] as unknown[]);
   expect(afterUndo[0]).not.toBe(mountedMember);
   expect((afterUndo[0] as { name?: string }).name).toBe(formerName);
 

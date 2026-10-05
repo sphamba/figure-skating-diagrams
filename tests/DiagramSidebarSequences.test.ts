@@ -1,4 +1,4 @@
-import { expect, test, vi, afterEach } from "vitest";
+import { beforeEach, expect, test, vi, afterEach } from "vitest";
 import { mount, type VueWrapper } from "@vue/test-utils";
 import { nextTick } from "vue";
 import type { App } from "vue";
@@ -8,6 +8,7 @@ import { PrimeVueConfirmSymbol } from "openvue/useconfirm";
 import OpenVue from "openvue/config";
 import Aura from "@openvue/themes/aura";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
+import { seedStoredDiagram } from "./helpers";
 import { Curve } from "@/engine/curve";
 import { Vector } from "@/engine/vector";
 import type { Sequence } from "@/engine/sequence";
@@ -79,6 +80,11 @@ async function clickOption(dialog: HTMLElement, index = 0) {
   option!.click();
   await settle(1, 0);
 }
+
+// The suite starts from a stored one-sequence diagram instead of the empty default.
+beforeEach(() => {
+  seedStoredDiagram();
+});
 
 afterEach(() => {
   wrapper?.unmount();

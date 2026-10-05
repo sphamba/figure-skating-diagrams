@@ -6,11 +6,13 @@ import type { PathCoordinate } from "../src/engine/coordinates";
 import { Path } from "../src/engine/path";
 import { Sequence } from "../src/engine/sequence";
 import { useSequenceEditorStore } from "../src/stores/sequenceEditor";
+import { seedStoredDiagram } from "./helpers";
 import { Vector } from "../src/engine/vector";
 import { LeftForwardInsideThreeTurn } from "../src/engine/element/threeTurn";
 
 test("duplicateSequence appends a copy with a unique name and makes it active", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const original = store.getSequences()[0] as Sequence;
@@ -45,6 +47,7 @@ test("duplicateSequence appends a copy with a unique name and makes it active", 
 
 test("duplicateSequence persists the copy to local storage", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   store.duplicateSequence(store.getSequences()[0] as Sequence);
@@ -58,6 +61,7 @@ test("duplicateSequence persists the copy to local storage", () => {
 
 test("duplicateSequence keeps the diagram unchanged for a sequence outside the diagram", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const foreign = new Sequence(new Path());
@@ -76,6 +80,7 @@ function setOffCenterPath(sequence: Sequence) {
 
 test("mirrorSequence mirrors the path x through the bounding box center and persists", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const sequence = store.getSequences()[0] as Sequence;
@@ -102,6 +107,7 @@ test("mirrorSequence mirrors the path x through the bounding box center and pers
 
 test("mirrorSequence mirrors the path y through the bounding box center", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const sequence = store.getSequences()[0] as Sequence;
@@ -123,6 +129,7 @@ test("mirrorSequence mirrors the path y through the bounding box center", () => 
 
 test("mirrorSequence swaps the element sides and mirrors the path", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const sequence = store.getSequences()[0] as Sequence;
@@ -133,14 +140,15 @@ test("mirrorSequence swaps the element sides and mirrors the path", () => {
 
   // The bounding box spans x in [1, 4], so the center line sits at x = 2.5.
   expect(sequence.path.curves[0]!.p0.x).toBeCloseTo(4, 10);
-  expect(sequence.elements[0]!.type).toBe("BothForwardGlide");
-  expect(sequence.elements[1]!.type).toBe("RightForwardInsideThreeTurn");
-  expect(sequence.elements[1]!.start).toBe(0.4 as PathCoordinate);
-  expect(sequence.elements[1]!.end).toBe(2.4 as PathCoordinate);
+  expect(sequence.elements).toHaveLength(1);
+  expect(sequence.elements[0]!.type).toBe("RightForwardInsideThreeTurn");
+  expect(sequence.elements[0]!.start).toBe(0.4 as PathCoordinate);
+  expect(sequence.elements[0]!.end).toBe(2.4 as PathCoordinate);
 });
 
 test("mirrorSequence twice restores the original geometry", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const sequence = store.getSequences()[0] as Sequence;
@@ -158,6 +166,7 @@ test("mirrorSequence twice restores the original geometry", () => {
 
 test("mirrorSequence treats an unknown axis as vertical", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const sequence = store.getSequences()[0] as Sequence;
@@ -172,6 +181,7 @@ test("mirrorSequence treats an unknown axis as vertical", () => {
 
 test("mirrorSequence keeps the diagram unchanged for a sequence outside the diagram", () => {
   localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const foreign = new Sequence(new Path());

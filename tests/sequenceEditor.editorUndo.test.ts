@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
-import { createStubCanvas, makeNoopContext, makeStraightLengthOnePath } from "./helpers";
+import { createStubCanvas, makeNoopContext, makeStraightLengthOnePath, seedStoredDiagram } from "./helpers";
 import { Editor } from "../src/engine/sequenceEditor/editor";
 import { Sequence } from "../src/engine/sequence";
 import { LeftForwardInsideGlide, LeftForwardOutsideGlide } from "../src/engine/element/glide";
@@ -45,6 +45,7 @@ function makeSync(editor: Editor, store: ReturnType<typeof useSequenceEditorStor
 
 test("a canvas edit round-trips through undo, redo and undo", () => {
   localStorage.clear();
+  seedStoredDiagram([[-2.5, 0, -0.5, 0, 0.5, 0, 2.5, 0]]);
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const { editor, canvas } = makeEditor();
@@ -81,6 +82,7 @@ test("a canvas edit round-trips through undo, redo and undo", () => {
 
 test("two quick canvas edits make two steps and walk back one at a time", () => {
   localStorage.clear();
+  seedStoredDiagram([[-2.5, 0, -0.5, 0, 0.5, 0, 2.5, 0]]);
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const { editor, canvas } = makeEditor();
@@ -120,6 +122,7 @@ test("two quick canvas edits make two steps and walk back one at a time", () => 
 
 test("a canvas edit after an undo edits the rebuilt sequence and undos back to it", () => {
   localStorage.clear();
+  seedStoredDiagram([[-2.5, 0, -0.5, 0, 0.5, 0, 2.5, 0]]);
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const { editor, canvas } = makeEditor();
@@ -156,6 +159,7 @@ test("a canvas edit after an undo edits the rebuilt sequence and undos back to i
 
 test("rapid store input commits merge while canvas edits stay separate", () => {
   localStorage.clear();
+  seedStoredDiagram([[-2.5, 0, -0.5, 0, 0.5, 0, 2.5, 0]]);
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const { editor, canvas } = makeEditor();

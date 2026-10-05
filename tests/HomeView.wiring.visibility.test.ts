@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from "pinia";
 import { nextTick } from "vue";
 import type { Component } from "vue";
 import type { Sequence } from "@/engine/sequence";
+import { seedStoredDiagram } from "./helpers";
 
 vi.mock("virtual:diagram-tree", () => ({
   default: { name: "diagrams", files: [], folders: [] },
@@ -50,7 +51,7 @@ class EditorStub {
   }
 
   clearSelection() {}
-  setBackgroundImage(dataUrl: string | undefined) {}
+  setBackgroundImage(_dataUrl: string | undefined) {}
   requestDraw() {}
   setSequences(list: unknown[]) {
     recorder.sequences = list;
@@ -143,6 +144,8 @@ const videoFile = {
 
 beforeEach(() => {
   localStorage.clear();
+  // The suite starts from a stored one-sequence diagram instead of the empty default.
+  seedStoredDiagram();
   recorder.constructorArgs.length = 0;
   recorder.hiddenSets.length = 0;
   recorder.sequences = [];
@@ -233,11 +236,13 @@ test("the tracking button resets after the canvas remounts", async () => {
 test("the tracking button shows the cursor icon while following a cursor", async () => {
   const wrapper = await mountHomeView(null, true, videoFile);
   const button = wrapper.find(".tracking-button");
-  const instance = recorder.instances.at(-1) as {
-    tracking: boolean;
-    trackingStage: "barycenter" | "cursor";
-    onTrackingChange?: () => void;
-  } | undefined;
+  const instance = recorder.instances.at(-1) as
+    | {
+        tracking: boolean;
+        trackingStage: "barycenter" | "cursor";
+        onTrackingChange?: () => void;
+      }
+    | undefined;
   expect(instance, "the editor should mount with the canvas").not.toBeUndefined();
   expect(button.find("polygon").exists()).toBe(false);
   await button.trigger("click");

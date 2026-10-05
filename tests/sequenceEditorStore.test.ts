@@ -2,9 +2,12 @@ import { expect, test } from "vitest";
 import { computed, nextTick, watch } from "vue";
 import { createPinia, setActivePinia } from "pinia";
 import { useSequenceEditorStore } from "../src/stores/sequenceEditor";
+import { seedStoredDiagram } from "./helpers";
 import type { Sequence } from "../src/engine/sequence";
 
 test("the visible list chain updates when a sequence is added", async () => {
+  localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   // Mirror the editor view: a list computed over the store, a visible filter over it.
@@ -24,6 +27,8 @@ test("the visible list chain updates when a sequence is added", async () => {
 });
 
 test("structural changes rebuild the sequences array so the chain keeps propagating", () => {
+  localStorage.clear();
+  seedStoredDiagram();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
   const first = store.getSequences()[0] as Sequence;
@@ -39,13 +44,28 @@ test("structural changes rebuild the sequences array so the chain keeps propagat
   expect(store.getSequences()[0]).toBe(first);
 });
 
-test("removing sequences never leaves an empty diagram and keeps one visible", () => {
+test("removing the active sequence reassigns it within the remaining list", () => {
+  localStorage.clear();
   setActivePinia(createPinia());
   const store = useSequenceEditorStore();
-  store.removeSequence(store.getSequences()[0] as Sequence);
+  store.addSequence();
+  store.addSequence();
+  const first = store.getSequences()[0] as Sequence;
+  const second = store.getSequences()[1] as Sequence;
+  store.removeSequence(second);
   expect(store.getSequences()).toHaveLength(1);
-  expect(store.getSequences()[0] as Sequence).toBeTruthy();
-  expect(store.getActiveSequence()).toBe(store.getSequences()[0]);
+  expect(store.getSequences()[0]).toBe(first);
+  expect(store.getActiveSequence()).toBe(first);
+});
+
+test("deleting the last sequence leaves an empty list and no active sequence", () => {
+  localStorage.clear();
+  setActivePinia(createPinia());
+  const store = useSequenceEditorStore();
+  store.addSequence();
+  store.removeSequence(store.getSequences()[0] as Sequence);
+  expect(store.getSequences()).toHaveLength(0);
+  expect(store.getActiveSequence()).toBeNull();
 });
 
 test("the short draw range state defaults to off and mirrors the setter", () => {
