@@ -8,6 +8,7 @@ const { t } = useI18n();
 const localeStore = useLocaleStore();
 
 const showLabels = defineModel<boolean>("showLabels", { required: true });
+const showLegend = defineModel<boolean>("showLegend", { required: true });
 const scaleElements = defineModel<boolean>("scaleElements", { required: true });
 const darkMode = defineModel<boolean>("darkMode", { required: true });
 
@@ -27,6 +28,10 @@ const languageOptions = [
     <div class="diagram-sidebar__toggle">
       <ToggleSwitch v-model="showLabels" input-id="show-labels" />
       <label for="show-labels">{{ t("options.showLabels") }}</label>
+    </div>
+    <div class="diagram-sidebar__toggle">
+      <ToggleSwitch v-model="showLegend" input-id="show-legend" />
+      <label for="show-legend">{{ t("options.showLegend") }}</label>
     </div>
     <div class="diagram-sidebar__toggle">
       <ToggleSwitch v-model="scaleElements" input-id="scale-elements-zoom" />

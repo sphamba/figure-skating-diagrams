@@ -4,7 +4,7 @@ import Accordion from "openvue/accordion";
 import AccordionContent from "openvue/accordioncontent";
 import AccordionHeader from "openvue/accordionheader";
 import AccordionPanel from "openvue/accordionpanel";
-import { sequenceTimeRange, type Sequence } from "@/engine/sequence";
+import { sequenceHasCursor, type Sequence } from "@/engine/sequence";
 import { WHEEL_SENSITIVITY } from "@/engine/constants";
 import type { Annotation } from "@/engine/annotation";
 import type { Time, PathCoordinate } from "@/engine/coordinates";
@@ -244,15 +244,9 @@ function toggleAnnotationOpen(key: string) {
     : [...closedAnnotationKeys.value, key];
 }
 
-// A cursor beyond a sequence's time range would clamp to its boundary coordinate,
-// so sequences the cursor is not within are skipped entirely.
+// A sequence the cursor is not within is skipped entirely.
 function cursorInSequence(sequence: Sequence): boolean {
-  if (sequence.path.curves.length === 0) return false;
-  if (sequence.keyframes.time.length <= 1) return false;
-  const time = props.timeSeconds;
-  if (time === null) return false;
-  const range = sequenceTimeRange(sequence, props.bpm);
-  return range !== null && time >= range[0] && time <= range[1];
+  return sequenceHasCursor(sequence, props.timeSeconds, props.bpm);
 }
 
 function seekTo(strip: ElementStrip, item: ElementItem) {

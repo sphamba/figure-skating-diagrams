@@ -16,8 +16,15 @@ const fr = {
   options: {
     darkMode: "Mode sombre",
     showLabels: "Afficher les étiquettes",
+    showLegend: "Afficher la légende",
     scaleElements: "Redimensionner les éléments avec le zoom",
     language: "Langue",
+  },
+  legend: {
+    leftForward: "Avant gauche",
+    leftBackward: "Arrière gauche",
+    rightForward: "Avant droit",
+    rightBackward: "Arrière droit",
   },
   diagram: {
     name: "Nom du diagramme",

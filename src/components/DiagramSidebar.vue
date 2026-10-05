@@ -29,6 +29,7 @@ const props = defineProps<{
 // The mobile drawer comes from the playback bar button.
 const open = defineModel<boolean>("open", { default: false });
 const showLabels = defineModel<boolean>("showLabels", { required: true });
+const showLegend = defineModel<boolean>("showLegend", { required: true });
 const scaleElements = defineModel<boolean>("scaleElements", { required: true });
 const darkMode = defineModel<boolean>("darkMode", { required: true });
 
@@ -85,6 +86,7 @@ function onTabsScroll(event: Event) {
       <div class="diagram-sidebar__section-head">{{ $t("sidebar.sections.options") }}</div>
       <DiagramSidebarOptions
         v-model:show-labels="showLabels"
+        v-model:show-legend="showLegend"
         v-model:scale-elements="scaleElements"
         v-model:dark-mode="darkMode"
       />
@@ -122,6 +124,7 @@ function onTabsScroll(event: Event) {
         <TabPanel value="options">
           <DiagramSidebarOptions
             v-model:show-labels="showLabels"
+            v-model:show-legend="showLegend"
             v-model:scale-elements="scaleElements"
             v-model:dark-mode="darkMode"
           />

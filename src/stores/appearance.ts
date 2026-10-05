@@ -12,6 +12,7 @@ interface StoredAppearance {
   darkModeOverridden?: boolean;
   darkMode?: boolean;
   showLabels?: boolean;
+  showLegend?: boolean;
   scaleElements?: boolean;
 }
 
@@ -35,6 +36,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
   );
   const overridden = ref(stored.darkModeOverridden === true);
   const showLabels = ref(stored.showLabels === false ? false : true);
+  const showLegend = ref(stored.showLegend === false ? false : true);
   const scaleElements = ref(stored.scaleElements === false ? false : true);
   let syncingFromSystem = false;
 
@@ -46,6 +48,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
           darkModeOverridden: overridden.value,
           darkMode: darkMode.value,
           showLabels: showLabels.value,
+          showLegend: showLegend.value,
           scaleElements: scaleElements.value,
         }),
       );
@@ -71,9 +74,9 @@ export const useAppearanceStore = defineStore("appearance", () => {
     { flush: "sync" },
   );
 
-  watch([showLabels, scaleElements], saveToStorage);
+  watch([showLabels, showLegend, scaleElements], saveToStorage);
 
   document.documentElement.classList.toggle("app-dark", darkMode.value);
 
-  return { darkMode, showLabels, scaleElements };
+  return { darkMode, showLabels, showLegend, scaleElements };
 });

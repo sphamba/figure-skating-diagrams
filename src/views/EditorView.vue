@@ -21,6 +21,7 @@ import ToggleSwitch from "openvue/toggleswitch";
 import Splitter from "openvue/splitter";
 import SplitterPanel from "openvue/splitterpanel";
 import TimeSyncPane from "@/components/TimeSyncPane.vue";
+import DiagramLegend from "@/components/DiagramLegend.vue";
 import TrackingButton from "@/components/TrackingButton.vue";
 import DiagramSidebar, { type HelpItem } from "@/components/DiagramSidebar.vue";
 import { Editor, formatTimingLabel, type EditMode, type PathCreationState } from "@/engine/sequenceEditor/editor";
@@ -1909,6 +1910,7 @@ function closeElementChange() {
       v-model:open="drawerOpen"
       v-model:scale-elements="appearance.scaleElements"
       v-model:show-labels="appearance.showLabels"
+      v-model:show-legend="appearance.showLegend"
       v-model:dark-mode="appearance.darkMode"
       mode="editor"
       :mobile="isMobile"
@@ -1953,18 +1955,24 @@ function closeElementChange() {
               <canvas ref="canvasRef" class="editor-view__canvas-element"></canvas>
               <TrackingButton :active="isTracking" :mode="trackingStage" @toggle="toggleTracking" />
               <UndoRedoButtons :can-undo="canUndo" :can-redo="canRedo" @undo="store.undo()" @redo="store.redo()" />
-              <TimeSyncPane
-                v-if="editMode === 'view'"
-                ref="elementsPane"
-                class="editor-view__elements"
-                :sequences="visibleSequences"
-                :time-seconds="videoTime"
-                :bpm="bpm"
-                :loop-window="loopDrawWindow"
-                @seek="setTimestamp"
-                @scrub-start="onPaneScrubStart"
-                @scrub-end="onPaneScrubEnd"
-              />
+              <div v-if="editMode === 'view'" class="editor-view__elements">
+                <TimeSyncPane
+                  ref="elementsPane"
+                  :sequences="visibleSequences"
+                  :time-seconds="videoTime"
+                  :bpm="bpm"
+                  :loop-window="loopDrawWindow"
+                  @seek="setTimestamp"
+                  @scrub-start="onPaneScrubStart"
+                  @scrub-end="onPaneScrubEnd"
+                />
+                <DiagramLegend
+                  v-if="appearance.showLegend"
+                  :sequences="visibleSequences"
+                  :time-seconds="videoTime"
+                  :bpm="bpm"
+                />
+              </div>
               <div v-if="sequences.length === 0" class="editor-view__empty-hint">
                 <Button
                   :label="$t('editor.emptyCanvas.addSequence')"
@@ -2658,8 +2666,8 @@ function closeElementChange() {
   width: 100%;
 }
 
-/* The elements pane floats above the canvas, so its rows can change without
-   resizing the canvas or the playback bar below. */
+/* The elements pane wrapper floats above the canvas, so its rows can change
+   without resizing the canvas or the playback bar below. */
 .editor-view__elements {
   position: absolute;
   top: 0;

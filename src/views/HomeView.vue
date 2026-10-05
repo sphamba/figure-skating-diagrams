@@ -5,6 +5,7 @@ import Select from "openvue/select";
 import Splitter from "openvue/splitter";
 import SplitterPanel from "openvue/splitterpanel";
 import TimeSyncPane from "@/components/TimeSyncPane.vue";
+import DiagramLegend from "@/components/DiagramLegend.vue";
 import TrackingButton from "@/components/TrackingButton.vue";
 import DiagramSidebar, { type HelpItem } from "@/components/DiagramSidebar.vue";
 import { useI18n } from "vue-i18n";
@@ -507,6 +508,7 @@ onBeforeUnmount(() => {
       v-model:open="drawerOpen"
       v-model:scale-elements="appearance.scaleElements"
       v-model:show-labels="appearance.showLabels"
+      v-model:show-legend="appearance.showLegend"
       v-model:dark-mode="appearance.darkMode"
       mode="home"
       :mobile="isMobile"
@@ -542,17 +544,24 @@ onBeforeUnmount(() => {
             <div class="home-view__canvas-area">
               <canvas ref="canvasRef" class="home-view__canvas-element"></canvas>
               <TrackingButton :active="isTracking" :mode="trackingStage" @toggle="toggleTracking" />
-              <TimeSyncPane
-                ref="elementsPane"
-                class="home-view__elements"
-                :sequences="visibleSequences"
-                :time-seconds="videoTime"
-                :bpm="bpm"
-                :loop-window="loopDrawWindow"
-                @seek="setTimestamp"
-                @scrub-start="onPaneScrubStart"
-                @scrub-end="onPaneScrubEnd"
-              />
+              <div class="home-view__elements">
+                <TimeSyncPane
+                  ref="elementsPane"
+                  :sequences="visibleSequences"
+                  :time-seconds="videoTime"
+                  :bpm="bpm"
+                  :loop-window="loopDrawWindow"
+                  @seek="setTimestamp"
+                  @scrub-start="onPaneScrubStart"
+                  @scrub-end="onPaneScrubEnd"
+                />
+                <DiagramLegend
+                  v-if="appearance.showLegend"
+                  :sequences="visibleSequences"
+                  :time-seconds="videoTime"
+                  :bpm="bpm"
+                />
+              </div>
             </div>
           </SplitterPanel>
         </Splitter>
@@ -747,8 +756,8 @@ onBeforeUnmount(() => {
   width: 100%;
 }
 
-/* The elements pane floats above the canvas, so its rows can change without
-   resizing the canvas or the playback bar below. */
+/* The elements pane wrapper floats above the canvas, so its rows can change
+   without resizing the canvas or the playback bar below. */
 .home-view__elements {
   position: absolute;
   top: 0;

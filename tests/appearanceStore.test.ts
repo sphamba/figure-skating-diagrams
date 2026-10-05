@@ -78,8 +78,10 @@ test("the store falls back to light without matchMedia", async () => {
 test("the store restores the persisted settings after a reload", async () => {
   const { useAppearanceStore } = await import("@/stores/appearance");
   const store = useAppearanceStore();
+  expect(store.showLegend).toBe(true);
   store.darkMode = true;
   store.showLabels = false;
+  store.showLegend = false;
   store.scaleElements = false;
   expect(store.darkMode).toBe(true);
   expect(document.documentElement.classList.contains("app-dark")).toBe(true);
@@ -90,6 +92,7 @@ test("the store restores the persisted settings after a reload", async () => {
   const next = reloaded();
   expect(next.darkMode).toBe(true);
   expect(next.showLabels).toBe(false);
+  expect(next.showLegend).toBe(false);
   expect(next.scaleElements).toBe(false);
   expect(document.documentElement.classList.contains("app-dark")).toBe(true);
   vi.unstubAllGlobals();

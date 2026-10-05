@@ -56,7 +56,7 @@ export const markSize = 0.03; // m cross diameter of toe-pick marks
 const defaultPathColor = "black";
 export const defaultTraceColorL = "#3030d2";
 export const defaultTraceColorR = "#9c0000";
-const traceOpacityForward = 0.7;
+export const traceOpacityForward = 0.7;
 
 export const DEFAULT_BPM = 120;
 
@@ -1361,4 +1361,12 @@ export function sequenceTimeRange(sequence: Sequence, bpm: number = DEFAULT_BPM)
   const start = resolved[0]!.time as Time;
   const end = resolved[resolved.length - 1]!.time as Time;
   return [start < end ? start : end, start < end ? end : start];
+}
+
+// A sequence has a cursor only when it animates and the time is inside its own
+// range: outside that range the cursor would clamp to a boundary coordinate.
+export function sequenceHasCursor(sequence: Sequence, time: number | null, bpm: number = DEFAULT_BPM): boolean {
+  if (!hasTimeEvolution(sequence) || time === null) return false;
+  const range = sequenceTimeRange(sequence, bpm);
+  return range !== null && time >= range[0] && time <= range[1];
 }
