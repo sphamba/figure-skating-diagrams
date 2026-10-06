@@ -127,13 +127,13 @@ test("a valid share payload loads the diagram and strips the query", async () =>
   expect(router.currentRoute.value.query.d).toBeUndefined();
 });
 
-test("a corrupt share payload shows the error notice and keeps the query", async () => {
+test("a corrupt share payload shows the error notice and strips the query", async () => {
   const { wrapper: mounted, router } = await mountHomeView("/?d=not-a-payload");
   wrapper = mounted;
   await settle();
   const note = document.querySelector("small.home-view__shared-link-error");
   expect(note?.textContent).toBe("The shared diagram could not be loaded.");
-  expect(router.currentRoute.value.query.d).toBe("not-a-payload");
+  expect(router.currentRoute.value.query.d).toBeUndefined();
 });
 
 test("no share payload leaves the default diagram and no notice", async () => {
@@ -163,7 +163,7 @@ test("a valid path payload fetches the public file, strips the query and keeps t
   expect(store.getBundledPath()).toBe("diagrams/Moves in the field/x.json");
 });
 
-test("a path payload outside the diagram tree shows the error notice and keeps the query", async () => {
+test("a path payload outside the diagram tree shows the error notice and strips the query", async () => {
   const fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
   const outsideTree = "/etc/passwd";
@@ -172,6 +172,31 @@ test("a path payload outside the diagram tree shows the error notice and keeps t
   await settle();
   const note = document.querySelector("small.home-view__shared-link-error");
   expect(note?.textContent).toBe("The shared diagram could not be loaded.");
-  expect(router.currentRoute.value.query.p, "the router hands the view the decoded text").toBe(outsideTree);
   expect(fetchMock, "a rejected payload never reaches the network").not.toHaveBeenCalled();
+  expect(router.currentRoute.value.query.p).toBeUndefined();
+});
+
+test("a payload pushed while the home view is already mounted loads the diagram", async () => {
+  const payload = bytesToBase64Url(await gzipText(JSON.stringify({ name: "Pushed", sequences: [] })));
+  const { wrapper: mounted, router } = await mountHomeView("/");
+  wrapper = mounted;
+  const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
+  const store = useSequenceEditorStore();
+  await router.push(`/?d=${payload}`);
+  await vi.waitFor(() => expect(store.getDiagram().name).toBe("Pushed"));
+  expect(router.currentRoute.value.query.d).toBeUndefined();
+});
+
+test("a path payload pushed while the home view is already mounted loads the public file", async () => {
+  const body = new TextEncoder().encode(JSON.stringify({ name: "Pushed path", sequences: [] }));
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => body.buffer });
+  vi.stubGlobal("fetch", fetchMock);
+  const { wrapper: mounted, router } = await mountHomeView("/");
+  wrapper = mounted;
+  const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
+  const store = useSequenceEditorStore();
+  await router.push(`/?p=${encodeURIComponent("Moves in the field/x.json")}`);
+  await vi.waitFor(() => expect(store.getDiagram().name).toBe("Pushed path"));
+  expect(store.getBundledPath()).toBe("diagrams/Moves in the field/x.json");
+  expect(router.currentRoute.value.query.p).toBeUndefined();
 });

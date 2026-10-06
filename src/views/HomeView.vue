@@ -472,48 +472,60 @@ const visibleSequences = computed(() => sequences.value.filter((sequence) => sto
 onMounted(() => {
   updateViewportSizes();
   window.addEventListener("resize", updateViewportSizes);
-  void loadSharedDiagram();
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("resize", updateViewportSizes);
 });
 
+let sharedLoadToken = 0;
+
+// A payload can arrive at mount or later, when a link is pasted into an open
+// tab: that changes only the hash, so the view is reused and onMounted does
+// not run again.
+watch(
+  () => `${route?.query.d ?? ""}|${route?.query.p ?? ""}`,
+  () => void loadSharedDiagram(),
+  { immediate: true },
+);
+
 async function loadSharedDiagram() {
   // The wiring tests mount the view without a router, so both stay undefined there.
   if (!route || !router) return;
-  const shared = route.query.d;
-  if (typeof shared === "string" && shared !== "") {
-    try {
-      const json = (await decodeShareParam(shared)) as DiagramJSON;
-      if (!Array.isArray(json.sequences)) throw new Error("not a DiagramJSON payload");
-      store.loadFromJSON(json);
-      // The payload has served its purpose, so the long URL leaves the address
-      // bar and history; the diagram itself stays in the store storage.
-      await router.replace({ query: {} });
-    } catch (error) {
-      sharedLinkError.value = true;
-      console.error("Could not load the shared diagram:", error);
-    }
-    return;
-  }
-  const sharedPath = route.query.p;
-  if (typeof sharedPath !== "string" || sharedPath === "") return;
+  const shared = typeof route.query.d === "string" ? route.query.d : "";
+  const sharedPath = typeof route.query.p === "string" ? route.query.p : "";
+  if (shared === "" && sharedPath === "") return;
+  // Last one wins: a slow load must not overwrite the diagram of a newer one.
+  const token = ++sharedLoadToken;
+  sharedLinkError.value = false;
   try {
-    const path = decodeSharePath(sharedPath);
-    if (!path) throw new Error("not a diagram path payload");
-    const json = (await fetchBundledDiagram(path)) as DiagramJSON;
+    let json: unknown;
+    let path: string | null = null;
+    if (shared !== "") {
+      json = await decodeShareParam(shared);
+    } else {
+      path = decodeSharePath(sharedPath);
+      if (!path) throw new Error("not a diagram path payload");
+      json = await fetchBundledDiagram(path);
+    }
     // A p= payload reuses the d= JSON shape: a DiagramJSON with a sequences
     // array. A bare SequenceJSON file is not shareable by path yet.
-    if (!Array.isArray(json.sequences)) throw new Error("not a DiagramJSON payload");
-    store.loadFromJSON(json);
-    store.setBundledPath(path);
-    store.setSaveFilename(path.split("/").pop() ?? "");
-    await router.replace({ query: {} });
+    if (!Array.isArray((json as DiagramJSON).sequences)) throw new Error("not a DiagramJSON payload");
+    if (token !== sharedLoadToken) return;
+    store.loadFromJSON(json as DiagramJSON);
+    if (path !== null) {
+      store.setBundledPath(path);
+      store.setSaveFilename(path.split("/").pop() ?? "");
+    }
   } catch (error) {
+    if (token !== sharedLoadToken) return;
     sharedLinkError.value = true;
     console.error("Could not load the shared diagram:", error);
   }
+  if (token !== sharedLoadToken) return;
+  // The payload has served its purpose, so the long URL leaves the address bar
+  // and history, whether the load worked or not.
+  await router.replace({ query: {} });
 }
 
 onBeforeUnmount(() => {
