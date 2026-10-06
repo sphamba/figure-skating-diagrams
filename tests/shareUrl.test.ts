@@ -67,7 +67,13 @@ test("the share URL limit is exported", () => {
 
 const PATH_EXAMPLE = "diagrams/Moves in the field/04. Juvenile/06. Forward Double Three-Turns.json";
 
-test("buildSharePathUrl returns a fragment URL with the p payload and the stripped prefix", () => {
+// vue-router hands the view the query value decoded once, which is the only
+// decode the p= format relies on.
+function receivedPath(url: string): string {
+  return decodeURIComponent(url.split("#/?p=")[1]);
+}
+
+test("buildSharePathUrl returns a fragment URL with the escaped bare path as its p payload", () => {
   const share = buildSharePathUrl(PATH_EXAMPLE);
   expect(share).not.toBeNull();
   const { url, chars } = share!;
@@ -75,35 +81,34 @@ test("buildSharePathUrl returns a fragment URL with the p payload and the stripp
   expect(url).toContain("#/?p=");
   expect(url).not.toContain("#/?d=");
   expect(chars).toBe(url.length);
+  const bare = PATH_EXAMPLE.slice(DIAGRAMS_PREFIX.length);
   const payload = url.split("#/?p=")[1];
-  expect(payload).toMatch(/^[A-Za-z0-9_-]+$/);
-  expect(payload).not.toContain("=");
-  const bare = new TextDecoder().decode(base64UrlToBytes(payload));
-  expect(bare.startsWith("diagrams/")).toBe(false);
-  expect(decodeSharePath(payload)).toBe(PATH_EXAMPLE);
+  expect(payload).toBe(encodeURIComponent(bare));
+  expect(payload.split("%2F")).toHaveLength(bare.split("/").length);
+  expect(payload.split("%20")).toHaveLength(bare.split(" ").length);
+  expect(payload).not.toContain("diagrams%2F");
+  expect(decodeSharePath(receivedPath(url))).toBe(PATH_EXAMPLE);
 });
 
 test("buildSharePathUrl round-trips a non-ASCII path with spaces", () => {
   const path = "diagrams/Test/Éléments/Porté é.json";
   const { url } = buildSharePathUrl(path)!;
-  expect(decodeSharePath(url.split("#/?p=")[1])).toBe(path);
+  expect(url.split("#/?p=")[1]).toBe(encodeURIComponent(path.slice(DIAGRAMS_PREFIX.length)));
+  expect(decodeSharePath(receivedPath(url))).toBe(path);
 });
 
 test("decodeSharePath rejects a payload that points outside the diagram tree", () => {
-  const encoded = (raw: string) => bytesToBase64Url(new TextEncoder().encode(raw));
-  expect(decodeSharePath(encoded(""))).toBeNull();
-  expect(decodeSharePath(encoded("/etc/passwd"))).toBeNull();
-  expect(decodeSharePath(encoded("https://evil.example/x.json"))).toBeNull();
-  expect(decodeSharePath(encoded("../../index.html"))).toBeNull();
-  expect(decodeSharePath(encoded("a\\b.json"))).toBeNull();
-  expect(decodeSharePath("!!!corrupt!!!")).toBeNull();
+  expect(decodeSharePath("")).toBeNull();
+  expect(decodeSharePath("/etc/passwd")).toBeNull();
+  expect(decodeSharePath("https://evil.example/x.json")).toBeNull();
+  expect(decodeSharePath("../../index.html")).toBeNull();
+  expect(decodeSharePath("a\\b.json")).toBeNull();
 });
 
 // The URL parser strips raw tabs and newlines before it normalizes dot
 // segments, and a file server can trim dots, spaces and path parameters from a
-// decoded segment, so every one of those forms is rejected in both directions.
+// segment, so every one of those forms is rejected in both directions.
 test("both directions reject a bare path that a parser or a file server would rewrite", () => {
-  const encoded = (raw: string) => bytesToBase64Url(new TextEncoder().encode(raw));
   const rejected = [
     ".\t./index.html",
     ".\r./index.html",
@@ -112,30 +117,37 @@ test("both directions reject a bare path that a parser or a file server would re
     ".. /index.html",
     " x.json",
     "..;/x.json",
-    "a%09b.json",
-    "%00x.json",
     ".../x.json",
   ];
   for (const bare of rejected) {
-    expect(decodeSharePath(encoded(bare)), `decodeSharePath(${JSON.stringify(bare)})`).toBeNull();
+    expect(decodeSharePath(bare), `decodeSharePath(${JSON.stringify(bare)})`).toBeNull();
     expect(buildSharePathUrl(`${DIAGRAMS_PREFIX}${bare}`), `buildSharePathUrl(${JSON.stringify(bare)})`).toBeNull();
   }
 });
 
+// Nothing decodes a segment any more, so a percent escape that the router left
+// in the text is a literal character of the file name.
+test("both directions accept a percent that survives into the bare path", () => {
+  const bare = "100%.json";
+  expect(decodeSharePath(bare)).toBe(`${DIAGRAMS_PREFIX}${bare}`);
+  const url = buildSharePathUrl(`${DIAGRAMS_PREFIX}${bare}`)!.url;
+  expect(url).toContain("#/?p=100%25.json");
+  expect(decodeSharePath(receivedPath(url))).toBe(`${DIAGRAMS_PREFIX}${bare}`);
+});
+
 // Both directions must agree, or a sender would emit a link the receiver refuses.
 test("both directions reject a bare path that repeats the diagrams prefix", () => {
-  const encoded = (raw: string) => bytesToBase64Url(new TextEncoder().encode(raw));
-  expect(decodeSharePath(encoded(DIAGRAMS_PREFIX + "x.json"))).toBeNull();
+  expect(decodeSharePath(DIAGRAMS_PREFIX + "x.json")).toBeNull();
   expect(buildSharePathUrl(DIAGRAMS_PREFIX + DIAGRAMS_PREFIX + "x.json")).toBeNull();
 });
 
-// The browser and the server normalize these before the file is read, so both
-// directions must reject them instead of sharing a path the receiver refuses.
-test("both directions reject a bare path with separators, dot segments or markers", () => {
-  const encoded = (raw: string) => bytesToBase64Url(new TextEncoder().encode(raw));
-  const rejected = ["%2e%2e/%2e%2e/index.html", "a%2fb.json", "x.json?y=1", "x.json#frag"];
+// The server resolves the escapes before the file is read and the URL parser
+// reads %2e as a dot segment, so both directions must reject these instead of
+// sharing a path the receiver resolves to something else.
+test("both directions reject a bare path with dot segments or markers", () => {
+  const rejected = ["%2e%2e/%2e%2e/index.html", "%2E%2E/x.json", "x.json?y=1", "x.json#frag"];
   for (const bare of rejected) {
-    expect(decodeSharePath(encoded(bare)), `decodeSharePath(${bare})`).toBeNull();
+    expect(decodeSharePath(bare), `decodeSharePath(${bare})`).toBeNull();
     expect(buildSharePathUrl(`${DIAGRAMS_PREFIX}${bare}`), `buildSharePathUrl(${bare})`).toBeNull();
   }
 });

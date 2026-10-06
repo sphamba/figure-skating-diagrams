@@ -150,7 +150,7 @@ test("a valid path payload fetches the public file, strips the query and keeps t
   const body = new TextEncoder().encode(JSON.stringify({ name: "Fetched", sequences: [] }));
   const fetchMock = vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => body.buffer });
   vi.stubGlobal("fetch", fetchMock);
-  const payload = bytesToBase64Url(new TextEncoder().encode("Moves in the field/x.json"));
+  const payload = encodeURIComponent("Moves in the field/x.json");
   const { wrapper: mounted, router } = await mountHomeView(`/?p=${payload}`);
   wrapper = mounted;
   const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
@@ -166,12 +166,12 @@ test("a valid path payload fetches the public file, strips the query and keeps t
 test("a path payload outside the diagram tree shows the error notice and keeps the query", async () => {
   const fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
-  const payload = bytesToBase64Url(new TextEncoder().encode("/etc/passwd"));
-  const { wrapper: mounted, router } = await mountHomeView(`/?p=${payload}`);
+  const outsideTree = "/etc/passwd";
+  const { wrapper: mounted, router } = await mountHomeView(`/?p=${encodeURIComponent(outsideTree)}`);
   wrapper = mounted;
   await settle();
   const note = document.querySelector("small.home-view__shared-link-error");
   expect(note?.textContent).toBe("The shared diagram could not be loaded.");
-  expect(router.currentRoute.value.query.p).toBe(payload);
+  expect(router.currentRoute.value.query.p, "the router hands the view the decoded text").toBe(outsideTree);
   expect(fetchMock, "a rejected payload never reaches the network").not.toHaveBeenCalled();
 });

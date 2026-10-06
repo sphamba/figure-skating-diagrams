@@ -6,7 +6,8 @@ import { decodeJsonFile, gzipText } from "@/utils/jsonGzip";
 export const SHARE_URL_MAX_CHARS = 8000;
 
 // A path share link points at a file in the public diagram tree. The payload
-// holds the tree path without this prefix.
+// holds the tree path without this prefix, as plain percent-encoded text so the
+// link stays readable and editable by hand.
 export const DIAGRAMS_PREFIX = "diagrams/";
 
 export function bytesToBase64Url(bytes: Uint8Array): string {
@@ -40,10 +41,10 @@ export async function decodeShareParam(value: string): Promise<unknown> {
 }
 
 // The payload is untrusted. The text checks cover what a file server does to a
-// decoded segment (trimming, path parameters, truncation) and the resolved
-// target check covers what the URL parser does to the raw text (stripping tabs
-// and newlines before it normalizes dot segments). Both must hold, and the
-// fetch must stay on this origin inside the diagram folder.
+// segment (trimming, path parameters, truncation) and the resolved target check
+// covers what the URL parser does to the raw text (stripping tabs and newlines,
+// and reading %2e as a dot segment, before it normalizes dot segments). Both
+// must hold, and the fetch must stay on this origin inside the diagram folder.
 function isShareablePath(path: string): boolean {
   if (
     path === "" ||
@@ -56,23 +57,17 @@ function isShareablePath(path: string): boolean {
     /[\u0000-\u001f\u007f]/.test(path)
   )
     return false;
-  const segments = path.split("/").every((segment) => {
-    let decoded: string;
-    try {
-      decoded = decodeURIComponent(segment);
-    } catch {
-      return false;
-    }
-    return (
-      decoded === decoded.trim() &&
-      !/[\u0000-\u001f\u007f;]/.test(decoded) &&
-      !decoded.endsWith(".") &&
-      decoded !== "." &&
-      decoded !== ".." &&
-      !decoded.includes("/") &&
-      !decoded.includes("\\")
+  const segments = path
+    .split("/")
+    .every(
+      (segment) =>
+        segment !== "" &&
+        segment === segment.trim() &&
+        !/[\u0000-\u001f\u007f;]/.test(segment) &&
+        !segment.endsWith(".") &&
+        segment !== "." &&
+        segment !== "..",
     );
-  });
   if (!segments) return false;
   const target = new URL(import.meta.env.BASE_URL + DIAGRAMS_PREFIX + path, window.location.href);
   return (
@@ -86,19 +81,16 @@ export function buildSharePathUrl(path: string): { url: string; chars: number } 
   if (!path.startsWith(DIAGRAMS_PREFIX)) return null;
   const bare = path.slice(DIAGRAMS_PREFIX.length);
   if (!isShareablePath(bare)) return null;
-  const payload = bytesToBase64Url(new TextEncoder().encode(bare));
+  // One escape pass over the whole path, so the slashes travel as %2F and
+  // vue-router undoes exactly this encoding when it reads the query.
+  const payload = encodeURIComponent(bare);
   const base = window.location.origin + import.meta.env.BASE_URL;
   const url = `${base}#/?p=${payload}`;
   return { url, chars: url.length };
 }
 
+// The router has already decoded the query value once, so this only validates.
 export function decodeSharePath(value: string): string | null {
-  let bare: string;
-  try {
-    bare = new TextDecoder().decode(base64UrlToBytes(value));
-  } catch {
-    return null;
-  }
-  if (!isShareablePath(bare)) return null;
-  return DIAGRAMS_PREFIX + bare;
+  if (!isShareablePath(value)) return null;
+  return DIAGRAMS_PREFIX + value;
 }

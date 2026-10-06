@@ -131,13 +131,31 @@ test("shareLink falls back to the inline payload when the origin path is not sha
   stubNavigator(share, vi.fn(() => true), clipboard);
   const component = mountFiles();
   const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
-  useSequenceEditorStore().setBundledPath("diagrams/a%2fb.json");
+  useSequenceEditorStore().setBundledPath("diagrams/x:y.json");
   await shareButton(component).trigger("click");
   await vi.waitFor(() => expect(share).toHaveBeenCalledTimes(1));
   await settle();
   const url = share.mock.calls[0][0].url as string;
   expect(url).toContain("#/?d=");
   expect(url).not.toContain("#/?p=");
+  expect(toastAdd).not.toHaveBeenCalled();
+});
+
+// An escape the router leaves behind is part of the file name now, so this
+// path shares by reference instead of falling back to the inline payload.
+test("shareLink shares an escaped origin path after one more encode pass", async () => {
+  const share = vi.fn().mockResolvedValue(undefined);
+  const clipboard = { writeText: vi.fn() };
+  stubNavigator(share, vi.fn(() => true), clipboard);
+  const component = mountFiles();
+  const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
+  useSequenceEditorStore().setBundledPath("diagrams/a%2fb.json");
+  await shareButton(component).trigger("click");
+  await vi.waitFor(() => expect(share).toHaveBeenCalledTimes(1));
+  await settle();
+  const url = share.mock.calls[0][0].url as string;
+  expect(url).toContain("#/?p=a%252fb.json");
+  expect(url).not.toContain("#/?d=");
   expect(toastAdd).not.toHaveBeenCalled();
 });
 
