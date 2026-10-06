@@ -1,5 +1,5 @@
 import type { PathCoordinate } from "../coordinates.js";
-import { Element } from "./element.js";
+import { Element, type ElementChoice } from "./element.js";
 import { type FootData, FootKeyframe, HipsKeyframe } from "../keyframe.js";
 import { getQuaternionFromAngleAxis } from "../quaternion.js";
 import { PartialVector } from "../vector.js";
@@ -164,7 +164,7 @@ export const glideEdges = [
 export const edgeLetter = (edge: "inside" | "outside" | "neither"): string =>
   edge === "inside" ? "I" : edge === "outside" ? "O" : "";
 
-export const glideKindChoices: { type: string; label: string }[] = [];
+export const glideKindChoices: ElementChoice[] = [];
 
 for (const [side, left] of glideSides) {
   for (const [direction, forward] of glideDirections) {
@@ -178,6 +178,12 @@ for (const [side, left] of glideSides) {
       glideKindChoices.push({
         type,
         label: `${side} ${direction.toLowerCase()} ${edge === "neither" ? "" : edge + " "}glide`,
+        parts: {
+          kind: "glide",
+          side: side.toLowerCase() as "left" | "right",
+          direction: direction.toLowerCase() as "forward" | "backward",
+          edge: edge === "neither" ? undefined : edge,
+        },
       });
     }
   }
@@ -190,7 +196,11 @@ for (const [direction, forward] of glideDirections) {
   if (!glideConstructorsByType[type]) {
     defineGlide(type, shortName, config);
   }
-  glideKindChoices.push({ type, label: `Two-feet ${direction.toLowerCase()} glide` });
+  glideKindChoices.push({
+    type,
+    label: `Two-feet ${direction.toLowerCase()} glide`,
+    parts: { kind: "glideTwoFeet", direction: direction.toLowerCase() as "forward" | "backward" },
+  });
 }
 
 export type TwoFeetPose = "SpreadEagle" | "InaBauer";
@@ -199,6 +209,11 @@ export type GlideFrontFoot = "Left" | "Right";
 const twoFeetPoseShortNames: Record<TwoFeetPose, string> = {
   SpreadEagle: "SeEe",
   InaBauer: "IBEe",
+};
+
+const twoFeetPoseNameKeys: Record<TwoFeetPose, "spreadEagle" | "inaBauer"> = {
+  SpreadEagle: "spreadEagle",
+  InaBauer: "inaBauer",
 };
 
 type TwoFeetPoseConfig = {
@@ -288,7 +303,15 @@ for (const [pose, poseLabel] of twoFeetPoseLabels) {
       }
     };
     glideConstructorsByType[type] = PoseGlide;
-    glideKindChoices.push({ type, label: `${poseLabel} ${frontFoot.toLowerCase()} front glide` });
+    glideKindChoices.push({
+      type,
+      label: `${poseLabel} ${frontFoot.toLowerCase()} front glide`,
+      parts: {
+        kind: "pose",
+        pose: twoFeetPoseNameKeys[pose],
+        frontFoot: frontFoot.toLowerCase() as "left" | "right",
+      },
+    });
   }
 }
 

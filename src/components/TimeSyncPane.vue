@@ -8,7 +8,7 @@ import { sequenceHasCursor, type Sequence } from "@/engine/sequence";
 import { WHEEL_SENSITIVITY } from "@/engine/constants";
 import type { Annotation } from "@/engine/annotation";
 import type { Time, PathCoordinate } from "@/engine/coordinates";
-import { elementFullName } from "@/engine/element/fullName";
+import { elementFullName, elementFullNameFr } from "@/engine/element/fullName";
 import type { Element as EngineElement } from "@/engine/element/element";
 import {
   CHANGE_EDGE_LABEL,
@@ -31,7 +31,10 @@ const props = withDefaults(
 
 const emit = defineEmits<{ seek: [seconds: number]; scrubStart: []; scrubEnd: [] }>();
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
+
+const fullNameOf = (element: EngineElement) =>
+  locale.value === "fr" ? elementFullNameFr(element, t) : elementFullName(element);
 
 type AnnotationRow = {
   kind: "annotation";
@@ -119,10 +122,10 @@ function crossedChip(sequence: Sequence, element: EngineElement): { label: strin
   if (!pill || !element.shortName) {
     return {
       label: pill ?? (element.crossedBack ? "XB" : "XF"),
-      fullName: element.crossedBack ? "Crossed-back" : "Crossed-front",
+      fullName: element.crossedBack ? t("timeSync.crossedBack") : t("timeSync.crossedFront"),
     };
   }
-  return { label: `${pill} ${element.shortName}`, fullName: elementFullName(element) };
+  return { label: `${pill} ${element.shortName}`, fullName: fullNameOf(element) };
 }
 
 // The change-of-edge chips sit at the uncovered change points, timed at when
@@ -167,7 +170,7 @@ const elementStrips = computed<ElementStrip[]>(() => {
         return {
           key: `${index}-${element.start}-${element.end}`,
           label: crossed ? crossed.label : element.shortName,
-          fullName: crossed ? crossed.fullName : elementFullName(element),
+          fullName: crossed ? crossed.fullName : fullNameOf(element),
           startTime: Number(sequence.getTimeFromPathCoordinate(element.start as PathCoordinate, props.bpm)),
           endTime: Number(sequence.getTimeFromPathCoordinate(element.end as PathCoordinate, props.bpm)),
           anchor: Math.min(element.start as number, element.end as number),

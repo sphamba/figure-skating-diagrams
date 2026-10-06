@@ -7,6 +7,7 @@ import { getQuaternionFromAngleAxis } from "../quaternion.js";
 import { Vector } from "../vector.js";
 import { FootTurn } from "./turn.js";
 import type { FootKey } from "../sequence.js";
+import type { ElementChoice } from "./element.js";
 
 export type TwoFeetTurnFlags = { left: boolean; forward: boolean; closed: boolean };
 
@@ -180,6 +181,7 @@ export abstract class TwoFeetTurn extends FootTurn {
 }
 
 export interface TwoFeetTurnKindSpec {
+  name: "mohawk" | "choctaw";
   suffix: string;
   label: string;
   shortName: (flags: TwoFeetTurnFlags) => string;
@@ -188,8 +190,8 @@ export interface TwoFeetTurnKindSpec {
 export function defineTwoFeetTurnKinds(
   spec: TwoFeetTurnKindSpec,
   defineVariant: (type: string, shortName: string, flags: TwoFeetTurnFlags) => void,
-): { type: string; label: string }[] {
-  const kindChoices: { type: string; label: string }[] = [];
+): ElementChoice[] {
+  const kindChoices: ElementChoice[] = [];
   for (const [side, left] of turnSides) {
     for (const [direction, forward] of turnDirections) {
       for (const [opennessName, closed] of turnOpenness) {
@@ -199,6 +201,13 @@ export function defineTwoFeetTurnKinds(
         kindChoices.push({
           type,
           label: `${side} ${direction.toLowerCase()} ${opennessName.toLowerCase()} ${spec.label}`,
+          parts: {
+            kind: "twoFeetTurn",
+            turn: spec.name,
+            side: side.toLowerCase() as "left" | "right",
+            direction: direction.toLowerCase() as "forward" | "backward",
+            openness: opennessName.toLowerCase() as "open" | "closed",
+          },
         });
       }
     }

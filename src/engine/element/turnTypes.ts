@@ -12,7 +12,7 @@ import { choctawConstructorsByType, choctawKindChoices } from "./choctaw.js";
 import { jumpConstructorsByType } from "./jump.js";
 import type { Jump } from "./jump.js";
 import { spinConstructorsByType, isSpinType, type SpinType } from "./spin.js";
-import type { Element } from "./element.js";
+import type { Element, ElementChoice } from "./element.js";
 import { footTurnConstructorsByType, changeFootTurnType } from "./turn.js";
 import type { FootTurnJSON } from "./turn.js";
 import type { FootKey } from "../sequence.js";
@@ -29,7 +29,7 @@ Object.assign(
   choctawConstructorsByType,
 );
 
-export const footTurnKindChoices: { type: string; label: string }[] = [
+export const footTurnKindChoices: ElementChoice[] = [
   ...threeTurnKindChoices,
   ...bracketKindChoices,
   ...rockerKindChoices,
@@ -52,14 +52,14 @@ export function isJumpType(type: string): boolean {
 export { parseJumpType } from "./jump.js";
 export { parseSpinType, isSpinType } from "./spin.js";
 
-export const jumpTypeChoices: { value: string; label: string }[] = [
-  { value: "ToeLoop", label: "Toe loop" },
-  { value: "Salchow", label: "Salchow" },
-  { value: "Loop", label: "Loop" },
-  { value: "Flip", label: "Flip" },
-  { value: "Lutz", label: "Lutz" },
-  { value: "Axel", label: "Axel" },
-  { value: "Euler", label: "Euler" },
+export const jumpTypeChoices: { value: string; label: string; key: string }[] = [
+  { value: "ToeLoop", label: "Toe loop", key: "toeLoop" },
+  { value: "Salchow", label: "Salchow", key: "salchow" },
+  { value: "Loop", label: "Loop", key: "loop" },
+  { value: "Flip", label: "Flip", key: "flip" },
+  { value: "Lutz", label: "Lutz", key: "lutz" },
+  { value: "Axel", label: "Axel", key: "axel" },
+  { value: "Euler", label: "Euler", key: "euler" },
 ];
 
 export function changeElementType(

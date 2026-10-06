@@ -7,6 +7,7 @@ import { Vector } from "../vector.js";
 import { defineOneFootTurnKinds, OneFootTurn } from "./oneFootTurn.js";
 import type { FootTurnFlags } from "./turn.js";
 import type { FootKey } from "../sequence.js";
+import type { ElementChoice } from "./element.js";
 
 export type LoopConstructor = new (footKey: FootKey, start: PathCoordinate, end: PathCoordinate) => Loop;
 
@@ -71,8 +72,8 @@ export abstract class Loop extends OneFootTurn {
 
 export const loopConstructorsByType: Record<string, LoopConstructor> = {};
 
-export const loopKindChoices: { type: string; label: string }[] = defineOneFootTurnKinds(
-  { suffix: "Loop", shortSuffix: " Loop", label: "loop" },
+export const loopKindChoices: ElementChoice[] = defineOneFootTurnKinds(
+  { name: "loop", suffix: "Loop", shortSuffix: " Loop", label: "loop" },
   (type, shortName, flags: FootTurnFlags) => {
     const Variant = class extends Loop {
       constructor(footKey: FootKey, start: PathCoordinate, end: PathCoordinate) {

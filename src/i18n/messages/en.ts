@@ -201,6 +201,8 @@ const en = {
     noDescription: "No description",
     noElement: "No element yet",
     changeEdge: "Change of edge",
+    crossedFront: "Crossed-front",
+    crossedBack: "Crossed-back",
   },
   tracking: {
     stop: "Stop tracking the time cursor",
@@ -271,6 +273,13 @@ const en = {
       double: "Double",
       triple: "Triple",
       quadruple: "Quadruple",
+      toeLoop: "Toe loop",
+      loop: "Loop",
+      salchow: "Salchow",
+      flip: "Flip",
+      lutz: "Lutz",
+      axel: "Axel",
+      euler: "Euler",
     },
     spins: {
       leftFoot: "Left foot",

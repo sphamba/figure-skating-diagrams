@@ -2,6 +2,21 @@ import type { PathCoordinate } from "../coordinates.js";
 import type { FootKeyframe, HipsKeyframe } from "../keyframe.js";
 import { round3 } from "../round.js";
 
+export type ElementNameParts = {
+  kind: "glide" | "glideTwoFeet" | "pose" | "stroke" | "turn" | "twizzle" | "twoFeetTurn" | "spin";
+  side?: "left" | "right";
+  direction?: "forward" | "backward";
+  edge?: "inside" | "outside";
+  stroke?: "normal" | "crossed" | "crossedBack";
+  turn?: "threeTurn" | "bracket" | "rocker" | "counter" | "loop" | "mohawk" | "choctaw";
+  pose?: "spreadEagle" | "inaBauer";
+  frontFoot?: "left" | "right";
+  openness?: "open" | "closed";
+  turns?: number;
+};
+
+export type ElementChoice = { type: string; label: string; parts?: ElementNameParts };
+
 export abstract class Element {
   private _start: PathCoordinate;
   private _end: PathCoordinate;

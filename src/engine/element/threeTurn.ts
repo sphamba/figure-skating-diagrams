@@ -2,6 +2,7 @@ import type { PathCoordinate } from "../coordinates.js";
 import type { FootKey } from "../sequence.js";
 import { defineOneFootTurnKinds, EdgeTurn } from "./oneFootTurn.js";
 import type { FootTurnFlags } from "./turn.js";
+import type { ElementChoice } from "./element.js";
 
 export abstract class ThreeTurn extends EdgeTurn {
   protected get counterRotated(): boolean {
@@ -13,8 +14,8 @@ export type ThreeTurnConstructor = new (footKey: FootKey, start: PathCoordinate,
 
 export const threeTurnConstructorsByType: Record<string, ThreeTurnConstructor> = {};
 
-export const threeTurnKindChoices: { type: string; label: string }[] = defineOneFootTurnKinds(
-  { suffix: "ThreeTurn", shortSuffix: "3", label: "three-turn" },
+export const threeTurnKindChoices: ElementChoice[] = defineOneFootTurnKinds(
+  { name: "threeTurn", suffix: "ThreeTurn", shortSuffix: "3", label: "three-turn" },
   (type, shortName, flags: FootTurnFlags) => {
     const Variant = class extends ThreeTurn {
       constructor(footKey: FootKey, start: PathCoordinate, end: PathCoordinate) {

@@ -2,6 +2,7 @@ import type { PathCoordinate } from "../coordinates.js";
 import type { FootKey } from "../sequence.js";
 import { defineOneFootTurnKinds, EdgeTurn } from "./oneFootTurn.js";
 import type { FootTurnFlags } from "./turn.js";
+import type { ElementChoice } from "./element.js";
 
 export abstract class Rocker extends EdgeTurn {
   protected get counterRotated(): boolean {
@@ -13,8 +14,8 @@ export type RockerConstructor = new (footKey: FootKey, start: PathCoordinate, en
 
 export const rockerConstructorsByType: Record<string, RockerConstructor> = {};
 
-export const rockerKindChoices: { type: string; label: string }[] = defineOneFootTurnKinds(
-  { suffix: "Rocker", shortSuffix: " RO", label: "rocker" },
+export const rockerKindChoices: ElementChoice[] = defineOneFootTurnKinds(
+  { name: "rocker", suffix: "Rocker", shortSuffix: " RO", label: "rocker" },
   (type, shortName, flags: FootTurnFlags) => {
     const Variant = class extends Rocker {
       constructor(footKey: FootKey, start: PathCoordinate, end: PathCoordinate) {

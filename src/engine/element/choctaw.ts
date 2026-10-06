@@ -2,6 +2,7 @@ import type { PathCoordinate } from "../coordinates.js";
 import type { FootKey } from "../sequence.js";
 import { TwoFeetTurn, defineTwoFeetTurnKinds, type TwoFeetTurnFlags } from "./twoFeetTurn.js";
 import { Vector } from "../vector.js";
+import type { ElementChoice } from "./element.js";
 
 export abstract class Choctaw extends TwoFeetTurn {
   protected midpointFootAngles(): [number, number] {
@@ -18,8 +19,9 @@ export type ChoctawConstructor = new (footKey: FootKey, start: PathCoordinate, e
 
 export const choctawConstructorsByType: Record<string, ChoctawConstructor> = {};
 
-export const choctawKindChoices: { type: string; label: string }[] = defineTwoFeetTurnKinds(
+export const choctawKindChoices: ElementChoice[] = defineTwoFeetTurnKinds(
   {
+    name: "choctaw",
     suffix: "Choctaw",
     label: "choctaw",
     shortName: (flags: TwoFeetTurnFlags) => (flags.closed ? "clCho" : "opCho"),

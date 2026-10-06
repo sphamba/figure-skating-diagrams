@@ -2,6 +2,7 @@ import type { PathCoordinate } from "../coordinates.js";
 import type { FootKey } from "../sequence.js";
 import { TwoFeetTurn, defineTwoFeetTurnKinds, type TwoFeetTurnFlags } from "./twoFeetTurn.js";
 import { Vector } from "../vector.js";
+import type { ElementChoice } from "./element.js";
 
 export abstract class Mohawk extends TwoFeetTurn {
   protected midpointFootAngles(): [number, number] {
@@ -22,8 +23,9 @@ export type MohawkConstructor = new (footKey: FootKey, start: PathCoordinate, en
 
 export const mohawkConstructorsByType: Record<string, MohawkConstructor> = {};
 
-export const mohawkKindChoices: { type: string; label: string }[] = defineTwoFeetTurnKinds(
+export const mohawkKindChoices: ElementChoice[] = defineTwoFeetTurnKinds(
   {
+    name: "mohawk",
     suffix: "Mohawk",
     label: "mohawk",
     shortName: (flags: TwoFeetTurnFlags) => (flags.closed ? "MO" : "opMo"),

@@ -1,5 +1,5 @@
 import type { PathCoordinate } from "../coordinates.js";
-import { Element } from "./element.js";
+import { Element, type ElementChoice } from "./element.js";
 import { type FootData, FootKeyframe, HipsKeyframe } from "../keyframe.js";
 import { offIceFootHeight } from "./glide.js";
 import { bladeLength } from "../constants.js";
@@ -220,7 +220,7 @@ export const spinEdges = [
   ["Outside", false],
 ] as const;
 
-export const spinKindChoices: { type: string; label: string }[] = [];
+export const spinKindChoices: ElementChoice[] = [];
 
 for (const [side, leftFoot] of spinSides) {
   for (const [edgeName, inside] of spinEdges) {
@@ -251,6 +251,11 @@ for (const [side, leftFoot] of spinSides) {
     spinKindChoices.push({
       type,
       label: `${side.toLowerCase()}foot ${edgeName.toLowerCase()}-edge spin`,
+      parts: {
+        kind: "spin",
+        side: side.toLowerCase() as "left" | "right",
+        edge: edgeName.toLowerCase() as "inside" | "outside",
+      },
     });
   }
 }

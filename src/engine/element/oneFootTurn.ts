@@ -5,6 +5,7 @@ import { PartialVector } from "../vector.js";
 import { getQuaternionFromAngleAxis } from "../quaternion.js";
 import { Vector } from "../vector.js";
 import { FootTurn, type FootTurnFlags } from "./turn.js";
+import type { ElementChoice } from "./element.js";
 
 export abstract class OneFootTurn extends FootTurn {
   get pathCoordinate(): PathCoordinate {
@@ -89,6 +90,7 @@ export const turnEdges = [
 ] as const;
 
 export interface OneFootTurnKindSpec {
+  name: "threeTurn" | "bracket" | "rocker" | "counter" | "loop";
   suffix: string;
   shortSuffix: string;
   label: string;
@@ -97,15 +99,25 @@ export interface OneFootTurnKindSpec {
 export function defineOneFootTurnKinds(
   spec: OneFootTurnKindSpec,
   defineVariant: (type: string, shortName: string, flags: FootTurnFlags) => void,
-): { type: string; label: string }[] {
-  const kindChoices: { type: string; label: string }[] = [];
+): ElementChoice[] {
+  const kindChoices: ElementChoice[] = [];
   for (const [side, left] of turnSides) {
     for (const [direction, forward] of turnDirections) {
       for (const [edge, inside] of turnEdges) {
         const type = `${side}${direction}${edge}${spec.suffix}`;
         const shortName = `${side[0]}${direction[0]}${edge[0]}${spec.shortSuffix}`;
         defineVariant(type, shortName, { left, forward, inside });
-        kindChoices.push({ type, label: `${side} ${direction.toLowerCase()} ${edge.toLowerCase()} ${spec.label}` });
+        kindChoices.push({
+          type,
+          label: `${side} ${direction.toLowerCase()} ${edge.toLowerCase()} ${spec.label}`,
+          parts: {
+            kind: "turn",
+            turn: spec.name,
+            side: side.toLowerCase() as "left" | "right",
+            direction: direction.toLowerCase() as "forward" | "backward",
+            edge: edge.toLowerCase() as "inside" | "outside",
+          },
+        });
       }
     }
   }

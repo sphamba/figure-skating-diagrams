@@ -6,6 +6,7 @@ import { PartialVector } from "../vector.js";
 import { getQuaternionFromAngleAxis } from "../quaternion.js";
 import { Vector } from "../vector.js";
 import type { FootTurnFlags } from "./turn.js";
+import type { ElementChoice } from "./element.js";
 
 export abstract class Twizzle extends EdgeTurn {
   readonly turns: number;
@@ -71,7 +72,7 @@ export const twizzleConstructorsByType: Record<string, TwizzleConstructor> = {};
 
 export const twizzleTurns = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5];
 
-function turnsNumeral(turns: number): string {
+export function turnsNumeral(turns: number): string {
   const whole = Math.trunc(turns);
   const half = turns - whole === 0.5;
   if (whole === 0) {
@@ -86,7 +87,7 @@ function turnsShortSuffix(turns: number): string {
   return half ? `${numeral} Tw` : `${numeral}Tw`;
 }
 
-export const twizzleKindChoices: { type: string; label: string }[] = [];
+export const twizzleKindChoices: ElementChoice[] = [];
 
 for (const [side, left] of turnSides) {
   for (const [direction, forward] of turnDirections) {
@@ -112,6 +113,13 @@ for (const [side, left] of turnSides) {
         twizzleKindChoices.push({
           type,
           label: `${side} ${direction.toLowerCase()} ${edge.toLowerCase()} twizzle (${turnsNumeral(turns)} turn${turns === 0.5 || turns === 1 ? "" : "s"})`,
+          parts: {
+            kind: "twizzle",
+            side: side.toLowerCase() as "left" | "right",
+            direction: direction.toLowerCase() as "forward" | "backward",
+            edge: edge.toLowerCase() as "inside" | "outside",
+            turns,
+          },
         });
       }
     }

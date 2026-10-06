@@ -140,6 +140,13 @@ for (const [side, left] of glideSides) {
           label: crossed
             ? `${strokeLabel} ${side.toLowerCase()} ${direction.toLowerCase()} ${edgeText}stroke`
             : `${side} ${strokeLabel} ${direction.toLowerCase()} ${edgeText}stroke`,
+          parts: {
+            kind: "stroke",
+            stroke: crossedBack ? "crossedBack" : crossed ? "crossed" : "normal",
+            side: side.toLowerCase() as "left" | "right",
+            direction: direction.toLowerCase() as "forward" | "backward",
+            edge: edge === "neither" ? undefined : edge,
+          },
         });
       }
     }

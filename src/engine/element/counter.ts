@@ -2,6 +2,7 @@ import type { PathCoordinate } from "../coordinates.js";
 import type { FootKey } from "../sequence.js";
 import { defineOneFootTurnKinds, EdgeTurn } from "./oneFootTurn.js";
 import type { FootTurnFlags } from "./turn.js";
+import type { ElementChoice } from "./element.js";
 
 export abstract class Counter extends EdgeTurn {
   protected get counterRotated(): boolean {
@@ -13,8 +14,8 @@ export type CounterConstructor = new (footKey: FootKey, start: PathCoordinate, e
 
 export const counterConstructorsByType: Record<string, CounterConstructor> = {};
 
-export const counterKindChoices: { type: string; label: string }[] = defineOneFootTurnKinds(
-  { suffix: "Counter", shortSuffix: " CTR", label: "counter" },
+export const counterKindChoices: ElementChoice[] = defineOneFootTurnKinds(
+  { name: "counter", suffix: "Counter", shortSuffix: " CTR", label: "counter" },
   (type, shortName, flags: FootTurnFlags) => {
     const Variant = class extends Counter {
       constructor(footKey: FootKey, start: PathCoordinate, end: PathCoordinate) {

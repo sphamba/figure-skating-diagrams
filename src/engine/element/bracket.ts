@@ -2,6 +2,7 @@ import type { PathCoordinate } from "../coordinates.js";
 import type { FootKey } from "../sequence.js";
 import { defineOneFootTurnKinds, EdgeTurn } from "./oneFootTurn.js";
 import type { FootTurnFlags } from "./turn.js";
+import type { ElementChoice } from "./element.js";
 
 export abstract class Bracket extends EdgeTurn {
   protected get counterRotated(): boolean {
@@ -13,8 +14,8 @@ export type BracketConstructor = new (footKey: FootKey, start: PathCoordinate, e
 
 export const bracketConstructorsByType: Record<string, BracketConstructor> = {};
 
-export const bracketKindChoices: { type: string; label: string }[] = defineOneFootTurnKinds(
-  { suffix: "Bracket", shortSuffix: "B", label: "bracket" },
+export const bracketKindChoices: ElementChoice[] = defineOneFootTurnKinds(
+  { name: "bracket", suffix: "Bracket", shortSuffix: "B", label: "bracket" },
   (type, shortName, flags: FootTurnFlags) => {
     const Variant = class extends Bracket {
       constructor(footKey: FootKey, start: PathCoordinate, end: PathCoordinate) {
