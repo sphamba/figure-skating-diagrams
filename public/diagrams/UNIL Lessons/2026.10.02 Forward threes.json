@@ -1,0 +1,277 @@
+{
+  "name": "2026.10.02 Forward three-turns",
+  "sequences": [
+    {
+      "name": "Sequence",
+      "traceColorL": "#3030d2",
+      "traceColorR": "#9c0000",
+      "path": {
+        "curves": [
+          {
+            "points": [
+              -13.755,
+              0.821,
+              -13.664,
+              -0.045,
+              -12.812,
+              -1.543,
+              -11.622,
+              -1.531
+            ]
+          },
+          {
+            "points": [
+              -11.622,
+              -1.531,
+              -9.191,
+              -1.507,
+              -9.749,
+              1.25,
+              -7.275,
+              1.391
+            ]
+          },
+          {
+            "points": [
+              -7.275,
+              1.391,
+              -5.639,
+              1.484,
+              -4.891,
+              0.292,
+              -5.452,
+              -1.11
+            ]
+          },
+          {
+            "points": [
+              -5.452,
+              -1.11,
+              -5.917,
+              -2.271,
+              -5.752,
+              -3.785,
+              -3.138,
+              -3.821
+            ]
+          },
+          {
+            "points": [
+              -3.138,
+              -3.821,
+              0.251,
+              -3.868,
+              0.056,
+              -1.814,
+              -0.193,
+              -0.876
+            ]
+          },
+          {
+            "points": [
+              -0.193,
+              -0.876,
+              -0.497,
+              0.269,
+              0.325,
+              1.439,
+              1.747,
+              1.531
+            ]
+          },
+          {
+            "points": [
+              1.747,
+              1.531,
+              3.921,
+              1.671,
+              3.498,
+              -1.414,
+              5.557,
+              -1.461
+            ]
+          },
+          {
+            "points": [
+              5.557,
+              -1.461,
+              6.827,
+              -1.49,
+              7.839,
+              -0.221,
+              7.497,
+              0.947
+            ]
+          },
+          {
+            "points": [
+              7.497,
+              0.947,
+              7.216,
+              1.905,
+              7.915,
+              3.52,
+              10.161,
+              3.541
+            ]
+          },
+          {
+            "points": [
+              10.161,
+              3.541,
+              12.638,
+              3.564,
+              13.483,
+              0.69,
+              13.733,
+              -0.723
+            ]
+          }
+        ]
+      },
+      "keyframes": {
+        "footL": [],
+        "footR": [],
+        "hips": [],
+        "time": [
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 0,
+            "data": {
+              "type": "time",
+              "value": 0
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 44.968,
+            "data": {
+              "type": "time",
+              "value": 15
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          }
+        ]
+      },
+      "elements": [
+        {
+          "type": "RightForwardInsideThreeTurn",
+          "start": 3.062,
+          "end": 3.77,
+          "shortName": "RFI3"
+        },
+        {
+          "type": "RightNormalForwardInsideGlide",
+          "start": 0,
+          "end": 0.442,
+          "shortName": "RFI"
+        },
+        {
+          "type": "LeftCrossedBackBackwardOutsideGlide",
+          "start": 5.613,
+          "end": 6.305,
+          "shortName": ""
+        },
+        {
+          "type": "RightCrossedBackwardInsideGlide",
+          "start": 8.55,
+          "end": 9.297,
+          "shortName": ""
+        },
+        {
+          "type": "RightBackwardOpenChoctaw",
+          "start": 12.03,
+          "end": 12.957,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardOutsideThreeTurn",
+          "start": 15.116,
+          "end": 16.19,
+          "shortName": "LFO3"
+        },
+        {
+          "type": "RightNormalBackwardOutsideGlide",
+          "start": 17.935,
+          "end": 19.152,
+          "shortName": "RBO"
+        },
+        {
+          "type": "RightBackwardClosedChoctaw",
+          "start": 22.219,
+          "end": 23.003,
+          "shortName": ""
+        },
+        {
+          "type": "LeftForwardInsideThreeTurn",
+          "start": 25.143,
+          "end": 25.971,
+          "shortName": "LFI3"
+        },
+        {
+          "type": "RightCrossedBackBackwardOutsideGlide",
+          "start": 27.948,
+          "end": 28.83,
+          "shortName": ""
+        },
+        {
+          "type": "LeftCrossedBackwardInsideGlide",
+          "start": 30.586,
+          "end": 31.473,
+          "shortName": ""
+        },
+        {
+          "type": "LeftBackwardOpenChoctaw",
+          "start": 33.933,
+          "end": 34.836,
+          "shortName": ""
+        },
+        {
+          "type": "RightForwardOutsideThreeTurn",
+          "start": 36.949,
+          "end": 38.037,
+          "shortName": "RFO3"
+        },
+        {
+          "type": "LeftNormalBackwardOutsideGlide",
+          "start": 39.56,
+          "end": 40.528,
+          "shortName": "LBO"
+        }
+      ],
+      "annotations": [
+        {
+          "start": 4.727,
+          "end": 7.155,
+          "title": "Cross roll",
+          "description": "",
+          "color": "#ffff00"
+        },
+        {
+          "start": 17.821,
+          "end": 22.491,
+          "title": "Exit",
+          "description": "",
+          "color": "#ffff00"
+        },
+        {
+          "start": 27.162,
+          "end": 29.143,
+          "title": "Cross roll",
+          "description": "",
+          "color": "#ffff00"
+        },
+        {
+          "start": 39.586,
+          "end": 44.968,
+          "title": "Exit",
+          "description": "",
+          "color": "#ffff00"
+        }
+      ]
+    }
+  ]
+}

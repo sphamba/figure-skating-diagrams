@@ -1,0 +1,518 @@
+{
+  "name": "2026.10.05 Rockers",
+  "sequences": [
+    {
+      "name": "Inside rockers",
+      "traceColorL": "#3030d2",
+      "traceColorR": "#9c0000",
+      "path": {
+        "curves": [
+          {
+            "points": [
+              -14.046,
+              8.616,
+              -14.061,
+              6.035,
+              -10.542,
+              6.252,
+              -10.525,
+              8.675
+            ]
+          },
+          {
+            "points": [
+              -10.525,
+              8.675,
+              -10.507,
+              11.27,
+              -6.979,
+              11.031,
+              -6.991,
+              8.674
+            ]
+          },
+          {
+            "points": [
+              -6.991,
+              8.674,
+              -7.005,
+              5.883,
+              -3.265,
+              6.209,
+              -3.281,
+              8.616
+            ]
+          },
+          {
+            "points": [
+              -3.281,
+              8.616,
+              -3.299,
+              11.292,
+              0.168,
+              10.944,
+              0.193,
+              8.615
+            ]
+          },
+          {
+            "points": [
+              0.193,
+              8.615,
+              0.218,
+              6.253,
+              3.599,
+              6.14,
+              3.631,
+              8.672
+            ]
+          },
+          {
+            "points": [
+              3.631,
+              8.672,
+              3.664,
+              11.289,
+              7.042,
+              11.028,
+              7.047,
+              8.642
+            ]
+          },
+          {
+            "points": [
+              7.047,
+              8.642,
+              7.053,
+              6.032,
+              10.639,
+              6.228,
+              10.639,
+              8.642
+            ]
+          },
+          {
+            "points": [
+              10.639,
+              8.642,
+              10.639,
+              11.029,
+              14.152,
+              11.207,
+              14.123,
+              8.616
+            ]
+          }
+        ]
+      },
+      "keyframes": {
+        "footL": [],
+        "footR": [],
+        "hips": [],
+        "time": [
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 0,
+            "data": {
+              "type": "time",
+              "value": 0
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 46.164,
+            "data": {
+              "type": "time",
+              "value": 15
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          }
+        ]
+      },
+      "elements": [
+        {
+          "type": "RightForwardInsideRocker",
+          "start": 5.47,
+          "end": 6.107,
+          "shortName": "RFI RO"
+        },
+        {
+          "type": "LeftNormalBackwardInsideGlide",
+          "start": 11.201,
+          "end": 11.828,
+          "shortName": ""
+        },
+        {
+          "type": "LeftBackwardInsideRocker",
+          "start": 17.268,
+          "end": 17.875,
+          "shortName": "LBI RO"
+        },
+        {
+          "type": "RightNormalForwardInsideGlide",
+          "start": 22.953,
+          "end": 23.548,
+          "shortName": ""
+        },
+        {
+          "type": "RightForwardInsideRocker",
+          "start": 28.659,
+          "end": 29.365,
+          "shortName": "RFI RO"
+        },
+        {
+          "type": "LeftNormalBackwardInsideGlide",
+          "start": 34.114,
+          "end": 34.923,
+          "shortName": ""
+        },
+        {
+          "type": "LeftBackwardInsideRocker",
+          "start": 40.062,
+          "end": 40.871,
+          "shortName": "LBI RO"
+        }
+      ],
+      "annotations": []
+    },
+    {
+      "name": "Outside-inside",
+      "traceColorL": "#3030d2",
+      "traceColorR": "#9c0000",
+      "path": {
+        "curves": [
+          {
+            "points": [
+              -13.987,
+              -0.052,
+              -14.002,
+              -2.633,
+              -10.483,
+              -2.416,
+              -10.466,
+              0.007
+            ]
+          },
+          {
+            "points": [
+              -10.466,
+              0.007,
+              -10.448,
+              2.602,
+              -6.92,
+              2.363,
+              -6.932,
+              0.006
+            ]
+          },
+          {
+            "points": [
+              -6.932,
+              0.006,
+              -6.946,
+              -2.785,
+              -3.206,
+              -2.459,
+              -3.222,
+              -0.052
+            ]
+          },
+          {
+            "points": [
+              -3.222,
+              -0.052,
+              -3.24,
+              2.624,
+              0.227,
+              2.276,
+              0.252,
+              -0.053
+            ]
+          },
+          {
+            "points": [
+              0.252,
+              -0.053,
+              0.277,
+              -2.415,
+              3.658,
+              -2.528,
+              3.69,
+              0.004
+            ]
+          },
+          {
+            "points": [
+              3.69,
+              0.004,
+              3.723,
+              2.621,
+              7.101,
+              2.36,
+              7.106,
+              -0.026
+            ]
+          },
+          {
+            "points": [
+              7.106,
+              -0.026,
+              7.112,
+              -2.636,
+              10.698,
+              -2.44,
+              10.698,
+              -0.026
+            ]
+          },
+          {
+            "points": [
+              10.698,
+              -0.026,
+              10.698,
+              2.361,
+              14.211,
+              2.539,
+              14.182,
+              -0.052
+            ]
+          }
+        ]
+      },
+      "keyframes": {
+        "footL": [],
+        "footR": [],
+        "hips": [],
+        "time": [
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 0,
+            "data": {
+              "type": "time",
+              "value": 15
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 46.164,
+            "data": {
+              "type": "time",
+              "value": 30
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          }
+        ]
+      },
+      "elements": [
+        {
+          "type": "LeftForwardOutsideRocker",
+          "start": 5.454,
+          "end": 6.254,
+          "shortName": "LFO RO"
+        },
+        {
+          "type": "LeftBackwardInsideRocker",
+          "start": 17.131,
+          "end": 17.931,
+          "shortName": "LBI RO"
+        },
+        {
+          "type": "LeftForwardOutsideRocker",
+          "start": 28.556,
+          "end": 29.356,
+          "shortName": "LFO RO"
+        },
+        {
+          "type": "LeftBackwardInsideRocker",
+          "start": 40.041,
+          "end": 40.84,
+          "shortName": "LBI RO"
+        }
+      ],
+      "annotations": []
+    },
+    {
+      "name": "Slalom",
+      "traceColorL": "#3030d2",
+      "traceColorR": "#9c0000",
+      "path": {
+        "curves": [
+          {
+            "points": [
+              -14.065,
+              -8.761,
+              -14.08,
+              -11.342,
+              -10.561,
+              -11.125,
+              -10.544,
+              -8.702
+            ]
+          },
+          {
+            "points": [
+              -10.544,
+              -8.702,
+              -10.526,
+              -6.107,
+              -6.998,
+              -6.346,
+              -7.01,
+              -8.703
+            ]
+          },
+          {
+            "points": [
+              -7.01,
+              -8.703,
+              -7.024,
+              -11.494,
+              -3.284,
+              -11.168,
+              -3.3,
+              -8.761
+            ]
+          },
+          {
+            "points": [
+              -3.3,
+              -8.761,
+              -3.318,
+              -6.085,
+              0.149,
+              -6.433,
+              0.174,
+              -8.762
+            ]
+          },
+          {
+            "points": [
+              0.174,
+              -8.762,
+              0.199,
+              -11.124,
+              3.58,
+              -11.237,
+              3.612,
+              -8.705
+            ]
+          },
+          {
+            "points": [
+              3.612,
+              -8.705,
+              3.645,
+              -6.088,
+              7.023,
+              -6.349,
+              7.028,
+              -8.735
+            ]
+          },
+          {
+            "points": [
+              7.028,
+              -8.735,
+              7.034,
+              -11.345,
+              10.62,
+              -11.149,
+              10.62,
+              -8.735
+            ]
+          },
+          {
+            "points": [
+              10.62,
+              -8.735,
+              10.62,
+              -6.348,
+              14.133,
+              -6.17,
+              14.104,
+              -8.761
+            ]
+          }
+        ]
+      },
+      "keyframes": {
+        "footL": [],
+        "footR": [],
+        "hips": [],
+        "time": [
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 0,
+            "data": {
+              "type": "time",
+              "value": 30
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          },
+          {
+            "kind": "TimingKeyframe",
+            "coordinate": 46.164,
+            "data": {
+              "type": "time",
+              "value": 45
+            },
+            "transitionIn": "linear",
+            "transitionOut": "linear"
+          }
+        ]
+      },
+      "elements": [
+        {
+          "type": "RightForwardInsideRocker",
+          "start": 5.275,
+          "end": 6.075,
+          "shortName": "RFI RO"
+        },
+        {
+          "type": "RightBackwardInsideRocker",
+          "start": 11.211,
+          "end": 12.011,
+          "shortName": "RBI RO"
+        },
+        {
+          "type": "RightForwardInsideRocker",
+          "start": 17.157,
+          "end": 17.957,
+          "shortName": "RFI RO"
+        },
+        {
+          "type": "RightBackwardInsideRocker",
+          "start": 22.928,
+          "end": 23.728,
+          "shortName": "RBI RO"
+        },
+        {
+          "type": "RightForwardInsideRocker",
+          "start": 28.502,
+          "end": 29.301,
+          "shortName": "RFI RO"
+        },
+        {
+          "type": "RightBackwardInsideRocker",
+          "start": 34.119,
+          "end": 34.919,
+          "shortName": "RBI RO"
+        },
+        {
+          "type": "RightForwardInsideRocker",
+          "start": 40.111,
+          "end": 40.911,
+          "shortName": "RFI RO"
+        }
+      ],
+      "annotations": []
+    }
+  ]
+}
