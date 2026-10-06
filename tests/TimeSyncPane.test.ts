@@ -1,6 +1,9 @@
 import { expect, test, vi } from "vitest";
 import { mount } from "@vue/test-utils";
+import { createI18n } from "vue-i18n";
 import TimeSyncPane from "@/components/TimeSyncPane.vue";
+import en from "@/i18n/messages/en";
+import fr from "@/i18n/messages/fr";
 import { BothForwardGlide, glideConstructorsByType } from "@/engine/element/glide";
 import { DynamicGlide } from "@/engine/element/stroke";
 import { Annotation } from "@/engine/annotation";
@@ -384,5 +387,15 @@ test("emits seek with the start time of the clicked element", async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
   const emitted = wrapper.emitted("seek");
   expect(emitted?.at(-1)?.at(0)).toBeCloseTo(3); // start of the second element, at one third of the path
+  wrapper.unmount();
+});
+
+test("shows the French full name under the strip", async () => {
+  const wrapper = mount(TimeSyncPane, {
+    props: { sequences: [buildFallbackSequence()], timeSeconds: 4.5, bpm: 120 },
+    global: { plugins: [createI18n({ legacy: false, locale: "fr", fallbackLocale: "en", messages: { en, fr } })] },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(wrapper.find(".time-sync-pane__strip-fullname").text()).toBe("Glissé avant deux pieds");
   wrapper.unmount();
 });

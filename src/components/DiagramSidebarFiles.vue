@@ -10,8 +10,8 @@ import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import DiagramTree, { type DiagramTreeSource } from "@/components/DiagramTree.vue";
 import { decodeJsonFile, encodeJsonFile, gzipFileName } from "@/utils/jsonGzip";
-import { listSavedDiagrams, loadSavedDiagram, saveSavedDiagram } from "@/utils/diagramLibrary";
-import { buildShareUrl, SHARE_URL_MAX_CHARS } from "@/utils/shareUrl";
+import { listSavedDiagrams, loadSavedDiagram, saveSavedDiagram, fetchBundledDiagram } from "@/utils/diagramLibrary";
+import { buildSharePathUrl, buildShareUrl, SHARE_URL_MAX_CHARS } from "@/utils/shareUrl";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import type { PatternJSON } from "@/engine/pattern";
 import type { DiagramJSON } from "@/engine/diagram";
@@ -110,12 +110,13 @@ async function onFileSelected(event: Event) {
 async function loadDiagramSource(path: string) {
   loadFailed.value = false;
   try {
-    const response = await fetch(`${import.meta.env.BASE_URL}${path}`);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const json = (await decodeJsonFile(await response.arrayBuffer())) as PatternJSON | DiagramJSON | SequenceJSON;
+    const json = (await fetchBundledDiagram(path)) as PatternJSON | DiagramJSON | SequenceJSON;
     emit("load-start");
     store.setSaveFilename(path.split("/").pop() ?? "");
     loadIntoStore(json);
+    // Only a full diagram is shareable by path, and the load clears the origin,
+    // so the origin travels after it.
+    if (isPattern(json)) store.setBundledPath(path);
     emit("close");
   } catch (error) {
     loadFailed.value = true;
@@ -209,17 +210,20 @@ async function downloadFile() {
 
 async function shareLink() {
   shareDialogOpen.value = false;
+  const bundledPath = store.getBundledPath();
   const json = store.toJSON();
+  const pathShare = bundledPath === null ? null : buildSharePathUrl(bundledPath);
   let url: string;
   let chars: number;
   try {
-    ({ url, chars } = await buildShareUrl(json));
+    ({ url, chars } = pathShare ?? (await buildShareUrl(json)));
   } catch (error) {
     toast.add({ severity: "error", summary: t("files.shareError"), life: 6000 });
     console.error("Could not build the share link:", error);
     return;
   }
-  if (chars > SHARE_URL_MAX_CHARS) {
+  // A path link is always short, so only the inline payload can exceed the limit.
+  if (pathShare === null && chars > SHARE_URL_MAX_CHARS) {
     toast.add({ severity: "error", summary: t("files.shareTooBig"), life: 6000 });
     return;
   }

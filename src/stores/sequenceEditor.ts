@@ -9,6 +9,7 @@ import { Vector } from "@/engine/vector";
 const STORAGE_KEY = "sequence-editor";
 const SHORT_DRAW_RANGE_KEY = "sequence-editor-short-draw-range";
 const FILENAME_KEY = "sequence-editor-filename";
+const BUNDLED_PATH_KEY = "sequence-editor-bundled-path";
 const DEFAULT_FILENAME = "diagram.json";
 const DEFAULT_SEQUENCE_NAME = "Sequence";
 // World axes: the canvas negates y, so world +x draws right and world -y draws
@@ -76,12 +77,33 @@ function storeFilename(value: string) {
   }
 }
 
+// The bundled path is the public tree file the diagram came from. It keeps the
+// share link small until the first edit drops it.
+function loadStoredBundledPath(): string | null {
+  try {
+    return localStorage.getItem(BUNDLED_PATH_KEY);
+  } catch (error) {
+    console.error("Could not read the stored bundled path:", error);
+    return null;
+  }
+}
+
+function storeBundledPath(path: string | null) {
+  try {
+    if (path === null) localStorage.removeItem(BUNDLED_PATH_KEY);
+    else localStorage.setItem(BUNDLED_PATH_KEY, path);
+  } catch (error) {
+    console.error("Could not store the bundled path:", error);
+  }
+}
+
 const HISTORY_KEY = "sequence-editor-history";
 
 export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
   const diagram = shallowRef<Diagram>(loadStoredDiagram());
   const shortDrawRange = ref(loadStoredShortDrawRange());
   const saveFilename = ref(loadStoredFilename());
+  const bundledPath = ref<string | null>(loadStoredBundledPath());
   const activeSequence = shallowRef<Sequence | null>(diagram.value.sequences[0] ?? null);
   const hiddenSequences = shallowRef<Set<Sequence>>(new Set());
   const jsonBaseline = ref<string>(JSON.stringify(diagram.value.toJSON(), null, 2));
@@ -129,6 +151,20 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
   function setSaveFilename(name: string) {
     saveFilename.value = sanitizeFilename(name);
     storeFilename(saveFilename.value);
+  }
+
+  function getBundledPath(): string | null {
+    return bundledPath.value;
+  }
+
+  function setBundledPath(path: string) {
+    bundledPath.value = path;
+    storeBundledPath(path);
+  }
+
+  function clearBundledPath() {
+    bundledPath.value = null;
+    storeBundledPath(null);
   }
 
   function getActiveSequence(): Sequence | null {
@@ -275,6 +311,9 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     }
     triggerRef(diagram);
     if (applyingHistory) return;
+    // The first real edit drops the public tree origin, so the share link can
+    // no longer hand out the original file.
+    clearBundledPath();
     // A deliberate action (canvas gesture, dialog OK, button click) is one
     // step and never merges. Only continuous inputs such as typed text, the
     // slider and the color picker coalesce inside the window.
@@ -332,6 +371,7 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
 
   function loadFromJSON(json: DiagramJSON) {
     consumeCreationRequest();
+    clearBundledPath();
     const next = Diagram.fromJSON(json);
     diagram.value = next;
     activeSequence.value = next.sequences[0] ?? null;
@@ -367,6 +407,7 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
 
   function clear() {
     consumeCreationRequest();
+    clearBundledPath();
     const next = defaultDiagram();
     diagram.value = next;
     activeSequence.value = next.sequences[0] ?? null;
@@ -393,6 +434,9 @@ export const useSequenceEditorStore = defineStore("sequenceEditor", () => {
     setShortDrawRange,
     getSaveFilename,
     setSaveFilename,
+    getBundledPath,
+    setBundledPath,
+    clearBundledPath,
     getActiveSequence,
     getSequences,
     isVisible,

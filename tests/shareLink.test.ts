@@ -53,6 +53,7 @@ afterEach(() => {
   wrapper = null;
   stubNavigator(undefined, undefined, undefined);
   toastAdd.mockClear();
+  localStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -103,6 +104,41 @@ test("shareLink shares the built link when navigator.share works", async () => {
   expect(toastAdd).not.toHaveBeenCalled();
   expect(dialogTextarea()).toBeNull();
   expect(shareNotes(component)).toEqual([]);
+});
+
+test("shareLink shares the public path when the diagram came from the tree", async () => {
+  const share = vi.fn().mockResolvedValue(undefined);
+  const clipboard = { writeText: vi.fn() };
+  stubNavigator(share, vi.fn(() => true), clipboard);
+  const component = mountFiles();
+  const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
+  useSequenceEditorStore().setBundledPath("diagrams/x.json");
+  await shareButton(component).trigger("click");
+  await vi.waitFor(() => expect(share).toHaveBeenCalledTimes(1));
+  await settle();
+  const url = share.mock.calls[0][0].url as string;
+  expect(url).toContain("#/?p=");
+  expect(url).not.toContain("#/?d=");
+  expect(clipboard.writeText).not.toHaveBeenCalled();
+  expect(useSequenceEditorStore().getBundledPath(), "sharing is not an edit").toBe("diagrams/x.json");
+});
+
+// The origin is resolved before sharing, so a path the receiver would reject
+// silently falls back to the inline payload instead of erroring.
+test("shareLink falls back to the inline payload when the origin path is not shareable", async () => {
+  const share = vi.fn().mockResolvedValue(undefined);
+  const clipboard = { writeText: vi.fn() };
+  stubNavigator(share, vi.fn(() => true), clipboard);
+  const component = mountFiles();
+  const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
+  useSequenceEditorStore().setBundledPath("diagrams/a%2fb.json");
+  await shareButton(component).trigger("click");
+  await vi.waitFor(() => expect(share).toHaveBeenCalledTimes(1));
+  await settle();
+  const url = share.mock.calls[0][0].url as string;
+  expect(url).toContain("#/?d=");
+  expect(url).not.toContain("#/?p=");
+  expect(toastAdd).not.toHaveBeenCalled();
 });
 
 test("shareLink falls back to the clipboard and shows a toast when navigator.share fails", async () => {

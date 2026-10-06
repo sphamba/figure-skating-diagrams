@@ -134,3 +134,54 @@ test("the symmetric flag persists to local storage and clears back", () => {
   const cleared = JSON.parse(localStorage.getItem("sequence-editor") as string) as { symmetric?: boolean };
   expect(cleared.symmetric).toBe(false);
 });
+
+test("the first edit drops the bundled origin and the drop survives a reload", () => {
+  localStorage.clear();
+  seedStoredDiagram();
+  setActivePinia(createPinia());
+  const store = useSequenceEditorStore();
+  store.setBundledPath("diagrams/a.json");
+  expect(store.getBundledPath()).toBe("diagrams/a.json");
+
+  store.setDiagramName("Edited");
+  expect(store.getBundledPath()).toBeNull();
+
+  setActivePinia(createPinia());
+  expect(useSequenceEditorStore().getBundledPath()).toBeNull();
+});
+
+test("undo and redo keep the bundled origin", () => {
+  localStorage.clear();
+  seedStoredDiagram();
+  setActivePinia(createPinia());
+  const store = useSequenceEditorStore();
+  store.setDiagramName("Edited");
+  store.setBundledPath("diagrams/a.json");
+
+  expect(store.undo()).not.toBeNull();
+  expect(store.getBundledPath()).toBe("diagrams/a.json");
+  expect(store.redo()).not.toBeNull();
+  expect(store.getBundledPath()).toBe("diagrams/a.json");
+});
+
+test("loadFromJSON clears the bundled origin", () => {
+  localStorage.clear();
+  seedStoredDiagram();
+  setActivePinia(createPinia());
+  const store = useSequenceEditorStore();
+  store.setBundledPath("diagrams/a.json");
+
+  store.loadFromJSON({ name: "Loaded", sequences: [] });
+  expect(store.getBundledPath()).toBeNull();
+});
+
+test("clear() clears the bundled origin", () => {
+  localStorage.clear();
+  seedStoredDiagram();
+  setActivePinia(createPinia());
+  const store = useSequenceEditorStore();
+  store.setBundledPath("diagrams/a.json");
+
+  store.clear();
+  expect(store.getBundledPath()).toBeNull();
+});

@@ -471,7 +471,7 @@ const chosenLabels = computed<string[]>(() => {
     const labels = [t("editor.kinds.jump")];
     jumpPath.value.forEach((value, level) => {
       const options =
-        level === 0 ? jumpHandednessOptions.value : level === 1 ? jumpTypeChoices : jumpRevolutionOptions.value;
+        level === 0 ? jumpHandednessOptions.value : level === 1 ? jumpTypeOptions.value : jumpRevolutionOptions.value;
       const option = options.find((choice) => choice.value === value);
       if (option) labels.push(option.label);
     });
@@ -1479,7 +1479,12 @@ onMounted(() => {
   };
   editorInstance.onPathCreationChange = (state) => {
     pathCreation.value = state;
-    if (state) pathCreationIsNew = state.isNew;
+    if (state) {
+      pathCreationIsNew = state.isNew;
+      // Path creation rewrites the path curves without a store edit, so the
+      // public tree origin must drop here too.
+      store.clearBundledPath();
+    }
     syncPathCreationToast(state);
   };
   editorInstance.onSequenceCreationFinish = (sequence) => {
@@ -1609,12 +1614,16 @@ const jumpRevolutionOptions = computed(() => [
   { label: t("editor.jumps.quadruple"), value: "4" },
 ]);
 
+const jumpTypeOptions = computed(() =>
+  jumpTypeChoices.map((choice) => ({ value: choice.value, label: t(`editor.jumps.${choice.key}`) })),
+);
+
 const jumpStepFinal = computed(() => jumpPath.value.length >= 3);
 
 const currentJumpOptions = computed(() => {
   if (jumpStepFinal.value) return [];
   if (jumpPath.value.length === 0) return jumpHandednessOptions.value;
-  if (jumpPath.value.length === 1) return jumpTypeChoices;
+  if (jumpPath.value.length === 1) return jumpTypeOptions.value;
   return jumpRevolutionOptions.value;
 });
 

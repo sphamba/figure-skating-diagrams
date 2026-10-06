@@ -646,3 +646,23 @@ test("the empty-canvas button starts a creation and hides once a sequence exists
   wrapper.unmount();
   vi.unstubAllGlobals();
 });
+
+test("the path creation drops the bundled origin", async () => {
+  const wrapper = await mountEditorView();
+  const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
+  const store = useSequenceEditorStore();
+  store.addSequence();
+  await nextTick();
+  await nextTick();
+  const sequence = store.getSequences()[0] as Sequence;
+  // The store request already saved, so the origin is re-set here to isolate
+  // the drop the editor state itself must trigger.
+  store.setBundledPath("diagrams/a.json");
+
+  recorder.editor.onPathCreationChange({ sequence, isNew: false, phase: "placing", curveCount: 1 });
+  await nextTick();
+
+  expect(store.getBundledPath()).toBeNull();
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});

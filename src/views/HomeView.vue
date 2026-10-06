@@ -15,7 +15,8 @@ import type { Sequence } from "@/engine/sequence";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
 import { useAppearanceStore } from "@/stores/appearance";
 import { useRoute, useRouter } from "vue-router";
-import { decodeShareParam } from "@/utils/shareUrl";
+import { decodeShareParam, decodeSharePath } from "@/utils/shareUrl";
+import { fetchBundledDiagram } from "@/utils/diagramLibrary";
 import type { DiagramJSON } from "@/engine/diagram";
 import { useMediaQuery } from "@/composables/useMediaQuery";
 import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
@@ -482,13 +483,32 @@ async function loadSharedDiagram() {
   // The wiring tests mount the view without a router, so both stay undefined there.
   if (!route || !router) return;
   const shared = route.query.d;
-  if (typeof shared !== "string" || shared === "") return;
+  if (typeof shared === "string" && shared !== "") {
+    try {
+      const json = (await decodeShareParam(shared)) as DiagramJSON;
+      if (!Array.isArray(json.sequences)) throw new Error("not a DiagramJSON payload");
+      store.loadFromJSON(json);
+      // The payload has served its purpose, so the long URL leaves the address
+      // bar and history; the diagram itself stays in the store storage.
+      await router.replace({ query: {} });
+    } catch (error) {
+      sharedLinkError.value = true;
+      console.error("Could not load the shared diagram:", error);
+    }
+    return;
+  }
+  const sharedPath = route.query.p;
+  if (typeof sharedPath !== "string" || sharedPath === "") return;
   try {
-    const json = (await decodeShareParam(shared)) as DiagramJSON;
+    const path = decodeSharePath(sharedPath);
+    if (!path) throw new Error("not a diagram path payload");
+    const json = (await fetchBundledDiagram(path)) as DiagramJSON;
+    // A p= payload reuses the d= JSON shape: a DiagramJSON with a sequences
+    // array. A bare SequenceJSON file is not shareable by path yet.
     if (!Array.isArray(json.sequences)) throw new Error("not a DiagramJSON payload");
     store.loadFromJSON(json);
-    // The payload has served its purpose, so the long URL leaves the address
-    // bar and history; the diagram itself stays in the store storage.
+    store.setBundledPath(path);
+    store.setSaveFilename(path.split("/").pop() ?? "");
     await router.replace({ query: {} });
   } catch (error) {
     sharedLinkError.value = true;

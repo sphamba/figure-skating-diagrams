@@ -5,6 +5,10 @@ import { decodeJsonFile, gzipText } from "@/utils/jsonGzip";
 // and some apps cannot carry; the fragment itself has no server limit.
 export const SHARE_URL_MAX_CHARS = 8000;
 
+// A path share link points at a file in the public diagram tree. The payload
+// holds the tree path without this prefix.
+export const DIAGRAMS_PREFIX = "diagrams/";
+
 export function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
   const chunkSize = 0x8000;
@@ -33,4 +37,68 @@ export async function buildShareUrl(json: string): Promise<{ url: string; chars:
 
 export async function decodeShareParam(value: string): Promise<unknown> {
   return decodeJsonFile(base64UrlToBytes(value).buffer as ArrayBuffer);
+}
+
+// The payload is untrusted. The text checks cover what a file server does to a
+// decoded segment (trimming, path parameters, truncation) and the resolved
+// target check covers what the URL parser does to the raw text (stripping tabs
+// and newlines before it normalizes dot segments). Both must hold, and the
+// fetch must stay on this origin inside the diagram folder.
+function isShareablePath(path: string): boolean {
+  if (
+    path === "" ||
+    path.startsWith("/") ||
+    path.startsWith(DIAGRAMS_PREFIX) ||
+    path.includes("\\") ||
+    path.includes(":") ||
+    path.includes("?") ||
+    path.includes("#") ||
+    /[\u0000-\u001f\u007f]/.test(path)
+  )
+    return false;
+  const segments = path.split("/").every((segment) => {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {
+      return false;
+    }
+    return (
+      decoded === decoded.trim() &&
+      !/[\u0000-\u001f\u007f;]/.test(decoded) &&
+      !decoded.endsWith(".") &&
+      decoded !== "." &&
+      decoded !== ".." &&
+      !decoded.includes("/") &&
+      !decoded.includes("\\")
+    );
+  });
+  if (!segments) return false;
+  const target = new URL(import.meta.env.BASE_URL + DIAGRAMS_PREFIX + path, window.location.href);
+  return (
+    target.origin === window.location.origin && target.pathname.startsWith(import.meta.env.BASE_URL + DIAGRAMS_PREFIX)
+  );
+}
+
+// Total by design: a path that cannot be shared returns null so the caller
+// falls back to the inline gzip link instead of surfacing an error.
+export function buildSharePathUrl(path: string): { url: string; chars: number } | null {
+  if (!path.startsWith(DIAGRAMS_PREFIX)) return null;
+  const bare = path.slice(DIAGRAMS_PREFIX.length);
+  if (!isShareablePath(bare)) return null;
+  const payload = bytesToBase64Url(new TextEncoder().encode(bare));
+  const base = window.location.origin + import.meta.env.BASE_URL;
+  const url = `${base}#/?p=${payload}`;
+  return { url, chars: url.length };
+}
+
+export function decodeSharePath(value: string): string | null {
+  let bare: string;
+  try {
+    bare = new TextDecoder().decode(base64UrlToBytes(value));
+  } catch {
+    return null;
+  }
+  if (!isShareablePath(bare)) return null;
+  return DIAGRAMS_PREFIX + bare;
 }

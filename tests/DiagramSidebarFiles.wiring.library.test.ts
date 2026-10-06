@@ -1,11 +1,20 @@
 import { beforeEach, expect, test, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { defineComponent, nextTick } from "vue";
 import type { Component } from "vue";
 
 vi.mock("virtual:diagram-tree", () => ({
-  default: { name: "diagrams", files: [], folders: [] },
+  default: {
+    name: "diagrams",
+    files: [
+      { name: "x.json", path: "diagrams/Moves in the field/x.json" },
+      { name: "s.json", path: "diagrams/Moves in the field/s.json" },
+    ],
+    folders: [],
+  },
 }));
 
 vi.spyOn(console, "error").mockImplementation(() => {});
@@ -133,4 +142,37 @@ test("a failed save shows an error toast", async () => {
     expect(document.querySelector(".p-toast")?.textContent).toContain("Could not save the diagram."),
   );
   wrapper.unmount();
+});
+
+test("opening a bundled tree leaf remembers the public origin", async () => {
+  const body = new TextEncoder().encode(JSON.stringify({ name: "Fetched", sequences: [] }));
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => body.buffer }));
+  const wrapper = await mountSidebar();
+  await buttonWithText(wrapper, "Load").trigger("click");
+  await vi.waitFor(() => expect(treeRow("x.json")).toBeDefined());
+  treeRow("x.json")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
+  const store = useSequenceEditorStore();
+  await vi.waitFor(() => expect(store.getDiagram().name).toBe("Fetched"));
+  expect(store.getBundledPath()).toBe("diagrams/Moves in the field/x.json");
+  wrapper.unmount();
+  vi.unstubAllGlobals();
+});
+
+// A bare sequence has no sequences array, and the p= receiver requires one, so
+// the origin must stay unset and sharing stays on the inline payload.
+test("opening a bundled sequence-only leaf leaves the origin unset", async () => {
+  const pattern = JSON.parse(readFileSync(resolve(process.cwd(), "tests/test-pattern.json"), "utf-8"));
+  const body = new TextEncoder().encode(JSON.stringify(pattern.sequences[0]));
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => body.buffer }));
+  const wrapper = await mountSidebar();
+  await buttonWithText(wrapper, "Load").trigger("click");
+  await vi.waitFor(() => expect(treeRow("s.json")).toBeDefined());
+  treeRow("s.json")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
+  const store = useSequenceEditorStore();
+  await vi.waitFor(() => expect(store.getSequences()).toHaveLength(1));
+  expect(store.getBundledPath()).toBeNull();
+  wrapper.unmount();
+  vi.unstubAllGlobals();
 });

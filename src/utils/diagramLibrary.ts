@@ -2,6 +2,8 @@
 // diagram names; the values are the DiagramJSON strings. IndexedDB can be
 // unavailable, so every call degrades to an empty result instead of throwing.
 
+import { decodeJsonFile } from "@/utils/jsonGzip";
+
 const DB_NAME = "figure-skating-diagrams";
 const STORE_NAME = "saved-diagrams";
 
@@ -87,6 +89,13 @@ export async function deleteSavedDiagram(name: string): Promise<boolean> {
     console.error("Could not delete the saved diagram:", error);
     return false;
   }
+}
+
+// Fetches a file from the public diagram tree and decodes its JSON.
+export async function fetchBundledDiagram(path: string): Promise<unknown> {
+  const response = await fetch(import.meta.env.BASE_URL + path);
+  if (!response.ok) throw new Error("HTTP " + response.status);
+  return decodeJsonFile(await response.arrayBuffer());
 }
 
 export type BundledDiagramFolder = {

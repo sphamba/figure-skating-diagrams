@@ -145,3 +145,33 @@ test("no share payload leaves the default diagram and no notice", async () => {
   expect(store.getDiagram().name).not.toBe("Shared");
   expect(document.querySelector("small.home-view__shared-link-error")).toBeNull();
 });
+
+test("a valid path payload fetches the public file, strips the query and keeps the origin", async () => {
+  const body = new TextEncoder().encode(JSON.stringify({ name: "Fetched", sequences: [] }));
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => body.buffer });
+  vi.stubGlobal("fetch", fetchMock);
+  const payload = bytesToBase64Url(new TextEncoder().encode("Moves in the field/x.json"));
+  const { wrapper: mounted, router } = await mountHomeView(`/?p=${payload}`);
+  wrapper = mounted;
+  const { useSequenceEditorStore } = await import("@/stores/sequenceEditor");
+  const store = useSequenceEditorStore();
+  await vi.waitFor(() => expect(store.getDiagram().name).toBe("Fetched"));
+  await vi.waitFor(() => expect(router.currentRoute.value.query.p).toBeUndefined());
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(fetchMock.mock.calls[0][0]).toBe(`${import.meta.env.BASE_URL}diagrams/Moves in the field/x.json`);
+  expect(store.getSaveFilename()).toBe("x.json");
+  expect(store.getBundledPath()).toBe("diagrams/Moves in the field/x.json");
+});
+
+test("a path payload outside the diagram tree shows the error notice and keeps the query", async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  const payload = bytesToBase64Url(new TextEncoder().encode("/etc/passwd"));
+  const { wrapper: mounted, router } = await mountHomeView(`/?p=${payload}`);
+  wrapper = mounted;
+  await settle();
+  const note = document.querySelector("small.home-view__shared-link-error");
+  expect(note?.textContent).toBe("The shared diagram could not be loaded.");
+  expect(router.currentRoute.value.query.p).toBe(payload);
+  expect(fetchMock, "a rejected payload never reaches the network").not.toHaveBeenCalled();
+});
