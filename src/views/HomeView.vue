@@ -17,6 +17,7 @@ import { useAppearanceStore } from "@/stores/appearance";
 import { useRoute, useRouter } from "vue-router";
 import { decodeShareParam, decodeSharePath } from "@/utils/shareUrl";
 import { fetchBundledDiagram } from "@/utils/diagramLibrary";
+import { getPreviousPath } from "@/router";
 import type { DiagramJSON } from "@/engine/diagram";
 import { useMediaQuery } from "@/composables/useMediaQuery";
 import { useGuardedLibraryOpen } from "@/composables/useGuardedLibraryOpen";
@@ -474,6 +475,7 @@ const visibleSequences = computed(() => sequences.value.filter((sequence) => sto
 onMounted(() => {
   updateViewportSizes();
   window.addEventListener("resize", updateViewportSizes);
+  void loadDiagramOfTheDay();
 });
 
 onBeforeUnmount(() => {
@@ -481,6 +483,36 @@ onBeforeUnmount(() => {
 });
 
 let sharedLoadToken = 0;
+
+// The diagram of the day fills an empty diagram when the home page opens, so a
+// first visit has something to look at. The user coming back from the editor
+// with an empty canvas means it on purpose, so the diagram stays empty. Rotate
+// the path here when a new diagram takes the slot.
+const DIAGRAM_OF_THE_DAY_PATH = "diagrams/Moves in the field/04. Juvenile/06. Forward Double Three-Turns.json";
+
+async function loadDiagramOfTheDay() {
+  // The wiring tests mount the view without a router, so the origin stays unknown there.
+  if (!route) return;
+  // A share payload owns the diagram, and the editor origin keeps it empty.
+  if (store.getSequences().length !== 0 || route.query.d || route.query.p || getPreviousPath() === "/editor") return;
+  const token = sharedLoadToken;
+  try {
+    const json = (await fetchBundledDiagram(DIAGRAM_OF_THE_DAY_PATH)) as DiagramJSON;
+    // The share load or the editor may have filled the store, or the user left meanwhile.
+    if (
+      token !== sharedLoadToken ||
+      store.getSequences().length !== 0 ||
+      route.path !== "/" ||
+      !Array.isArray(json.sequences)
+    )
+      return;
+    store.loadFromJSON(json);
+    store.setBundledPath(DIAGRAM_OF_THE_DAY_PATH);
+    store.setSaveFilename(DIAGRAM_OF_THE_DAY_PATH.split("/").pop() ?? "");
+  } catch (error) {
+    console.error("Could not load the diagram of the day:", error);
+  }
+}
 
 // A payload can arrive at mount or later, when a link is pasted into an open
 // tab: that changes only the hash, so the view is reused and onMounted does

@@ -188,8 +188,21 @@ test("a payload pushed while the home view is already mounted loads the diagram"
 });
 
 test("a path payload pushed while the home view is already mounted loads the public file", async () => {
-  const body = new TextEncoder().encode(JSON.stringify({ name: "Pushed path", sequences: [] }));
-  const fetchMock = vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => body.buffer });
+  // The diagram of the day fetches at mount on an empty store, so the stub
+  // answers per URL and the share load wins over the landed dotd.
+  const shareBody = new TextEncoder().encode(JSON.stringify({ name: "Pushed path", sequences: [] }));
+  const dotdBody = new TextEncoder().encode(
+    JSON.stringify({
+      name: "Forward Double Three-Turns",
+      sequences: [
+        { name: "Sequence", path: { curves: [] }, elements: [], keyframes: { footL: [], footR: [], hips: [], time: [] } },
+      ],
+    }),
+  );
+  const fetchMock = vi.fn().mockImplementation(async (url: string) => ({
+    ok: true,
+    arrayBuffer: async () => (String(url).includes("Forward Double Three-Turns") ? dotdBody.buffer : shareBody.buffer),
+  }));
   vi.stubGlobal("fetch", fetchMock);
   const { wrapper: mounted, router } = await mountHomeView("/");
   wrapper = mounted;
