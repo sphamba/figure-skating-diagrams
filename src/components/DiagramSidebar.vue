@@ -11,6 +11,8 @@ import Tab from "openvue/tab";
 import TabList from "openvue/tablist";
 import TabPanel from "openvue/tabpanel";
 import TabPanels from "openvue/tabpanels";
+import ConfirmDialog from "openvue/confirmdialog";
+import { useToast } from "openvue/usetoast";
 import { useI18n } from "vue-i18n";
 import DiagramSidebarAbout from "@/components/DiagramSidebarAbout.vue";
 import DiagramSidebarDiagram from "@/components/DiagramSidebarDiagram.vue";
@@ -18,6 +20,9 @@ import DiagramSidebarFiles from "@/components/DiagramSidebarFiles.vue";
 import DiagramSidebarHelp from "@/components/DiagramSidebarHelp.vue";
 import DiagramSidebarOptions from "@/components/DiagramSidebarOptions.vue";
 import DiagramSidebarSequences from "@/components/DiagramSidebarSequences.vue";
+import DiagramTree from "@/components/DiagramTree.vue";
+import { useLibraryLoad } from "@/composables/useLibraryLoad";
+import { useDiagramLibraryUiStore } from "@/stores/diagramLibraryUi";
 
 const props = defineProps<{
   mode: SidebarMode;
@@ -36,6 +41,16 @@ const darkMode = defineModel<boolean>("darkMode", { required: true });
 const emit = defineEmits<{ "load-start": []; redraw: [] }>();
 
 const { t } = useI18n();
+
+// The library dialog hosts at the sidebar root, outside the mobile drawer, so
+// the homescreen canvas and the Files tab trigger can open it on any viewport.
+const libraryUi = useDiagramLibraryUiStore();
+const toast = useToast();
+const libraryLoad = useLibraryLoad({
+  onLoadStart: () => emit("load-start"),
+  onClose: () => (open.value = false),
+  onLoadError: () => toast.add({ severity: "error", summary: t("files.loadError"), life: 6000 }),
+});
 
 const activeTab = ref("files");
 
@@ -140,6 +155,13 @@ function onTabsScroll(event: Event) {
 
     <div class="diagram-sidebar__copyright">{{ $t("sidebar.copyright", { year: copyrightYear }) }}</div>
   </Drawer>
+
+  <DiagramTree
+    v-model:visible="libraryUi.libraryOpen"
+    :refresh-key="libraryUi.libraryRefresh"
+    @select="libraryLoad.openDiagramSource"
+  />
+  <ConfirmDialog group="diagram-sidebar-open-library" />
 </template>
 
 <!-- Teleported and regular markup share these styles, so they stay global. -->

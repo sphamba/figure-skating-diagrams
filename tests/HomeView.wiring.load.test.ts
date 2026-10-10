@@ -1,7 +1,7 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
-import { nextTick } from "vue";
+import { defineComponent, nextTick } from "vue";
 import type { Component } from "vue";
 
 vi.mock("virtual:diagram-tree", () => ({
@@ -49,7 +49,7 @@ class EditorStub {
   }
 
   clearSelection() {}
-  setBackgroundImage(dataUrl: string | undefined) {}
+  setBackgroundImage(_dataUrl: string | undefined) {}
   requestDraw() {}
   setSequences(list: unknown[]) {
     recorder.sequences = list;
@@ -111,13 +111,20 @@ async function mountHomeView(selectPath: string | null, fetchOk: boolean, fetchR
     );
   }
   const { default: view } = await import("@/views/HomeView.vue");
+  const { default: Toast } = await import("openvue/toast");
   const { default: OpenVue } = await import("openvue/config");
   const { default: ConfirmationService } = await import("openvue/confirmationservice");
   const { default: Aura } = await import("@openvue/themes/aura");
   const { definePreset } = await import("@openuxkit/themes");
   const appPreset = definePreset(Aura, { semantic: { primary: { 50: "{sky.50}" } } });
   setActivePinia(createPinia());
-  const wrapper = mount(view as Component, {
+  // <Toast /> normally mounts in MainLayout; the wrapper hosts one so toast
+  // assertions work without the full layout.
+  const host = defineComponent({
+    components: { Toast, Page: view },
+    template: `<div><Toast /><Page /></div>`,
+  });
+  const wrapper = mount(host as Component, {
     attachTo: document.body,
     global: {
       plugins: [
@@ -198,9 +205,7 @@ test("the tree loader mounts the player and fills the url", async () => {
 test("a failed tree load clears the select and shows an error", async () => {
   const wrapper = await mountHomeView("diagrams/bad-file.json", false, videoFile);
   await wrapper.find('[data-test="tree-open"]').trigger("click");
-  await vi.waitFor(() => expect(document.querySelector(".diagram-sidebar__load-error")).not.toBeNull());
-  const small = document.querySelector(".diagram-sidebar__load-error");
-  expect(small !== null).toBe(true);
+  await vi.waitFor(() => expect(document.querySelector(".p-toast")?.textContent).toContain("The diagram could not be opened."));
   wrapper.unmount();
   vi.unstubAllGlobals();
 });

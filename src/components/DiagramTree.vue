@@ -17,7 +17,6 @@ const props = defineProps<{ visible: boolean; refreshKey: number }>();
 
 const emit = defineEmits<{
   select: [source: DiagramTreeSource];
-  "open-request": [];
   "update:visible": [visible: boolean];
 }>();
 
@@ -101,13 +100,6 @@ async function deleteConfirmed(name: string) {
 
 <template>
   <div class="diagram-tree">
-    <Button
-      :label="$t('files.load')"
-      icon="pi pi-folder-open"
-      class="w-full"
-      severity="secondary"
-      @click="$emit('open-request')"
-    />
     <Dialog
       :visible="visible"
       modal

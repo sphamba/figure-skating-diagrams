@@ -8,14 +8,13 @@ import { useConfirm } from "openvue/useconfirm";
 import { useToast } from "openvue/usetoast";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import DiagramTree, { type DiagramTreeSource } from "@/components/DiagramTree.vue";
-import { decodeJsonFile, encodeJsonFile, gzipFileName } from "@/utils/jsonGzip";
-import { listSavedDiagrams, loadSavedDiagram, saveSavedDiagram, fetchBundledDiagram } from "@/utils/diagramLibrary";
+import { useGuardedLibraryOpen } from "@/composables/useGuardedLibraryOpen";
+import { useLibraryLoad } from "@/composables/useLibraryLoad";
+import { useDiagramLibraryUiStore } from "@/stores/diagramLibraryUi";
+import { encodeJsonFile, gzipFileName } from "@/utils/jsonGzip";
+import { listSavedDiagrams, saveSavedDiagram } from "@/utils/diagramLibrary";
 import { buildSharePathUrl, buildShareUrl, SHARE_URL_MAX_CHARS } from "@/utils/shareUrl";
 import { useSequenceEditorStore } from "@/stores/sequenceEditor";
-import type { PatternJSON } from "@/engine/pattern";
-import type { DiagramJSON } from "@/engine/diagram";
-import type { SequenceJSON } from "@/engine/sequence";
 
 const props = defineProps<{ mode: "home" | "editor" }>();
 
@@ -30,32 +29,16 @@ const confirm = useConfirm();
 const { t } = useI18n();
 
 const isUnsaved = computed(() => store.isUnsaved());
-const loadFailed = ref(false);
-const libraryOpen = ref(false);
-const libraryRefresh = ref(0);
+const { loadFailed, loadJsonFile } = useLibraryLoad({
+  onLoadStart: () => emit("load-start"),
+  onClose: () => emit("close"),
+});
+const libraryUi = useDiagramLibraryUiStore();
 const fileInput = ref<HTMLInputElement | null>(null);
 const shareDialogOpen = ref(false);
 const shareDialogUrl = ref("");
 const shareDialogTextarea = ref<HTMLTextAreaElement | null>(null);
 const toast = useToast();
-
-function isPattern(json: PatternJSON | DiagramJSON | SequenceJSON): json is PatternJSON {
-  return Array.isArray((json as PatternJSON).sequences);
-}
-
-function isSequenceJSON(json: PatternJSON | DiagramJSON | SequenceJSON): json is SequenceJSON {
-  return "path" in json && "keyframes" in json;
-}
-
-function loadIntoStore(json: PatternJSON | DiagramJSON | SequenceJSON) {
-  if (isPattern(json)) {
-    store.loadFromJSON(json);
-  } else if (isSequenceJSON(json)) {
-    store.loadFromJSON({ name: t("files.defaultDiagramName"), sequences: [json] });
-  } else {
-    store.loadFromJSON(json);
-  }
-}
 
 function navigate(path: string) {
   if (router) {
@@ -92,78 +75,14 @@ async function onFileSelected(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   if (!file) return;
-  loadFailed.value = false;
   try {
-    const json = (await decodeJsonFile(await file.arrayBuffer())) as PatternJSON | DiagramJSON | SequenceJSON;
-    emit("load-start");
-    store.setSaveFilename(file.name);
-    loadIntoStore(json);
-    emit("close");
-  } catch (error) {
-    loadFailed.value = true;
-    console.error("Could not open the diagram file:", error);
+    await loadJsonFile(file);
   } finally {
     input.value = "";
   }
 }
 
-async function loadDiagramSource(path: string) {
-  loadFailed.value = false;
-  try {
-    const json = (await fetchBundledDiagram(path)) as PatternJSON | DiagramJSON | SequenceJSON;
-    emit("load-start");
-    store.setSaveFilename(path.split("/").pop() ?? "");
-    loadIntoStore(json);
-    // Only a full diagram is shareable by path, and the load clears the origin,
-    // so the origin travels after it.
-    if (isPattern(json)) store.setBundledPath(path);
-    emit("close");
-  } catch (error) {
-    loadFailed.value = true;
-    console.error("Could not open the diagram file:", error);
-  }
-}
-
-// The unsaved guard runs when the library dialog opens, not on selection.
-function openDiagramSource(source: DiagramTreeSource) {
-  if (source.source === "saved") void openSavedDiagram(source.name);
-  else void loadDiagramSource(source.path);
-}
-
-async function openSavedDiagram(name: string) {
-  loadFailed.value = false;
-  try {
-    const json = await loadSavedDiagram(name);
-    if (json === null) throw new Error(`No saved diagram named "${name}".`);
-    emit("load-start");
-    store.setSaveFilename(name);
-    loadIntoStore(json as PatternJSON | DiagramJSON | SequenceJSON);
-    libraryOpen.value = false;
-    emit("close");
-  } catch {
-    loadFailed.value = true;
-  }
-}
-
-function openLibrary() {
-  if (!store.isUnsaved()) {
-    libraryOpen.value = true;
-    return;
-  }
-  confirm.require({
-    group: "diagram-sidebar-open-library",
-    header: t("files.confirm.unsavedHeader"),
-    message: t("files.confirm.openLibraryMessage"),
-    icon: "pi pi-exclamation-triangle",
-    rejectLabel: t("files.confirm.cancel"),
-    acceptLabel: t("files.confirm.open"),
-    acceptProps: { severity: "warning" },
-    rejectProps: { severity: "secondary", text: true },
-    accept: () => {
-      libraryOpen.value = true;
-    },
-  });
-}
+const { openLibrary } = useGuardedLibraryOpen();
 
 async function writeToLibrary(name: string) {
   const ok = await saveSavedDiagram(name, store.toJSON());
@@ -174,7 +93,7 @@ async function writeToLibrary(name: string) {
   toast.add({ severity: "success", summary: t("files.savedToast"), life: 4000 });
   store.markSaved();
   store.setSaveFilename(name);
-  libraryRefresh.value++;
+  libraryUi.libraryRefresh++;
 }
 
 async function saveToLibrary() {
@@ -320,11 +239,12 @@ function leaveEditor() {
       :severity="isUnsaved ? 'warn' : 'success'"
       class="diagram-sidebar__unsaved-tag"
     />
-    <DiagramTree
-      v-model:visible="libraryOpen"
-      :refresh-key="libraryRefresh"
-      @open-request="openLibrary"
-      @select="openDiagramSource"
+    <Button
+      :label="$t('files.load')"
+      icon="pi pi-folder-open"
+      class="w-full"
+      severity="secondary"
+      @click="openLibrary"
     />
     <Button :label="$t('files.save')" icon="pi pi-save" class="w-full" severity="secondary" @click="saveToLibrary" />
     <small v-if="loadFailed" class="diagram-sidebar__load-error">
@@ -364,7 +284,6 @@ function leaveEditor() {
       @change="onFileSelected"
     />
     <ConfirmDialog group="diagram-sidebar-open-file" />
-    <ConfirmDialog group="diagram-sidebar-open-library" />
     <ConfirmDialog group="diagram-sidebar-save-overwrite" />
     <ConfirmDialog group="diagram-sidebar-new" />
     <ConfirmDialog group="diagram-sidebar-leave" />

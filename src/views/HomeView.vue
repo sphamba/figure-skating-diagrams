@@ -19,6 +19,7 @@ import { decodeShareParam, decodeSharePath } from "@/utils/shareUrl";
 import { fetchBundledDiagram } from "@/utils/diagramLibrary";
 import type { DiagramJSON } from "@/engine/diagram";
 import { useMediaQuery } from "@/composables/useMediaQuery";
+import { useGuardedLibraryOpen } from "@/composables/useGuardedLibraryOpen";
 import { useVideoTimestamp } from "@/composables/useVideoTimestamp";
 import { usePlaybackKeyToggle } from "@/composables/usePlaybackKeyToggle";
 import { usePlaybackLoop } from "@/composables/usePlaybackLoop";
@@ -36,6 +37,7 @@ const appearance = useAppearanceStore();
 const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
+const { openLibrary } = useGuardedLibraryOpen();
 const sharedLinkError = ref(false);
 
 const sequences = computed(() => store.getSequences());
@@ -576,6 +578,15 @@ onBeforeUnmount(() => {
             <div class="home-view__canvas-area">
               <canvas ref="canvasRef" class="home-view__canvas-element"></canvas>
               <TrackingButton :active="isTracking" :mode="trackingStage" @toggle="toggleTracking" />
+              <div v-if="sequences.length === 0" class="home-view__empty-hint">
+                <Button :label="$t('files.load')" icon="pi pi-folder-open" severity="primary" @click="openLibrary" />
+                <Button
+                  :label="$t('files.openInEditor')"
+                  icon="pi pi-pencil"
+                  severity="primary"
+                  @click="router.push('/editor')"
+                />
+              </div>
               <div class="home-view__elements">
                 <TimeSyncPane
                   ref="elementsPane"
@@ -797,6 +808,19 @@ onBeforeUnmount(() => {
   right: 0;
   width: auto;
   z-index: 5;
+}
+
+/* Same spot as the editor's empty-canvas button, but two stacked. */
+.home-view__empty-hint {
+  position: absolute;
+  bottom: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .home-view__canvas-element {
